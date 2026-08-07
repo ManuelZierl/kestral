@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "sends": {
+    "thread-alpha-1": {
+      "requestId": "request-alpha-1",
+      "message": "Resume safely"
+    }
+  }
+}

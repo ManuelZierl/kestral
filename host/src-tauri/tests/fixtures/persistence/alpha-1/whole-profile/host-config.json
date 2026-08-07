@@ -1,0 +1,44 @@
+{
+  "version": 3,
+  "config": {
+    "version": 2,
+    "host": {
+      "default_llm_provider": "llm-provider",
+      "default_llm_profile": "local-ollama",
+      "cloud_llm_egress_accepted_profiles": [],
+      "app_data_backup_retention": 1
+    },
+    "apps": {
+      "chat": {
+        "settings": {
+          "max_iterations": 10,
+          "record_injected_context": false,
+          "show_metadata": false,
+          "show_thinking": false
+        }
+      },
+      "llm-provider": {
+        "settings": {}
+      }
+    },
+    "connectors": {
+      "llm-provider/local-ollama": {
+        "kind": "ollama",
+        "base_url": "http://localhost:11434",
+        "default_model": "llama3.1",
+        "default_variant": null,
+        "default_text_verbosity": null,
+        "secret_refs": {}
+      }
+    },
+    "mcp_servers": {},
+    "mcp_exports": {},
+    "mcp_export_transitions": {},
+    "mcp_gateway": {
+      "enabled": false,
+      "bind_address": "127.0.0.1:8137",
+      "allowed_origins": [],
+      "oauth_enabled": false
+    }
+  }
+}

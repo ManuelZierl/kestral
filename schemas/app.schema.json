@@ -1,0 +1,1127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apphost.dev/schemas/app.schema.json",
+  "title": "Kestral app package manifest (app.json)",
+  "description": "The public installable-app package format for the Kestral 0.1 release series. See docs/writing-apps.md. Fields under `manifest` mirror the kernel `AppManifest` (crates/kernel/src/manifest.rs) serde shapes exactly and are translated verbatim by the host; `backend`, `data`, `integrity`, `min_host_version`, `publisher`, `license`, `icon`, `theme_colors`, and `surfaces[].ui` are host/adapter concerns and never enter the kernel. A detached `app.signature.json` file may accompany `app.json`; it is validated separately and is outside the signed content. No package code runs during inspection; nothing is granted automatically.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "id",
+    "version",
+    "display_name",
+    "description",
+    "manifest",
+    "backend",
+    "data",
+    "integrity",
+    "min_host_version"
+  ],
+  "properties": {
+    "format_version": {
+      "description": "Generation of THIS package schema (not the app's version). The host rejects a major it does not understand.",
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "description": "Reverse-DNS app id; becomes AppManifest.app_id verbatim. Must contain a dot, must not start with 'mcp-', and must not equal a host-reserved bundled app id.",
+      "type": "string",
+      "pattern": "^(?!mcp-)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$",
+      "minLength": 3,
+      "maxLength": 214,
+      "not": {
+        "enum": [
+          "com.ma-zierl.kestral-artifacts",
+          "com.ma-zierl.host.file-broker",
+          "com.ma-zierl.host.permissions"
+        ]
+      }
+    },
+    "version": {
+      "description": "The app's own version. Strict semver; defines update/rollback ordering. Becomes AppManifest.version.",
+      "$ref": "#/$defs/semver"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "publisher": {
+      "description": "Host-only provenance metadata. Never confers authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "homepage": { "type": "string", "format": "uri" },
+        "key_id": {
+          "description": "Publisher key identifier; if present must equal signature.key_id.",
+          "$ref": "#/$defs/keyId"
+        }
+      }
+    },
+    "license": {
+      "description": "SPDX license identifier (host-only metadata).",
+      "type": "string",
+      "minLength": 1
+    },
+    "icon": {
+      "description": "Optional app icon. Use a checksummed package-local SVG, PNG, WebP, or JPEG path, or select a named icon from Kestral's built-in icon catalog. Omit it to use the display name's first letter.",
+      "oneOf": [
+        { "$ref": "#/$defs/packagePath" },
+        { "$ref": "#/$defs/KestralIcon" }
+      ]
+    },
+    "theme_colors": {
+      "description": "Optional app-owned semantic colors for custom surfaces. Kestral exposes each value inside this app's sandbox as --app-color-<name>, shows it in Settings > Appearance, and selects the declared light/dark default unless a custom color profile overrides it.",
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/AppThemeColor" }
+    },
+    "min_host_version": {
+      "description": "Lowest host version that can install this package. Strict semver; host refuses install if its own version is lower.",
+      "$ref": "#/$defs/semver"
+    },
+    "manifest": {
+      "description": "The kernel-facing declaration. Every field here maps field-for-field onto AppManifest (minus identity, injected by the host). The host runs AppManifest::require_consistent() at install.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityDeclaration" }
+        },
+        "surfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SurfaceDeclaration" }
+        },
+        "agents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AgentDeclaration" }
+        },
+        "skills": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SkillDeclaration" }
+        },
+        "assistant_profiles": {
+          "description": "Declarative Chat assistant profiles. The host derives contributor identity, app version, and content digest from the installed package.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssistantProfileDeclaration" }
+        },
+        "automations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AutomationDeclaration" }
+        },
+        "connectors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConnectorDeclaration" }
+        },
+        "artifact_types": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ArtifactTypeDeclaration" }
+        },
+        "extension_points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExtensionPointDeclaration" }
+        },
+        "extension_contributions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExtensionContribution" }
+        },
+        "config_declarations": {
+          "description": "Host config storage supports exactly one section per app in the 0.1 series (config.rs::validate_app_config), so at most one entry is permitted.",
+          "type": "array",
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/ConfigDeclaration" }
+        },
+        "grant_requests": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GrantRequest" }
+        },
+        "event_subscriptions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EventTopic" }
+        }
+      }
+    },
+    "consumer_grant_requests": {
+      "description": "Host-mediated permission requests for another installed app to consume capabilities provided by this package. Each request is confirmed through trusted chrome; denial leaves the integration unavailable.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/ConsumerGrantRequest" }
+    },
+    "backend": {
+      "description": "How the host runs/reaches the app's capabilities. MCP backends expose ordinary tools; agent-worker backends use the callback-capable agent adapter. Consumed by host adapters; never seen by the kernel.",
+      "$ref": "#/$defs/Backend"
+    },
+    "data": {
+      "description": "App-owned persistent data contract. Host-owned config, secrets, artifacts, and surface-state envelopes are outside this declaration.",
+      "$ref": "#/$defs/AppData"
+    },
+    "integrity": {
+      "description": "Per-file checksums over all payload under ui/ and backend/. Verified at inspection before any file is copied or run.",
+      "$ref": "#/$defs/Integrity"
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "A backend of kind 'none' may declare capabilities only when host-managed data exports bind every capability to a fixed host operation.",
+      "if": {
+        "type": "object",
+        "required": ["backend", "data"],
+        "properties": {
+          "backend": {
+            "type": "object",
+            "properties": { "kind": { "const": "none" } }
+          },
+          "data": {
+            "not": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "const": "host-managed" } }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "object",
+            "properties": {
+              "capabilities": { "type": "array", "maxItems": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Host-managed data is implemented entirely by the host and cannot coexist with a native or remote backend. Contract v2 adds bounded opaque documents.",
+      "if": {
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": { "kind": { "const": "host-managed" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "backend": {
+            "type": "object",
+            "properties": { "kind": { "const": "none" } },
+            "required": ["kind"]
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Versioned app data requires a local process that the host can run against a staged candidate before activation.",
+      "if": {
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": { "kind": { "const": "versioned" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "backend": {
+            "type": "object",
+            "properties": {
+              "kind": { "enum": ["mcp-stdio", "executable"] }
+            },
+            "required": ["kind"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^ed25519:[0-9a-f]{64}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256-[0-9a-fA-F]{64}$"
+    },
+    "packagePath": {
+      "description": "Relative path inside the package. Forward slashes; no absolute paths, no drive letters, no '..' traversal, no leading slash.",
+      "type": "string",
+      "pattern": "^(ui|backend)/[^\\\\:*?\"<>|]+$",
+      "not": { "pattern": "(^|/)\\.\\.(/|$)" },
+      "minLength": 4,
+      "maxLength": 1024
+    },
+    "KestralIcon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name"],
+      "properties": {
+        "kind": { "const": "kestral" },
+        "name": {
+          "type": "string",
+          "enum": [
+            "activity",
+            "app-grid",
+            "artifact-box",
+            "book-open",
+            "chat-bubble",
+            "check-square",
+            "pencil-ruler",
+            "settings"
+          ]
+        }
+      }
+    },
+    "identifierName": {
+      "description": "A contribution name (capability/surface/agent/skill/automation/connector/config/artifact-type). Must be unique per kind within the manifest (enforced by AppManifest::require_consistent at install).",
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "themeColorValue": {
+      "description": "A bounded HEX, rgb(), or rgba() color. Exact channel ranges are also validated by the host.",
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 80,
+      "pattern": "^(?:#[0-9A-Fa-f]{3,4}|#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{8}|(?:rgb|rgba)\\([^;\\r\\n]{1,70}\\))$"
+    },
+    "AppThemeColor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "title", "description", "light", "dark"],
+      "properties": {
+        "name": {
+          "description": "App-local kebab-case token name. Surfaces consume it as var(--app-color-<name>); Kestral namespaces it to the current app sandbox.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "light": { "$ref": "#/$defs/themeColorValue" },
+        "dark": { "$ref": "#/$defs/themeColorValue" }
+      }
+    },
+    "jsonSchemaObject": {
+      "description": "An embedded JSON Schema (object form). The host compiles it at inspection; capability I/O, artifact-type, and config schemas all use this.",
+      "type": "object"
+    },
+
+    "CapabilityRef": {
+      "description": "Fully-qualified reference to one app's capability (primitives/capability.rs).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "capability"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "capability": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "CapabilityEffect": {
+      "description": "Advisory effect metadata (primitives/capability.rs). Never grants authority.",
+      "type": "string",
+      "enum": ["unspecified", "read-only", "local-write", "external-write", "destructive"]
+    },
+
+    "CapabilityDeclaration": {
+      "description": "CapabilityDeclaration (primitives/capability.rs). input_schema/output_schema are JSON Schemas validated by the kernel at invocation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "input_schema"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "description": { "type": "string" },
+        "input_schema": { "$ref": "#/$defs/jsonSchemaObject" },
+        "effect": { "$ref": "#/$defs/CapabilityEffect", "default": "unspecified" },
+        "output_schema": { "$ref": "#/$defs/jsonSchemaObject" }
+      }
+    },
+
+    "SurfaceKind": {
+      "type": "string",
+      "enum": ["panel", "card", "form", "picker", "dashboard"]
+    },
+
+    "SurfaceDeclaration": {
+      "description": "SurfaceDeclaration (primitives/surface.rs) plus an OPTIONAL host-only `ui` binding. The `ui` field is stripped before the manifest is sealed and never enters the kernel. Form surfaces must declare exactly one intent (enforced at install by require_consistent).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "title", "description"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "kind": { "$ref": "#/$defs/SurfaceKind" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "intents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityRef" }
+        },
+        "ui": {
+          "description": "Host-only static UI binding. Loaded into a sandboxed per-app webview; intent-only, secret-free, cannot render trusted chrome.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entry"],
+          "properties": {
+            "entry": {
+              "description": "Path inside ui/ to the surface's entry HTML; must be listed in integrity.assets.",
+              "$ref": "#/$defs/packagePath"
+            },
+            "csp": {
+              "description": "Rejected: the host always authors a deny-by-default CSP that a bundle cannot widen. Declare allowed network origins in connect_src instead. A package that sets this fails install with a clear error.",
+              "type": "string"
+            },
+            "connect_src": {
+              "description": "Additional CSP connect-src origins requested by this surface. Host policy remains authoritative.",
+              "type": "array",
+              "items": { "type": "string" },
+              "default": []
+            }
+          }
+        }
+      },
+      "if": { "type": "object", "properties": { "kind": { "const": "form" } } },
+      "then": {
+        "type": "object",
+        "properties": { "intents": { "type": "array", "minItems": 1, "maxItems": 1 } },
+        "required": ["intents"]
+      }
+    },
+
+    "AgentDeclaration": {
+      "description": "AgentDeclaration (manifest.rs). Pure data to the kernel.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "instructions", "capability_bindings"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "description": { "type": "string" },
+        "instructions": { "type": "string" },
+        "capability_bindings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CapabilityRef" }
+        }
+      }
+    },
+
+    "SkillDeclaration": {
+      "description": "SkillDeclaration (manifest.rs). Pure data.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "instructions"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "description": { "type": "string" },
+        "instructions": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "Bounded reusable prompt content. Enabling a skill remains an explicit Chat configuration choice."
+        }
+      }
+    },
+
+    "AssistantProfileDeclaration": {
+      "description": "A user-selectable Chat composition profile. Skill references name skills declared by this same app; suggested capabilities and agent engines confer no authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_name", "title", "description", "instruction_skill_refs", "suggested_capability_refs", "starter_prompts"],
+      "properties": {
+        "profile_name": { "$ref": "#/$defs/identifierName" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "instruction_skill_refs": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifierName" }
+        },
+        "suggested_capability_refs": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/CapabilityRef" }
+        },
+        "suggested_agent_engine_contract": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "starter_prompts": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        }
+      }
+    },
+
+    "AutomationDeclaration": {
+      "description": "AutomationDeclaration (manifest.rs). Pure data; the kernel never fires triggers, it only ever sees runs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "trigger"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "description": { "type": "string" },
+        "trigger": { "type": "string" }
+      }
+    },
+
+    "ConnectorDeclaration": {
+      "description": "ConnectorDeclaration (manifest.rs). Declares the NAMES of secrets a connector needs, never values. Values are entered by the user via trusted chrome and held by the broker under SecretRef{owner=app_id,name}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "secret_names"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "description": { "type": "string" },
+        "secret_names": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "config_schema": { "$ref": "#/$defs/jsonSchemaObject" }
+      }
+    },
+
+    "ArtifactTypeDeclaration": {
+      "description": "ArtifactTypeDeclaration (primitives/artifact.rs). Schema for a durable object the app produces; content is validated and provenance is kernel-stamped.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "json_schema"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "description": { "type": "string" },
+        "json_schema": { "$ref": "#/$defs/jsonSchemaObject" }
+      }
+    },
+
+    "ConfigDeclaration": {
+      "description": "ConfigDeclaration (manifest.rs). Declared by the app, stored and rendered by the host.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "title", "description", "json_schema"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "json_schema": { "$ref": "#/$defs/jsonSchemaObject" },
+        "default": {
+          "description": "Optional default value; must validate against json_schema."
+        }
+      }
+    },
+
+    "ExtensionPointDeclaration": {
+      "description": "A versioned host integration seam exposed by an app. Extension points are manifest metadata, not a kernel primitive.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "contract_version", "context_schema"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifierName" },
+        "contract_version": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "context_schema": { "$ref": "#/$defs/jsonSchemaObject" }
+      }
+    },
+
+    "ExtensionContribution": {
+      "description": "A declared surface contributed to another app's versioned extension point.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_app", "extension_point", "contract_version", "surface"],
+      "properties": {
+        "target_app": { "type": "string", "minLength": 1 },
+        "extension_point": { "$ref": "#/$defs/identifierName" },
+        "contract_version": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "surface": { "$ref": "#/$defs/identifierName" }
+      }
+    },
+
+    "EventTopic": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+
+    "ResourceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+
+    "GrantCondition": {
+      "description": "How exercising the grant interacts with the user (primitives/grant.rs).",
+      "type": "string",
+      "enum": ["silent", "notify", "requires-approval"]
+    },
+
+    "DataScope": {
+      "description": "Closed data scope attached to a grant request or grant (primitives/grant.rs).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "none" } }
+        },
+        {
+          "description": "Every current and future resource governed by the requested capability. This is broad persistent authority; invocations must still request exact resource IDs.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "all-resources" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "resource_ids"],
+          "properties": {
+            "kind": { "const": "resources" },
+            "resource_ids": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/ResourceId" },
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+
+    "GrantScope": {
+      "description": "Closed set of grant scopes (primitives/grant.rs).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "provider", "capability"],
+          "properties": {
+            "kind": { "const": "exact-capability" },
+            "provider": { "type": "string", "minLength": 1 },
+            "capability": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "provider"],
+          "properties": {
+            "kind": { "const": "all-provider-capabilities" },
+            "provider": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+
+    "GrantDuration": {
+      "description": "Grant lifetime (primitives/grant.rs). Must be explicit — no permissive default by omission. `seconds` is a positive u32 (NonZeroU32 in the kernel).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "non-expiring" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "seconds"],
+          "properties": {
+            "kind": { "const": "expires-after" },
+            "seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          }
+        }
+      ]
+    },
+
+    "GrantRequest": {
+      "description": "GrantRequest (manifest.rs). A NEED, not a grant. Issuance is the broker's decision via trusted chrome at install; nothing is granted automatically.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "data_scope", "condition", "reason", "duration"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/GrantScope" },
+        "data_scope": { "$ref": "#/$defs/DataScope" },
+        "condition": { "$ref": "#/$defs/GrantCondition" },
+        "reason": { "type": "string", "minLength": 1 },
+        "duration": { "$ref": "#/$defs/GrantDuration" }
+      }
+    },
+
+    "ConsumerGrantRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["holder", "request"],
+      "properties": {
+        "holder": { "type": "string", "minLength": 1 },
+        "request": { "$ref": "#/$defs/GrantRequest" }
+      }
+    },
+
+    "BackendAuthorityMode": {
+      "description": "Authority mode for native backends. Sandboxed is a future product target, not a Kestral 0.1 alpha guarantee; a package must not claim it unless the target host reports support. Unsandboxed requires an explicit host/debug opt-in and retains the backend OS account's direct authority.",
+      "type": "string",
+      "enum": ["sandboxed", "unsandboxed"]
+    },
+
+    "AppData": {
+      "description": "Tagged app-owned data declaration. `none` means no app-owned durable data. `versioned` is opaque publisher-owned data migrated by a native backend. `host-managed` is bounded JSON-object data interpreted and persisted by the host for backend-free apps.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "none" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "format_version", "migration"],
+          "properties": {
+            "kind": { "const": "versioned" },
+            "format_version": {
+              "description": "Positive publisher-owned format version written by this package. Independent from package and app versions.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "migration": { "$ref": "#/$defs/AppDataMigration" }
+          }
+        },
+        {
+          "$ref": "#/$defs/HostManagedData"
+        }
+      ]
+    },
+
+    "HostManagedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "contract_version", "collections", "limits", "exports"],
+      "properties": {
+        "kind": { "const": "host-managed" },
+        "contract_version": { "enum": [1, 2] },
+        "collections": {
+          "type": "object",
+          "minProperties": 0,
+          "maxProperties": 64,
+          "propertyNames": { "$ref": "#/$defs/managedDataName" },
+          "additionalProperties": { "$ref": "#/$defs/ManagedDataCollection" }
+        },
+        "documents": {
+          "description": "Contract v2 only: declared host-managed document collections. Metadata is schema-validated JSON; content is opaque bounded bytes.",
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": { "$ref": "#/$defs/managedDataName" },
+          "additionalProperties": { "$ref": "#/$defs/ManagedDocumentCollection" }
+        },
+        "limits": { "$ref": "#/$defs/ManagedDataStoreLimits" },
+        "exports": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/ManagedDataExport" }
+        },
+        "proposals": {
+          "description": "Fixed host-generated proposal capabilities. Each creates a reviewable artifact and never changes managed data.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/ManagedDataProposal" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "contract_version": { "const": 1 } } },
+          "then": {
+            "properties": {
+              "collections": { "minProperties": 1 },
+              "documents": { "maxProperties": 0 },
+              "limits": { "not": { "required": ["batch_operations"] } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "contract_version": { "const": 2 } } },
+          "then": {
+            "properties": {
+              "limits": {
+                "required": ["batch_operations"],
+                "properties": {
+                  "batch_operations": { "type": "integer", "minimum": 1, "maximum": 2048 }
+                }
+              }
+            },
+            "anyOf": [
+              {
+                "properties": { "collections": { "minProperties": 1 } }
+              },
+              {
+                "required": ["documents"],
+                "properties": { "documents": { "minProperties": 1 } }
+              }
+            ]
+          }
+        }
+      ]
+    },
+
+    "managedDataName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+
+    "ManagedDataCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "indexes", "operations", "limits"],
+      "properties": {
+        "schema": {
+          "description": "JSON Schema for one record value. Contract v1 requires an object schema with additionalProperties false.",
+          "type": "object"
+        },
+        "indexes": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/ManagedDataIndex" }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["get", "list", "create", "replace", "delete", "transaction"]
+          }
+        },
+        "limits": { "$ref": "#/$defs/ManagedDataCollectionLimits" }
+      }
+    },
+
+    "ManagedDocumentCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metadata_schema", "operations", "limits"],
+      "properties": {
+        "metadata_schema": {
+          "description": "Strict JSON Schema for document metadata. Document content is opaque bytes and is not parsed.",
+          "type": "object"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+            "items": { "enum": ["get", "list", "create", "replace", "update-metadata", "delete"] }
+        },
+        "limits": { "$ref": "#/$defs/ManagedDocumentCollectionLimits" }
+      }
+    },
+
+    "ManagedDocumentCollectionLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "metadata_bytes", "content_bytes"],
+      "properties": {
+        "documents": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "metadata_bytes": { "type": "integer", "minimum": 2, "maximum": 65536 },
+        "content_bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+      }
+    },
+
+    "ManagedDataIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "field", "value_schema"],
+      "properties": {
+        "name": { "$ref": "#/$defs/managedDataName" },
+        "field": { "$ref": "#/$defs/managedDataName" },
+        "value_schema": { "type": "object" },
+        "unique": {
+          "description": "When true, non-null indexed values must be unique within the collection.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "ManagedDataCollectionLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "record_bytes", "query_results"],
+      "properties": {
+        "records": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "record_bytes": { "type": "integer", "minimum": 2, "maximum": 1048576 },
+        "query_results": { "type": "integer", "minimum": 1, "maximum": 1000 }
+      }
+    },
+
+    "ManagedDataStoreLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_bytes", "transaction_operations"],
+      "properties": {
+        "total_bytes": { "type": "integer", "minimum": 1024, "maximum": 67108864 },
+        "transaction_operations": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "batch_operations": { "type": "integer", "minimum": 1, "maximum": 2048 }
+      }
+    },
+
+    "ManagedDataExport": {
+      "description": "A fixed read-only capability implemented by the host. `get` accepts an id. `list` optionally fixes one declared equality index and may bind its equality value from trusted host context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "operation", "collection"],
+      "properties": {
+        "capability": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "operation": { "enum": ["get", "list"] },
+        "collection": { "$ref": "#/$defs/managedDataName" },
+        "index": { "$ref": "#/$defs/managedDataName" },
+        "equals_host_input": {
+          "description": "Trusted host context supplied as the required equality value instead of exposing that field to Chat's model.",
+          "enum": ["current-chat-thread-id"]
+        }
+      }
+    },
+
+    "ManagedDataProposal": {
+      "description": "A fixed host-managed proposal operation. The capability input and artifact envelope schemas are derived by Kestral; the declaration supplies only the typed payload schema and target binding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "artifact_type", "title", "description", "target", "payload_schema", "max_payload_bytes"],
+      "properties": {
+        "capability": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "artifact_type": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "target": { "$ref": "#/$defs/ManagedDataProposalTarget" },
+        "payload_schema": {
+          "description": "Strict JSON-object schema for the proposal payload. Kestral bounds its serialized JSON bytes separately.",
+          "type": "object"
+        },
+        "max_payload_bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 }
+      }
+    },
+
+    "ManagedDataProposalTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "collection"],
+          "properties": {
+            "kind": { "const": "collection" },
+            "collection": { "$ref": "#/$defs/managedDataName" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "collection"],
+          "properties": {
+            "kind": { "const": "record" },
+            "collection": { "$ref": "#/$defs/managedDataName" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "document_collection"],
+          "properties": {
+            "kind": { "const": "document" },
+            "document_collection": { "$ref": "#/$defs/managedDataName" }
+          }
+        }
+      ]
+    },
+
+    "AppDataMigration": {
+      "description": "Dedicated newline-delimited JSON-RPC command. It receives only a staged candidate through APP_HOST_DATA_DIR and must implement `kestral/app-data/migrate` protocol version 1. Authority mode is inherited from the native backend.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "command", "entry", "transitions"],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "command": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "entry": { "$ref": "#/$defs/packagePath" },
+        "args": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "type": "string", "maxLength": 4096 },
+          "default": []
+        },
+        "transitions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/AppDataTransition" }
+        }
+      }
+    },
+
+    "AppDataTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "destructive"],
+      "properties": {
+        "from": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "to": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "destructive": {
+          "description": "True when the migration intentionally discards or irreversibly rewrites publisher-owned information. Kestral surfaces this in the explicit update review.",
+          "type": "boolean"
+        }
+      }
+    },
+
+    "Backend": {
+      "description": "Tagged union over backend.kind. 'none' has no process; MCP variants expose tools; agent-worker supports host-mediated model and tool callbacks.",
+      "oneOf": [
+        {
+          "$comment": "No backend process. The app contributes surfaces/skills/agents/artifact types/config and/or requests grants to other apps. It may declare only fixed host-managed read capabilities bound by data.exports.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "none" }
+          }
+        },
+        {
+          "$comment": "External MCP server launched over stdio; command must already exist on the host.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "authority_mode", "command"],
+          "properties": {
+            "kind": { "const": "mcp-stdio" },
+            "authority_mode": { "$ref": "#/$defs/BackendAuthorityMode" },
+            "command": { "type": "string", "minLength": 1 },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": []
+            }
+          }
+        },
+        {
+          "$comment": "MCP Streamable HTTP endpoint.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "url"],
+          "properties": {
+            "kind": { "const": "mcp-streamable-http" },
+            "url": {
+              "type": "string",
+              "pattern": "^https?://",
+              "format": "uri"
+            }
+          }
+        },
+        {
+          "$comment": "Executable bundled inside the package under backend/, run by the host, speaking MCP over stdio. The language-neutral path (Bun/Deno single-file exe, compiled Rust binary, etc.).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "authority_mode", "protocol", "platforms"],
+          "properties": {
+            "kind": { "const": "executable" },
+            "authority_mode": { "$ref": "#/$defs/BackendAuthorityMode" },
+            "protocol": {
+              "description": "Only MCP over stdio is supported; explicit so the adapter invariant is visible in the wire format.",
+              "const": "mcp-stdio"
+            },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": []
+            },
+            "platforms": {
+              "description": "Per-target binaries. The host selects by its own platform triple; a package must cover the platforms it claims to support.",
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "enum": [
+                  "windows-x86_64",
+                  "windows-aarch64",
+                  "macos-x86_64",
+                  "macos-aarch64",
+                  "linux-x86_64",
+                  "linux-aarch64"
+                ]
+              },
+              "additionalProperties": { "$ref": "#/$defs/packagePath" }
+            }
+          }
+        },
+        {
+          "$comment": "Invocation-scoped agent worker bundled under backend/. The host supplies its checksum-verified Node runtime and mediates every model/tool callback as a child Run.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "authority_mode", "protocol_version", "entry"],
+          "properties": {
+            "kind": { "const": "agent-worker" },
+            "authority_mode": { "$ref": "#/$defs/BackendAuthorityMode" },
+            "protocol_version": { "const": 1 },
+            "entry": { "$ref": "#/$defs/packagePath" }
+          }
+        }
+      ]
+    },
+
+    "Integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "assets"],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "sha256"
+        },
+        "assets": {
+          "description": "sha256 for EVERY package payload file. app.json is implicitly declared. Missing, extra, mismatched, traversal, symlink, non-regular, duplicate-normalized, and case-colliding entries fail before anything can run.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/packagePath" },
+          "additionalProperties": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+
+    "SignatureDocument": {
+      "description": "Detached app.signature.json carrier. The signature is over the package digest and package id, not over this file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key", "signature"],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "ed25519"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^ed25519:[0-9a-f]{64}$"
+        },
+        "public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{43}=$"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        }
+      }
+    }
+  }
+}

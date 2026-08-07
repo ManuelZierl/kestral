@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "providers": [
+    {
+      "app_id": "chat",
+      "extension_points": [
+        {
+          "name": "composer-actions",
+          "contract_version": 1
+        },
+        {
+          "name": "composer-context",
+          "contract_version": 1
+        },
+        {
+          "name": "message-actions",
+          "contract_version": 6
+        },
+        {
+          "name": "model-profile-editor",
+          "contract_version": 1
+        },
+        {
+          "name": "thread-actions",
+          "contract_version": 1
+        }
+      ]
+    }
+  ]
+}

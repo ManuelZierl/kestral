@@ -1,0 +1,66 @@
+[package]
+name = "host"
+version = "0.1.0-alpha.1"
+description = "Agentic App Host — Tauri shell embedding the kernel"
+default-run = "host"
+authors = ["Manuel Zierl"]
+edition = "2021"
+
+[features]
+dev-mcp = ["dep:tauri-plugin-mcp-bridge"]
+# Compiles the generic provider fixture for external integration test binaries.
+test-fixtures = []
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "host_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+app-host-kernel = { path = "../../crates/kernel" }
+mcp-adapter = { path = "../../crates/mcp-adapter" }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+tar = "0.4"
+axum = "0.8"
+futures-util = "0.3"
+tiny_http = "0.12"
+tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time"] }
+jsonschema = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+semver = { workspace = true }
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true }
+fs2 = "0.4"
+rand = "0.8"
+tauri-plugin-dialog = "2"
+tauri-plugin-mcp-bridge = { version = "=0.12.0", optional = true }
+webauthn-rs = "0.5.5"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
+keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
+openssl = { version = "0.10", features = ["vendored"] }
+
+[dev-dependencies]
+chrono = { workspace = true }
+host = { path = ".", features = ["test-fixtures"] }

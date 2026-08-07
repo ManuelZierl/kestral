@@ -1,0 +1,194 @@
+name: CI
+
+# Branch model:
+#   develop — default branch; PRs against develop run Linux tests and package builds.
+#   main    — release branch; PRs against main (and pushes to main) run the
+#             full matrix including Windows, native credential integration,
+#             and Windows package builds.
+# Releases are produced by release.yml when a v* tag lands on main.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-linux:
+    name: Core tests + packages (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: docs
+      - name: Verify product versions
+        run: node scripts/check-release-version.mjs
+      - name: Verify promoted app contracts
+        run: |
+          node --test scripts/check-promoted-app-contracts.test.mjs
+          node scripts/check-promoted-app-contracts.mjs
+      - name: Verify external app isolation
+        run: node scripts/check-reference-app-isolation.mjs
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install frontend toolchain
+        working-directory: host
+        run: npm ci
+      - name: Generate third-party notices
+        run: node scripts/generate-third-party-notices.mjs
+      - name: Provider worker checks and tests
+        working-directory: host
+        run: |
+          npm run provider-worker:check
+          npm run provider-worker:test
+      - name: Package provider worker
+        working-directory: host
+        run: npm run provider-worker:package
+      - name: Frontend type-check
+        working-directory: host
+        run: npm run check
+      - name: Frontend tests
+        working-directory: host
+        run: npm test
+      - name: Split development launcher and gateway
+        working-directory: host
+        run: npm run test:split-dev
+      - name: Frontend dependency audit
+        working-directory: host
+        run: npm audit --audit-level=high
+      - name: Documentation build and link check
+        run: |
+          BUNDLE_GEMFILE=docs/Gemfile bundle exec jekyll build --source docs --destination docs/_site --strict_front_matter
+          node scripts/check-doc-links.mjs docs/_site
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Rust lints
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Rust test matrix
+        run: cargo test --all-features
+      - name: Rust dependency audit
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
+      - name: Build Linux desktop packages and backend
+        working-directory: host
+        run: |
+          cargo build -p host --release --bin host-server
+          npm run tauri build -- --bundles appimage,deb
+      - name: Smoke-test backend-only remote transport
+        run: node scripts/smoke-host-server.mjs target/release/host-server
+      - name: Package Linux backend and static browser client
+        shell: bash
+        run: |
+          version="$(node -p 'require("./host/package.json").version')"
+          if ldd target/release/host-server | grep -q "not found"; then
+            echo "host-server has unresolved runtime libraries" >&2
+            exit 1
+          fi
+          bash scripts/package-linux-release.sh "$version"
+          cp THIRD-PARTY-NOTICES.txt host/build/THIRD-PARTY-NOTICES.txt
+          (cd host/build && zip -qr "../../target/release/public/kestral-browser-client-${version}.zip" .)
+           cp THIRD-PARTY-NOTICES.txt target/release/public/
+      - name: Require reproducible tracked outputs
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v6
+        with:
+          name: linux-release-candidates
+          path: target/release/public/*
+          if-no-files-found: error
+
+  # The Windows leg is the release gate: it only runs for main (PRs targeting
+  # main and pushes to main), covering the native credential store and the
+  # native package matrix on the shipping platform.
+  test-windows:
+    name: Core tests + packages (Windows)
+    runs-on: windows-latest
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify product versions
+        run: node scripts/check-release-version.mjs
+      - name: Verify promoted app contracts
+        run: |
+          node --test scripts/check-promoted-app-contracts.test.mjs
+          node scripts/check-promoted-app-contracts.mjs
+      - name: Verify external app isolation
+        run: node scripts/check-reference-app-isolation.mjs
+      - name: Install frontend toolchain
+        working-directory: host
+        run: npm ci
+      - name: Generate third-party notices
+        run: node scripts/generate-third-party-notices.mjs
+      - name: Provider worker checks and tests
+        working-directory: host
+        run: |
+          npm run provider-worker:check
+          npm run provider-worker:test
+      - name: Package provider worker
+        working-directory: host
+        run: npm run provider-worker:package
+      - name: Frontend type-check
+        working-directory: host
+        run: npm run check
+      - name: Frontend tests
+        working-directory: host
+        run: npm test
+      - name: Frontend dependency audit
+        working-directory: host
+        run: npm audit --audit-level=high
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Rust lints
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Rust test matrix
+        run: cargo test --all-features
+      - name: Native Windows credential integration
+        run: cargo test -p host --test os_credentials -- --ignored --exact native_credential_round_trip_keeps_json_status_only
+      - name: Build Windows desktop packages and backend
+        working-directory: host
+        run: |
+          cargo build -p host --release --bin host-server
+          npm run tauri build -- --bundles nsis
+      - name: Package portable Windows build
+        shell: pwsh
+        run: |
+          scripts/package-windows-release.ps1
+          Copy-Item "THIRD-PARTY-NOTICES.txt" "target/release/public/THIRD-PARTY-NOTICES.txt"
+      - name: Require reproducible tracked outputs
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-release-candidates
+          path: target/release/public/*
+          if-no-files-found: error

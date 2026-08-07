@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "selected_next_launch_profile_id": "profile-alpha-1",
+  "profiles": [
+    {
+      "profile_id": "profile-alpha-1",
+      "display_name": "Alpha fixture",
+      "slug": "alpha-fixture",
+      "root": "{{PROFILE_ROOT}}",
+      "created_at": "2026-08-03T00:00:00Z"
+    }
+  ]
+}

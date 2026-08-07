@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "id": "com.example.fixture",
+  "version": "0.1.0",
+  "display_name": "Fixture app",
+  "description": "Frozen alpha fixture package",
+  "manifest": {},
+  "backend": {
+    "kind": "mcp-stdio",
+    "authority_mode": "unsandboxed",
+    "command": "node",
+    "args": ["backend/server.mjs"]
+  },
+  "data": {
+    "kind": "versioned",
+    "format_version": 1,
+    "migration": {
+      "protocol_version": 1,
+      "command": "node",
+      "entry": "backend/migrate.mjs",
+      "args": ["backend/migrate.mjs"],
+      "transitions": []
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "assets": {
+      "backend/server.mjs": "sha256-e7a74775e9e4897bc31e38329967427b79bc66e3a0d5ad48c5c60894dc16bddb",
+      "backend/migrate.mjs": "sha256-381c0ea574e1a56f82f9df80bc80c7631fb7678bae02438cc9e7fd8a2e74fd5e"
+    }
+  },
+  "min_host_version": "0.1.0-alpha.1"
+}

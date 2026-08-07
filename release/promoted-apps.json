@@ -1,0 +1,103 @@
+{
+  "format_version": 1,
+  "host_version": "0.1.0-alpha.1",
+  "tested_core_commit": null,
+  "apps": [
+    {
+      "id": "kestral.daily-notes",
+      "display_name": "Daily Notes",
+      "repository": "https://github.com/ManuelZierl/daily-notes",
+      "source_commit": "543332db5162ee63e8686cb4ad08c60e76791b6a",
+      "package_version": "0.1.0",
+      "package_digest": "sha256-8fc172678cb11c51907bb3bb15d97a0ee4e0acf9ef27b16e143e2c07c84f7c08",
+      "minimum_host_version": "0.1.0-alpha.1",
+      "tested_host_version": "0.1.0-alpha.1",
+      "extension_contributions": [],
+      "evidence_url": null,
+      "evidence_sha256": null
+    },
+    {
+      "id": "com.ma-zierl.kestral-chat-export",
+      "display_name": "Chat Export",
+      "repository": "https://github.com/ManuelZierl/kestral-chat-export",
+      "source_commit": "d83a64b336ebc4ee8f6c75d710ed7689c6571a19",
+      "package_version": "0.1.1",
+      "package_digest": "sha256-9fa54047ed2046d7d4efd3248762893a5270e826d96444c46ee20990076d37e4",
+      "minimum_host_version": "0.1.0-alpha.1",
+      "tested_host_version": "0.1.0-alpha.1",
+      "extension_contributions": [
+        {
+          "target_app": "chat",
+          "extension_point": "thread-actions",
+          "contract_version": 1
+        }
+      ],
+      "evidence_url": null,
+      "evidence_sha256": null
+    },
+    {
+      "id": "com.ma-zierl.kestral-excalidraw",
+      "display_name": "Whiteboard",
+      "repository": "https://github.com/ManuelZierl/kestral-excalidraw",
+      "source_commit": "fcb5c6d453f7de4db8c3b0a0f19746a3b1a36891",
+      "package_version": "0.1.1",
+      "package_digest": "sha256-e03b8097f932e13fdc542b7526881a0d812b1d90777c00988e9fa7cc5bef3c94",
+      "minimum_host_version": "0.1.0-alpha.1",
+      "tested_host_version": "0.1.0-alpha.1",
+      "extension_contributions": [],
+      "evidence_url": null,
+      "evidence_sha256": null
+    },
+    {
+      "id": "com.ma-zierl.kestral-model-profiles",
+      "display_name": "Model Profiles",
+      "repository": "https://github.com/ManuelZierl/kestral-model-profiles",
+      "source_commit": "f31fd0da4c07eb1ffff746d2b8861b20ed679dd7",
+      "package_version": "0.1.0",
+      "package_digest": "sha256-6e870e024a62b562a49b7a3a52f1b9d954647fa55f5be94bb5ef2d3d4889c82e",
+      "minimum_host_version": "0.1.0-alpha.1",
+      "tested_host_version": "0.1.0-alpha.1",
+      "extension_contributions": [
+        {
+          "target_app": "chat",
+          "extension_point": "model-profile-editor",
+          "contract_version": 1
+        }
+      ],
+      "evidence_url": null,
+      "evidence_sha256": null
+    },
+    {
+      "id": "com.ma-zierl.kestral-pi",
+      "display_name": "Agent Engine (pi)",
+      "repository": "https://github.com/ManuelZierl/kestral-pi",
+      "source_commit": "d1d63bfaee1730fa8361810d70aae8e83b99323e",
+      "package_version": "0.1.1",
+      "package_digest": "sha256-6b1dbe0fb9d5a22c90e7602a653d8bfc063af0fb1f7ded2fe18a9ff1ff72532f",
+      "minimum_host_version": "0.1.0-alpha.1",
+      "tested_host_version": "0.1.0-alpha.1",
+      "extension_contributions": [],
+      "evidence_url": null,
+      "evidence_sha256": null
+    },
+    {
+      "id": "org.apphost.reading-insights",
+      "display_name": "Reading Insights",
+      "repository": "https://github.com/ManuelZierl/reading-insights",
+      "source_commit": "e92051b2f91350a0684d6de4d24b639178714d96",
+      "package_version": "0.3.1",
+      "package_digest": "sha256-ac6c85f561ac8ee60a05d0af99ab801ed15c6a14e3b1cd42235c3873f16cc255",
+      "minimum_host_version": "0.1.0-alpha.1",
+      "tested_host_version": "0.1.0-alpha.1",
+      "extension_contributions": [
+        {
+          "target_app": "chat",
+          "extension_point": "message-actions",
+          "contract_version": 6
+        }
+      ],
+      "evidence_url": null,
+      "evidence_sha256": null
+    }
+  ]
+}

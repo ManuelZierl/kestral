@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "profile": {
+    "profile_id": "profile-alpha-1",
+    "display_name": "Alpha fixture",
+    "slug": "alpha-fixture",
+    "root": "{{PROFILE_ROOT}}",
+    "created_at": "2026-08-03T00:00:00Z"
+  },
+  "source": "managed"
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "transaction_id": "00000000-0000-4000-8000-000000000002",
+  "profile_id": "profile-alpha-1",
+  "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "candidate_sha256": null,
+  "phase": "planned"
+}

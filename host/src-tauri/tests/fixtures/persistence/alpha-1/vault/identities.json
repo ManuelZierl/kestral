@@ -1,0 +1,11 @@
+{
+  "profile_namespace": "profile-alpha-1",
+  "values_in_profile_backup": false,
+  "references": [
+    {
+      "owner": "com.example.fixture",
+      "name": "api-key",
+      "present": false
+    }
+  ]
+}

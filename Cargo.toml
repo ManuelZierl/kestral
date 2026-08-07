@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/kernel", "crates/mcp-adapter", "host/src-tauri"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+jsonschema = { version = "0.33", default-features = false }
+sha2 = "0.10"
+thiserror = "2"
+semver = "1"
+base64 = "0.22"
+ed25519-dalek = "2"

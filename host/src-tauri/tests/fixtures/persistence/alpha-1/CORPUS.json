@@ -1,0 +1,31 @@
+{
+  "release": "0.1.0-alpha.1",
+  "sha256": {
+    "README.md": "3ef250d039c824124372042323d3b1979dd880e63ad0b52a1f85f966ad208541",
+    "browser/custom-themes.json": "546deb2dca85c7fcd408afba9857c198abce342b2d80de34d31ed6ba0e20c685",
+    "browser/pending-chat-sends.json": "e5b776e755cdb0e36dee47dd3e5c665b6555fe82bfc0adfdc5655e9e6aa624a2",
+    "store-samples/kestral-system-reset.json": "08590ee808c35b153ec976a8b2b0f324b556c7514d515cc3a48b569b9e9cf428",
+    "store-samples/kestral-profile-transition.json": "a2a9444ab20940128e6856bf2f21a1aec25cf931dfd2825837b2e08dc41e68c0",
+    "store-samples/profile-migration-journal.json": "9d41fb2ac213992f43bede60145090c8b791f296343b7a21c2ada747e4a33ae6",
+    "store-samples/remote-owner-auth-v1.json": "30287e7a79c0e99c634b539f743a50e7085a9844807af13217ab5b1f6a80b65a",
+    "store-samples/update-journal.json": "3631ad0248a986bfa7f04305f14d5f71b4eb9dd2950db4c5407988b370a5101c",
+    "vault/identities.json": "06cad846b0f252428d73359844f81e414514a22c24854d844c93efa98ae2764f",
+    "whole-profile/apps/.data/com.example.fixture/app-data-revisions/11111111-1111-4111-8111-111111111111/opaque-data.json": "9d12029749a1e36d6dfdf63535161180d0d63ff788c24536f6883bbf3277e2df",
+    "whole-profile/apps/.data/com.example.fixture/app-data-state-v1.json": "39e084da142849def2bb459917902fd1a03e8bfe8e3babc65b3afb937e4a5a76",
+    "whole-profile/apps/.data/com.example.fixture/surface-state-v2.json": "87bf19d8a326ad8b248811330c36b35e0a9ac904d1cb91d5313c99a9d3745a77",
+    "whole-profile/apps/com.example.fixture/revisions/revision-alpha-1/app.json": "ab1c7216bb662f577d317617c7bc5006d5e8cf2d6c0adc4f7b2cc4e6e66e429d",
+    "whole-profile/apps/com.example.fixture/revisions/revision-alpha-1/backend/migrate.mjs": "381c0ea574e1a56f82f9df80bc80c7631fb7678bae02438cc9e7fd8a2e74fd5e",
+    "whole-profile/apps/com.example.fixture/revisions/revision-alpha-1/backend/server.mjs": "e7a74775e9e4897bc31e38329967427b79bc66e3a0d5ad48c5c60894dc16bddb",
+    "whole-profile/chat-threads.json": "bacd27761564f44ac0f49716742854dc277fbd2bc90c6e17945d089249696618",
+    "whole-profile/file-resources-v1.json": "f9e19bbbd0b9c5904df3d66620baebe33bcca4ee77f9c4b584e76038a1540a47",
+    "whole-profile/host-config.json": "b097af6ac6032fd1ed03f2f8262bde24a5ef6ea73ddaf1468f185bacaaabcd4e",
+    "whole-profile/host-secrets.json": "aecc41a99bb2e899c9f6ef3d0cfc71a2aae0119944ab8b9e8a337d7b2cdcee4f",
+    "whole-profile/installed-apps.json": "4023b01920cb3b4b7d250bf4ffe235095d5fe5c8c84d17047c7b1eba606072f4",
+    "whole-profile/kernel-state-v1.json": "15467f2ebbb058b1921e44c1a227af8828b71e3975b913353abbd8982a892b90",
+    "whole-profile/kestral-profile.json": "1cd48f3ad8d6fc5265e79dd7d8b4c24cf68b2d916ac419f23a1689f0b4175c5d",
+    "whole-profile/kestral-profiles.json": "1a2b4e9d21bda9a25d8c8f63231e22d418253a98a7d63d4ca7b9881be6cc0310",
+    "whole-profile/mcp-gateway-audit.jsonl": "ded65f5b3f75fd59fff72082c8258d0f8f878f7f2d887d9d70855446687b4cda",
+    "whole-profile/trusted-notices.json": "8394ce29537b005fe8d465e3d11a70f68787422e914d58a6cc9bf0d2a765c4f8",
+    "whole-profile/trust-store.json": "7c1051f6e2bc3943b7c1dbe4da229694455681b8875a346c99279e555edb733f"
+  }
+}

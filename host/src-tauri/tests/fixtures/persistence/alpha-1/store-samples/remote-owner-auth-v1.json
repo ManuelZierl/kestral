@@ -1,0 +1,40 @@
+{
+  "credentials": [
+    {
+      "cred": {
+        "attestation": {
+          "data": "None",
+          "metadata": "None"
+        },
+        "attestation_format": "none",
+        "backup_eligible": false,
+        "backup_state": false,
+        "counter": 0,
+        "cred": {
+          "key": {
+            "EC_EC2": {
+              "curve": "SECP256R1",
+              "x": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+              "y": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+            }
+          },
+          "type_": "ES256"
+        },
+        "cred_id": "AQIDBA",
+        "extensions": {
+          "appid": "NotRequested",
+          "cred_props": "NotRequested",
+          "cred_protect": "NotRequested",
+          "hmac_create_secret": "NotRequested"
+        },
+        "registration_policy": "preferred",
+        "transports": null,
+        "user_verified": true
+      }
+    }
+  ],
+  "format_version": 1,
+  "origin": "https://kestral.example",
+  "owner_user_id": "00000000-0000-4000-8000-000000000001",
+  "rp_id": "kestral.example"
+}

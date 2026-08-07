@@ -1,0 +1,30 @@
+title: Kestral
+description: Kestral is a personal-first, open-source AI workspace and lean local host for user-chosen apps. Chat is the default starting app, not the canonical interface for all AI work.
+
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+
+baseurl: ""
+
+color_scheme: dark
+search_enabled: true
+heading_anchors: true
+back_to_top: true
+back_to_top_text: Back to top
+footer_content: "Kestral 0.1.0-alpha.1 documentation."
+callouts:
+  warning:
+    title: Warning
+    color: red
+  important:
+    title: Important
+    color: yellow
+  note:
+    title: Note
+    color: blue
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

@@ -1,0 +1,22 @@
+[package]
+name = "mcp-adapter"
+version = "0.1.0-alpha.1"
+edition = "2021"
+description = "MCP consumer adapter: bridges Model Context Protocol servers into generic host-kernel apps. MCP is an adapter protocol here, not the internal ontology."
+
+[dependencies]
+app-host-kernel = { path = "../kernel" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+jsonschema = { workspace = true }
+thiserror = { workspace = true }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+[dev-dependencies]
+tiny_http = "0.12"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Isolation", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading", "Win32_Storage_FileSystem"] }

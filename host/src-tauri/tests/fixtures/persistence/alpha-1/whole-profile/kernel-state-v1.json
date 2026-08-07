@@ -1,0 +1,11 @@
+{
+  "format_version": 1,
+  "state_sha256": "e072b05f6b35a356d2ea95e127f5c11c597f5996c7d856e556b829d9505462f0",
+  "state": {
+    "installed_apps": [],
+    "grants": [],
+    "revoked_grant_ids": [],
+    "ledger_records": [],
+    "artifacts": []
+  }
+}

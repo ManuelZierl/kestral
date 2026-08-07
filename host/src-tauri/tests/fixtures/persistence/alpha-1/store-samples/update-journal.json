@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "transition_id": "transition-alpha-1",
+  "app_id": "com.example.fixture",
+  "operation": "update",
+  "phase": "prepared",
+  "current_revision_id": "revision-alpha-1",
+  "target_revision": {
+    "revision_id": "revision-alpha-2",
+    "version": "0.1.1",
+    "display_name": "Fixture app",
+    "description": "Frozen alpha fixture package",
+    "backend_kind": "mcp-stdio",
+    "publisher": null,
+    "signature_verdict": "unsigned",
+    "signature_key_id": null,
+    "min_host_version": "0.1.0-alpha.1",
+    "installed_at": "2026-08-03T00:01:00Z",
+    "payload_dir": "{{PROFILE_ROOT}}/apps/com.example.fixture/revisions/revision-alpha-2",
+    "package_digest": "sha256-fixture-alpha-2"
+  },
+  "prior_revisions": [],
+  "enabled": false,
+  "data_transition": null
+}

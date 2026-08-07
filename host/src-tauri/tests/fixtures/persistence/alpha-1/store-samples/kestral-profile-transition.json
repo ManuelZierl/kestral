@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "transition": {
+    "kind": "create",
+    "profile": {
+      "profile_id": "profile-alpha-2",
+      "display_name": "Second fixture",
+      "slug": "second-fixture",
+      "root": "{{PROFILE_ROOT}}/profiles/profile-alpha-2",
+      "created_at": "2026-08-03T00:03:00Z"
+    }
+  }
+}

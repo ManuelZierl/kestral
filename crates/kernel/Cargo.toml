@@ -1,0 +1,18 @@
+[package]
+name = "app-host-kernel"
+version = "0.1.0-alpha.1"
+edition = "2021"
+description = "Microkernel of a lean local desktop host for agentic apps."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+jsonschema = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+serde_json = { workspace = true }

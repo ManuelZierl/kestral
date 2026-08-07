@@ -1,0 +1,31 @@
+{
+  "version": 4,
+  "apps": [
+    {
+      "id": "com.example.fixture",
+      "enabled": false,
+      "uninstalling": false,
+      "lifecycle_generation": 1,
+      "purge_secrets": false,
+      "purge_data": false,
+      "purge_secret_names": [],
+      "active_revision_id": "revision-alpha-1",
+      "revisions": [
+        {
+          "revision_id": "revision-alpha-1",
+          "version": "0.1.0",
+          "display_name": "Fixture app",
+          "description": "Frozen alpha fixture package",
+          "backend_kind": "mcp-stdio",
+          "publisher": null,
+          "signature_verdict": "unsigned",
+          "signature_key_id": null,
+          "min_host_version": "0.1.0-alpha.1",
+          "installed_at": "2026-08-03T00:00:00Z",
+          "payload_dir": "{{PROFILE_ROOT}}/apps/com.example.fixture/revisions/revision-alpha-1",
+          "package_digest": "sha256-b808a2498a1a0397d745b4013c3dd6bae77cd8d0752e393625ab54d742aa83c9"
+        }
+      ]
+    }
+  ]
+}

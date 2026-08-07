@@ -1,0 +1,65 @@
+{
+  "name": "host",
+  "version": "0.1.0-alpha.1",
+  "description": "Kestral is a personal-first, open-source AI workspace and lean local host for user-chosen apps. Chat is the default starting app, not the canonical interface for all AI work.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19 <23"
+  },
+  "scripts": {
+    "dev": "vite dev",
+    "dev:split": "node ../scripts/dev-split.mjs",
+    "build": "npm run provider-worker:package && vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run",
+    "test:split-dev": "node --test ../scripts/dev-split.test.mjs ../scripts/host-server-listen-address.test.mjs && node ../scripts/smoke-split-dev-proxy.mjs",
+    "test:split-proxy": "node ../scripts/smoke-split-dev-proxy.mjs",
+    "provider-worker:runtime": "node provider-worker/scripts/install-node-runtime.mjs",
+    "provider-worker:build": "esbuild provider-worker/src/worker.ts --bundle --platform=node --format=esm --target=node22.19 --outfile=provider-worker/dist/worker.mjs",
+    "provider-worker:package": "npm run provider-worker:runtime && npm run provider-worker:build",
+    "provider-worker:check": "tsc -p provider-worker/tsconfig.json",
+    "provider-worker:test": "npm run provider-worker:runtime && node provider-worker/scripts/run-with-runtime.mjs --test provider-worker/test/*.test.ts",
+    "tauri": "tauri",
+    "tauri:dev:mcp": "tauri dev --config src-tauri/tauri.mcp.conf.json --features dev-mcp"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
+    "@earendil-works/pi-ai": "0.80.7",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-opener": "^2",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "@hypothesi/tauri-mcp-server": "0.12.0",
+    "@sveltejs/adapter-static": "^3.0.6",
+    "@sveltejs/kit": "^2.9.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/svelte": "^5.4.2",
+    "@testing-library/user-event": "^14.6.1",
+    "esbuild": "0.25.6",
+    "jsdom": "^29.1.1",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vitest": "^3.2.7"
+  },
+  "overrides": {
+    "@hypothesi/tauri-mcp-server": {
+      "@modelcontextprotocol/sdk": "1.29.0",
+      "ws": "8.21.1"
+    },
+    "@sveltejs/kit": {
+      "cookie": "0.7.2"
+    }
+  }
+}

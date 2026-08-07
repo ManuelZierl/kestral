@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "generation": 1,
+  "surfaces": {
+    "main": {
+      "entries": {
+        "fixture": {
+          "revision": 1,
+          "value": {
+            "text": "opaque app-owned value"
+          }
+        }
+      }
+    }
+  }
+}

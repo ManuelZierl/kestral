@@ -1,0 +1,293 @@
+name: Release
+
+# A v* tag contained in main is validated, built on Windows and Linux, and
+# published only after every declared artifact has been collected.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Product version to build without publishing (for example, 0.1.0-alpha.1)
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Require a clean core commit
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Require release commit to belong to main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: docs
+      - name: Require tag to match every product version
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          node scripts/check-release-version.mjs "$version"
+      - name: Verify promoted app release contracts and evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --test scripts/check-alpha-release-evidence.test.mjs
+          node scripts/check-alpha-release-evidence.mjs --require-complete --release-commit "$GITHUB_SHA"
+          node --test scripts/check-promoted-app-contracts.test.mjs
+          node scripts/check-promoted-app-contracts.mjs --require-evidence --verify-remotes --release-commit "$GITHUB_SHA"
+      - name: Verify external app isolation
+        run: node scripts/check-reference-app-isolation.mjs
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install frontend toolchain
+        working-directory: host
+        run: npm ci
+      - name: Generate third-party notices
+        run: node scripts/generate-third-party-notices.mjs
+      - name: Package provider worker
+        working-directory: host
+        run: |
+          npm run provider-worker:check
+          npm run provider-worker:test
+          npm run provider-worker:package
+      - name: Frontend checks and tests
+        working-directory: host
+        run: |
+          npm run check
+          npm test
+          npm run test:split-dev
+          npm run build
+          npm audit --audit-level=high
+      - name: Documentation build and link check
+        run: |
+          BUNDLE_GEMFILE=docs/Gemfile bundle exec jekyll build --source docs --destination docs/_site --strict_front_matter
+          node scripts/check-doc-links.mjs docs/_site
+      - name: Rust formatting, lints, tests, and audit
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo test --all-features
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
+      - name: Package platform-independent artifacts
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          mkdir -p target/release/public
+          cp THIRD-PARTY-NOTICES.txt host/build/THIRD-PARTY-NOTICES.txt
+          (cd host/build && zip -qr "../../target/release/public/kestral-browser-client-${version}.zip" .)
+          cp THIRD-PARTY-NOTICES.txt target/release/public/
+          cp release/promoted-apps.json target/release/public/PROMOTED-APPS.json
+          cp release/v0.1.0-alpha.1-evidence.md target/release/public/RELEASE-EVIDENCE.md
+      - name: Require reproducible tracked outputs
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v6
+        with:
+          name: platform-independent-release
+          path: target/release/public/*
+          if-no-files-found: error
+
+  windows:
+    name: Build Windows artifacts
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v7
+        with:
+          name: platform-independent-release
+          path: target/release/independent
+      - name: Stage third-party notices
+        shell: pwsh
+        run: Copy-Item "target/release/independent/THIRD-PARTY-NOTICES.txt" "THIRD-PARTY-NOTICES.txt"
+      - name: Install frontend toolchain and verify provider worker
+        working-directory: host
+        run: |
+          npm ci
+          npm run provider-worker:check
+          npm run provider-worker:test
+          npm run provider-worker:package
+      - name: Native Windows credential integration
+        run: cargo test -p host --test os_credentials -- --ignored --exact native_credential_round_trip_keeps_json_status_only
+      - name: Build NSIS and backend binary
+        working-directory: host
+        run: |
+          cargo build -p host --release --bin host-server
+          npm run tauri build -- --bundles nsis
+      - name: Package Windows artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if (-not $version) { $version = "${{ github.ref_name }}".Substring(1) }
+          scripts/package-windows-release.ps1 -Version $version
+      - name: Require reproducible tracked outputs
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-release
+          path: target/release/public/*
+          if-no-files-found: error
+
+  linux:
+    name: Build Linux artifacts
+    needs: validate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v7
+        with:
+          name: platform-independent-release
+          path: target/release/independent
+      - name: Stage third-party notices
+        run: cp target/release/independent/THIRD-PARTY-NOTICES.txt THIRD-PARTY-NOTICES.txt
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install frontend toolchain and verify provider worker
+        working-directory: host
+        run: |
+          npm ci
+          npm run provider-worker:check
+          npm run provider-worker:test
+          npm run provider-worker:package
+      - name: Build AppImage, deb, and backend binary
+        working-directory: host
+        run: |
+          cargo build -p host --release --bin host-server
+          npm run tauri build -- --bundles appimage,deb
+      - name: Smoke-test backend-only remote transport
+        run: node scripts/smoke-host-server.mjs target/release/host-server
+      - name: Package Linux artifacts
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          if ldd target/release/host-server | grep -q "not found"; then
+            echo "host-server has unresolved runtime libraries" >&2
+            exit 1
+          fi
+          bash scripts/package-linux-release.sh "$version"
+      - name: Require reproducible tracked outputs
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v6
+        with:
+          name: linux-release
+          path: target/release/public/*
+          if-no-files-found: error
+
+  assemble:
+    name: Assemble release
+    needs: [validate, windows, linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: "*-release"
+          path: release-assets
+          merge-multiple: true
+      - name: Require complete release matrix
+        shell: bash
+        run: |
+          require_one() {
+            local label="$1"
+            local pattern="$2"
+            mapfile -t matches < <(compgen -G "release-assets/$pattern" || true)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "Expected one $label artifact matching $pattern; found ${#matches[@]}" >&2
+              exit 1
+            fi
+          }
+          require_one "NSIS" "*.exe"
+          require_one "Windows portable" "*windows-x86_64-portable.zip"
+          require_one "AppImage" "*.AppImage"
+          require_one "deb" "*.deb"
+          require_one "Linux backend" "*linux-x86_64-server.tar.gz"
+          require_one "browser client" "kestral-browser-client-*.zip"
+          require_one "promoted app record" "PROMOTED-APPS.json"
+          require_one "release evidence" "RELEASE-EVIDENCE.md"
+      - name: Write CI provenance record
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          cat > release-assets/BUILD-PROVENANCE.txt <<EOF
+          repository=https://github.com/${GITHUB_REPOSITORY}
+          commit=${GITHUB_SHA}
+          release_version=${version}
+          trigger=${GITHUB_EVENT_NAME}
+          workflow=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}
+          promoted_apps=PROMOTED-APPS.json
+          runner=GitHub Actions
+          signing=unsigned
+          EOF
+      - name: Write release checksums
+        working-directory: release-assets
+        run: sha256sum * | LC_ALL=C sort -k2 > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: assembled-release
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub prerelease
+    if: github.event_name == 'push'
+    needs: assemble
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: assembled-release
+          path: release-assets
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Kestral ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: release/v0.1.0-alpha.1.md
+          files: release-assets/*
+          fail_on_unmatched_files: true
