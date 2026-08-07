@@ -4,6 +4,8 @@ layout: default
 nav_order: 1
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Kestral documentation
 
 Kestral is a personal-first, open-source AI workspace and lean local host for
@@ -17,7 +19,7 @@ been published. The candidate supports a native Windows or Linux desktop and a
 split deployment with an Ubuntu backend and a static browser-based trusted owner
 console. It is intended for technical testers and contributors, not production
 use. Read the
-[release notice]({% link alpha-release.md %}) before installing it.
+[release notice]({{ internal_link_prefix }}{% link alpha-release.md %}) before installing it.
 
 {: .important }
 Installing an app is not blanket trust. Read the package inspection and each
@@ -28,17 +30,17 @@ series and are not isolated from that account's files or network by the kernel.
 
 | Page | What it covers |
 |------|----------------|
-| [Getting started]({% link getting-started.md %}) | Build or install Kestral, configure a model, start with Chat, and add a focused app |
-| [Alpha release notice]({% link alpha-release.md %}) | Understand the audience, artifacts, unsigned status, and testing risks |
-| [Using Kestral]({% link user-guide.md %}) | Work across Chat, focused apps, artifacts, settings, and activity history |
-| [Managing apps]({% link managing-apps.md %}) | Inspect, install, update, disable, and remove apps |
-| [Curated apps]({% link curated-apps.md %}) | Discover reviewed independent apps and propose a listing |
-| [Tool servers]({% link tool-servers.md %}) | Connect local or remote MCP servers explicitly |
-| [Permissions and files]({% link permissions-and-files.md %}) | Understand grants and share only selected files or folders |
-| [Extending Kestral]({% link extending-kestral.md %}) | Build app packages or expose capabilities over MCP |
-| [Architecture]({% link architecture.md %}) | Understand the kernel, adapters, host, and action path |
-| [Operations]({% link operations.md %}) | Deployment, state, versioning, and release limitations |
-| [Roadmap]({% link roadmap.md %}) | Review explicitly non-shipped product direction and constraints |
+| [Getting started]({{ internal_link_prefix }}{% link getting-started.md %}) | Build or install Kestral, configure a model, start with Chat, and add a focused app |
+| [Alpha release notice]({{ internal_link_prefix }}{% link alpha-release.md %}) | Understand the audience, artifacts, unsigned status, and testing risks |
+| [Using Kestral]({{ internal_link_prefix }}{% link user-guide.md %}) | Work across Chat, focused apps, artifacts, settings, and activity history |
+| [Managing apps]({{ internal_link_prefix }}{% link managing-apps.md %}) | Inspect, install, update, disable, and remove apps |
+| [Curated apps]({{ internal_link_prefix }}{% link curated-apps.md %}) | Discover reviewed independent apps and propose a listing |
+| [Tool servers]({{ internal_link_prefix }}{% link tool-servers.md %}) | Connect local or remote MCP servers explicitly |
+| [Permissions and files]({{ internal_link_prefix }}{% link permissions-and-files.md %}) | Understand grants and share only selected files or folders |
+| [Extending Kestral]({{ internal_link_prefix }}{% link extending-kestral.md %}) | Build app packages or expose capabilities over MCP |
+| [Architecture]({{ internal_link_prefix }}{% link architecture.md %}) | Understand the kernel, adapters, host, and action path |
+| [Operations]({{ internal_link_prefix }}{% link operations.md %}) | Deployment, state, versioning, and release limitations |
+| [Roadmap]({{ internal_link_prefix }}{% link roadmap.md %}) | Review explicitly non-shipped product direction and constraints |
 
 ## Product boundary
 

@@ -5,6 +5,8 @@ parent: Extending Kestral
 nav_order: 1
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Building an app package
 {: .no_toc }
 
@@ -1087,7 +1089,7 @@ available.
 | `executable` | Selects a checksummed packaged executable for the host platform; it speaks MCP over stdio. Supported keys are `windows-x86_64`, `windows-aarch64`, `macos-x86_64`, `macos-aarch64`, `linux-x86_64`, and `linux-aarch64`. |
 | `agent-worker` | Runs the version 1 callback protocol used by a headless agent engine. It must declare exactly `agent.run` and an `agent-transcript` artifact type. |
 
-See [Agent workers]({% link agent-workers.md %}) for the complete version 1
+See [Agent workers]({{ internal_link_prefix }}{% link agent-workers.md %}) for the complete version 1
 message contract, limits, callback mediation, progress, and cancellation rules.
 
 Native backend kinds declare `authority_mode`. In the 0.1 series,

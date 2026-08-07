@@ -5,6 +5,8 @@ nav_order: 3
 has_children: true
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Using Kestral
 {: .no_toc }
 
@@ -56,8 +58,8 @@ attributable capability Runs without an unnecessary second approval prompt.
 Apps can also expose capabilities to other granted callers, contribute a
 contextual surface to another app, or produce artifacts that retain provenance.
 This allows Chat to coordinate work without forcing the complete workflow into
-a transcript. Review apps under [Managing apps]({% link managing-apps.md %}) and
-use [Curated apps]({% link curated-apps.md %}) for independent starting points.
+a transcript. Review apps under [Managing apps]({{ internal_link_prefix }}{% link managing-apps.md %}) and
+use [Curated apps]({{ internal_link_prefix }}{% link curated-apps.md %}) for independent starting points.
 
 ## Appearance
 

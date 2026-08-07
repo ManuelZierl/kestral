@@ -4,6 +4,8 @@ layout: default
 nav_order: 7
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Roadmap
 {: .no_toc }
 
@@ -15,10 +17,10 @@ a planning document, not a release promise. Scope, sequencing, and version
 targets may change as personal use, external app work, and security review
 produce evidence.
 
-For implemented behavior, use the [0.1 documentation]({% link index.md %}). For
-known release limits, use [Alpha limitations]({% link honest-gaps.md %}). Public
+For implemented behavior, use the [0.1 documentation]({{ internal_link_prefix }}{% link index.md %}). For
+known release limits, use [Alpha limitations]({{ internal_link_prefix }}{% link honest-gaps.md %}). Public
 Chat and app contracts implemented for the current 0.1 candidate are documented under
-[Building an app package]({% link writing-apps.md %}), not repeated here as
+[Building an app package]({{ internal_link_prefix }}{% link writing-apps.md %}), not repeated here as
 future work.
 
 {: .warning }
@@ -63,7 +65,7 @@ breadth. Before publication:
   idle resources, worker cost, and time to first useful result.
 
 Development data created before that public baseline remains disposable. See
-[Versioning and recovery]({% link versioning.md %}) for the exact current and
+[Versioning and recovery]({{ internal_link_prefix }}{% link versioning.md %}) for the exact current and
 post-publication rules.
 
 ## Personal workspace exploration

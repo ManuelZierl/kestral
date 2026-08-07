@@ -5,6 +5,8 @@ nav_order: 4
 has_children: true
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Extending Kestral
 
 Kestral's developer platform exists to support the personal workspace: a user
@@ -18,11 +20,11 @@ Kestral supports two extension paths in the 0.1 series:
 
 | Path | Best for | What the host derives or loads |
 |---|---|---|
-| [App package]({% link writing-apps.md %}) | A named, versioned product with declared permissions, optional custom UI, configuration, artifacts, and managed lifecycle | `app.json`, checksummed UI/backend payload, kernel manifest, handlers, and surfaces |
-| [Bare MCP server]({% link tool-servers.md %}) | Making existing tools usable quickly, without a Kestral package | Generic app identity, form surfaces, result artifacts, and approval-required grants from MCP tool schemas |
+| [App package]({{ internal_link_prefix }}{% link writing-apps.md %}) | A named, versioned product with declared permissions, optional custom UI, configuration, artifacts, and managed lifecycle | `app.json`, checksummed UI/backend payload, kernel manifest, handlers, and surfaces |
+| [Bare MCP server]({{ internal_link_prefix }}{% link tool-servers.md %}) | Making existing tools usable quickly, without a Kestral package | Generic app identity, form surfaces, result artifacts, and approval-required grants from MCP tool schemas |
 
 Kestral can also act as an MCP provider. See
-[Serving capabilities over MCP]({% link mcp-provider.md %}) when a remote MCP
+[Serving capabilities over MCP]({{ internal_link_prefix }}{% link mcp-provider.md %}) when a remote MCP
 client should call a narrow set of capabilities already installed in Kestral.
 
 All paths preserve the same mediated boundary: an extension declares behavior,

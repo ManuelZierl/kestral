@@ -5,6 +5,8 @@ parent: Operations
 nav_order: 2
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Versioning and recovery
 {: .no_toc }
 
@@ -489,7 +491,7 @@ documentation. The host preserves valid JSON values and CAS revisions without
 interpreting app-owned records.
 
 Chat's `message-actions` extension contract is version 6, documented in
-[Writing apps]({% link writing-apps.md %}). No other contract version is
+[Writing apps]({{ internal_link_prefix }}{% link writing-apps.md %}). No other contract version is
 accepted.
 
 The composition-receipt v3 shape is an embedded substructure of the Chat v4

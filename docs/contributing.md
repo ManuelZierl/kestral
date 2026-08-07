@@ -5,6 +5,8 @@ nav_order: 8
 has_children: true
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Contributing
 {: .no_toc }
 
@@ -18,8 +20,8 @@ has_children: true
 - platform dependencies required by Tauri 2;
 - Node on `PATH` for MCP stdio conformance and packaged-app lifecycle tests.
 
-Read [Architecture]({% link architecture.md %}),
-[Trust model]({% link trust-model.md %}), and the repository `AGENTS.md` before
+Read [Architecture]({{ internal_link_prefix }}{% link architecture.md %}),
+[Trust model]({{ internal_link_prefix }}{% link trust-model.md %}), and the repository `AGENTS.md` before
 changing architecture. The five primitives are a closed set, MCP belongs in
 the adapter/host boundary, and Chat, LLM Provider, and agent behavior remain
 userland.
@@ -63,10 +65,11 @@ npm test
 Build the documentation locally from `docs/` with Ruby and Bundler:
 
 ```sh
+cd docs
 bundle install
 bundle exec jekyll build --strict_front_matter
 cd ..
-node scripts/check-doc-links.mjs docs/_site
+node scripts/check-doc-links.mjs docs/_site /kestral
 ```
 
 Without local Ruby, run the same build in a disposable container from the
@@ -75,7 +78,7 @@ repository root:
 ```powershell
 docker run --rm -v "${PWD}/docs:/site" -w /site ruby:3.3 `
   sh -lc "bundle install && bundle exec jekyll build --strict_front_matter"
-node scripts/check-doc-links.mjs docs/_site
+node scripts/check-doc-links.mjs docs/_site /kestral
 ```
 
 Before a release-bound change, also run workspace formatting, Clippy with

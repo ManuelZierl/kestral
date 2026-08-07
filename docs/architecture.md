@@ -5,6 +5,8 @@ nav_order: 5
 has_children: true
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Architecture
 {: .no_toc }
 
@@ -430,7 +432,7 @@ Agent callbacks enter a bounded host dispatcher: eight workers, a bounded
 queue, and at most four outstanding requests per initiating app. Saturation is
 reported as an overload failure instead of spawning another OS thread. The
 language-neutral protocol is documented for third-party agent packages in
-[Agent workers]({% link agent-workers.md %}); Kestral Pi is its first external
+[Agent workers]({{ internal_link_prefix }}{% link agent-workers.md %}); Kestral Pi is its first external
 implementation, not a privileged runtime class.
 
 ## Durability
@@ -530,5 +532,5 @@ evidence must additionally show that the personal workspace improves recurring
 work, focused apps outperform Chat where their interaction model fits, external
 developers can use public seams, and the complete host remains measurably lean.
 
-See [Trust model]({% link trust-model.md %}) for the security consequences of
+See [Trust model]({{ internal_link_prefix }}{% link trust-model.md %}) for the security consequences of
 these boundaries.

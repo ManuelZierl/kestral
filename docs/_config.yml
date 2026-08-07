@@ -5,7 +5,8 @@ remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
 
-baseurl: ""
+url: "https://manuelzierl.github.io"
+baseurl: "/kestral"
 
 color_scheme: dark
 search_enabled: true

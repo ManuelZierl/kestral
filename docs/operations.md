@@ -5,6 +5,8 @@ nav_order: 6
 has_children: true
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Operations
 
 The planned Kestral `0.1.0-alpha.1` candidate supports native desktop mode and a
@@ -14,9 +16,9 @@ testing build.
 
 | Page | Purpose |
 |---|---|
-| [Deployment modes]({% link deployment-modes.md %}) | Run the all-in-one desktop or the advanced backend/client split. |
-| [Versioning and recovery]({% link versioning.md %}) | Understand strict data formats, updates, backups, and failure behavior. |
-| [Alpha limitations]({% link honest-gaps.md %}) | Know what is intentionally outside the supported boundary. |
+| [Deployment modes]({{ internal_link_prefix }}{% link deployment-modes.md %}) | Run the all-in-one desktop or the advanced backend/client split. |
+| [Versioning and recovery]({{ internal_link_prefix }}{% link versioning.md %}) | Understand strict data formats, updates, backups, and failure behavior. |
+| [Alpha limitations]({{ internal_link_prefix }}{% link honest-gaps.md %}) | Know what is intentionally outside the supported boundary. |
 
 For profile selection and backup basics, see
-[Profiles and data]({% link profiles.md %}).
+[Profiles and data]({{ internal_link_prefix }}{% link profiles.md %}).

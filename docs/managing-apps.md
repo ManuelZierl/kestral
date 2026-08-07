@@ -5,6 +5,8 @@ parent: Using Kestral
 nav_order: 1
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Managing apps
 {: .no_toc }
 
@@ -78,7 +80,7 @@ Install native backends only from publishers you trust.
 Release builds require an explicit unsafe-native-backend opt-in before such a
 package can activate.
 The per-user, non-administrator procedure and its broad security effect are
-documented under [Agent Engine opt-in]({% link getting-started.md %}#agent-engine-opt-in).
+documented under [Agent Engine opt-in]({{ internal_link_prefix }}{% link getting-started.md %}#agent-engine-opt-in).
 
 ## Updates, downgrades, and revisions
 

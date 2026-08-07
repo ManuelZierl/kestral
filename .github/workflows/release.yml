@@ -89,8 +89,9 @@ jobs:
           npm audit --audit-level=high
       - name: Documentation build and link check
         run: |
+          node --test scripts/check-doc-links.test.mjs
           BUNDLE_GEMFILE=docs/Gemfile bundle exec jekyll build --source docs --destination docs/_site --strict_front_matter
-          node scripts/check-doc-links.mjs docs/_site
+          node scripts/check-doc-links.mjs docs/_site /kestral
       - name: Rust formatting, lints, tests, and audit
         run: |
           cargo fmt --all -- --check

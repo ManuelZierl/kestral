@@ -5,6 +5,8 @@ parent: Contributing
 nav_order: 1
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # v0.1.0-alpha.1 release candidate
 
 Kestral is a personal-first, open-source AI workspace and lean local host for
@@ -170,5 +172,5 @@ Use the repository's **Alpha bug report** issue template and include artifact
 name and SHA-256, OS, managed-device status, elevation behavior, exact warnings,
 reproduction steps, logs with secrets removed, persistence/recovery behavior,
 and whether Kestral Pi or remote mode was involved. The
-[alpha testing checklist]({% link contributing.md %}#alpha-testing-checklist)
+[alpha testing checklist]({{ internal_link_prefix }}{% link contributing.md %}#alpha-testing-checklist)
 lists concrete areas where reports are needed.

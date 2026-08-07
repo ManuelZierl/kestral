@@ -5,6 +5,8 @@ parent: Using Kestral
 nav_order: 2
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Curated apps
 {: .no_toc }
 
@@ -48,7 +50,7 @@ it is not a security endorsement or a general recommendation.
 
 Kestral installs the reviewed package bytes from `app.json` or `dist/app.json`;
 it does not run a repository's build during installation. See
-[Managing apps]({% link managing-apps.md %}) for the complete review, update,
+[Managing apps]({{ internal_link_prefix }}{% link managing-apps.md %}) for the complete review, update,
 disable, and uninstall workflow.
 
 ## Curation criteria

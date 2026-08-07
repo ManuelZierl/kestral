@@ -4,6 +4,8 @@ layout: default
 nav_order: 2
 ---
 
+{% assign internal_link_prefix = "" %}{% assign jekyll_major = jekyll.version | split: "." | first %}{% if jekyll_major == "3" %}{% assign internal_link_prefix = site.baseurl %}{% endif %}
+
 # Getting started
 {: .no_toc }
 
@@ -75,7 +77,7 @@ Linux fails closed rather than storing provider secrets in plaintext.
 Use split mode when the complete Kestral backend should run on an Ubuntu
 machine while another device uses a normal browser. The Windows client needs no
 Kestral executable. Download the Linux server archive and static browser-client
-ZIP, then follow [Deployment modes]({% link deployment-modes.md %}) for the
+ZIP, then follow [Deployment modes]({{ internal_link_prefix }}{% link deployment-modes.md %}) for the
 exact loopback backend, HTTPS proxy, allowed origin, passkey pairing, resource, and
 server-side data-directory configuration.
 
@@ -105,7 +107,7 @@ same tunnel. Use `npm run dev:split -- --pair` when you need an owner pairing
 code. During pre-release development, use `npm run dev:split -- --clean` to
 irreversibly remove incompatible split-development data and Kestral's
 browser-local state, then create a fresh owner pairing code. See [Deployment
-modes]({% link deployment-modes.md %}) for
+modes]({{ internal_link_prefix }}{% link deployment-modes.md %}) for
 Zed setup and optional port, origin, and data-directory overrides. For a static
 client build, use `cd host && npm run build`.
 
@@ -169,7 +171,7 @@ Use **Reconnect ChatGPT account** if OpenAI revokes the session, or
 ## Add a focused app
 
 After the first message, open **Apps → Install an app** to review and install a
-task-specific app, or browse [Curated apps]({% link curated-apps.md %}) for an
+task-specific app, or browse [Curated apps]({{ internal_link_prefix }}{% link curated-apps.md %}) for an
 independently maintained starting point. A focused app can provide its own
 workspace surface and may separately request permission for Chat or another app
 to use its capabilities.
@@ -193,9 +195,9 @@ folder**.
 
 ## Next steps
 
-- Read the [alpha release notice]({% link alpha-release.md %}).
-- Learn the screens in [Using Kestral]({% link user-guide.md %}).
-- Review [Managing apps]({% link managing-apps.md %}) before installing a
+- Read the [alpha release notice]({{ internal_link_prefix }}{% link alpha-release.md %}).
+- Learn the screens in [Using Kestral]({{ internal_link_prefix }}{% link user-guide.md %}).
+- Review [Managing apps]({{ internal_link_prefix }}{% link managing-apps.md %}) before installing a
   package.
-- Review [Alpha limitations]({% link honest-gaps.md %}) and
-  [Versioning and recovery]({% link versioning.md %}).
+- Review [Alpha limitations]({{ internal_link_prefix }}{% link honest-gaps.md %}) and
+  [Versioning and recovery]({{ internal_link_prefix }}{% link versioning.md %}).
