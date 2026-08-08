@@ -10,7 +10,7 @@ $portable = "target/release/Kestral-$Version-windows-x86_64"
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $public, $portable
 New-Item -ItemType Directory -Force -Path "$portable/provider-worker/runtime", $public | Out-Null
 
-Copy-Item "target/release/host.exe", "target/release/host-server.exe", "LICENSE", "THIRD-PARTY-NOTICES.txt" -Destination $portable
+Copy-Item "target/release/kestral.exe", "target/release/host-server.exe", "LICENSE", "THIRD-PARTY-NOTICES.txt" -Destination $portable
 Copy-Item "docs/getting-started.md" -Destination "$portable/GETTING-STARTED.md"
 Copy-Item "host/provider-worker/dist/worker.mjs" -Destination "$portable/provider-worker"
 Copy-Item "host/provider-worker/runtime/node.exe", "host/provider-worker/runtime/LICENSE" -Destination "$portable/provider-worker/runtime"

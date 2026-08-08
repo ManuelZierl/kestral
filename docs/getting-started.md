@@ -31,7 +31,7 @@ successful GitHub Actions release run.
   installer. It installs under the current user's local application data and
   should not request elevation.
 - `kestral-0.1.0-alpha.1-windows-x86_64-portable.zip` requires no installation.
-  Extract the complete archive and run `host.exe` without moving it away from
+  Extract the complete archive and run `kestral.exe` without moving it away from
   the bundled `provider-worker/` resources.
 
 This alpha does not publish an MSI: the current Tauri/WiX pipeline rejects a
