@@ -140,7 +140,6 @@
         app={extension.app}
         surface={extension.surface}
         bundle={bundles[key]}
-        eager
         extensionContext={context}
         onExtensionState={(payload) => handleExtensionState(
           key,

@@ -51,8 +51,6 @@
     /// bar) to carry the app's identity — the in-flow identity strip only
     /// shows while loading.
     fill?: boolean;
-    /** Load immediately when the owner needs state before the frame is visible. */
-    eager?: boolean;
     onOutcome?: (outcome: SurfaceActionOutcome) => void;
     /// The frame published slot-specific state for its extension point owner.
     /// Untrusted: validate against the extension point's contract before use.
@@ -63,7 +61,7 @@
     handshakeTimeoutMs?: number;
   }
 
-  let { app, surface, bundle, extensionContext = {}, fill = false, eager = false, onOutcome, onExtensionState, handshakeTimeoutMs = 10000 }: Props = $props();
+  let { app, surface, bundle, extensionContext = {}, fill = false, onOutcome, onExtensionState, handshakeTimeoutMs = 10000 }: Props = $props();
 
   let status = $state<"loading" | "ready" | "error">("loading");
   let errorMessage = $state<string | null>(null);
@@ -391,6 +389,8 @@
       />
     {/if}
     {#if srcdoc}
+      <!-- Hidden zero-size frames are not eligible for lazy loading in WebKitGTK,
+           but the host cannot reveal this frame until its ready handshake. -->
       <iframe
         bind:this={iframeEl}
         title={`${app.manifest.display_name}: ${surface.title}`}
@@ -399,7 +399,7 @@
         onload={handleFrameLoad}
         referrerpolicy="no-referrer"
         allow=""
-        loading={eager ? "eager" : "lazy"}
+        loading="eager"
         class:loading={status === "loading"}
         style={!fill && contentHeight !== null ? `height: ${contentHeight}px` : undefined}
       ></iframe>

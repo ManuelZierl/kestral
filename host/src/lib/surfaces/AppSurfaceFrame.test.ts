@@ -165,6 +165,12 @@ describe("AppSurfaceFrame sandboxing", () => {
     expect(iframe.getAttribute("referrerpolicy")).toBe("no-referrer");
   });
 
+  it("loads eagerly so the hidden frame can complete its readiness handshake", async () => {
+    render(AppSurfaceFrame, props());
+
+    expect((await frame()).getAttribute("loading")).toBe("eager");
+  });
+
   it("serves the app HTML with the deny-by-default CSP and bridge SDK injected", async () => {
     render(AppSurfaceFrame, props());
     const iframe = await frame();
