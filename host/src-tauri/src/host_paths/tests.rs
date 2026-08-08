@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use super::HostPaths;
+use crate::kernel_state::ProfileRegistryLock;
 use crate::profiles::{ProfileRegistryService, ProfileSource};
 
 fn args(values: &[&str]) -> Vec<OsString> {
@@ -59,6 +60,38 @@ fn default_root_derives_all_paths() {
         paths.file_resource_registry_path(),
         root.join("file-resources-v1.json")
     );
+}
+
+#[test]
+fn fresh_default_root_initializes_while_the_registry_lock_is_held() {
+    let root = temp_root("locked-default");
+    let _registry_lock = ProfileRegistryLock::acquire(&root).unwrap();
+
+    let paths =
+        HostPaths::resolve_startup_from(root.clone(), Vec::<OsString>::new(), |_| None).unwrap();
+
+    assert_eq!(paths.root(), root);
+    assert!(root.join("kestral-profile.json").is_file());
+    assert!(root.join("kestral-profiles.json").is_file());
+}
+
+#[test]
+fn custom_data_root_initializes_with_only_a_kernel_lock_file() {
+    let default_root = temp_root("custom-default");
+    let custom_root = temp_root("locked-custom");
+    std::fs::write(custom_root.join("kernel-state-v1.lock"), []).unwrap();
+    let custom_root_arg = custom_root.to_str().unwrap();
+
+    let paths = HostPaths::resolve_startup_from(
+        default_root,
+        args(&["--data-dir", custom_root_arg]),
+        |_| None,
+    )
+    .unwrap();
+
+    assert_eq!(paths.root(), custom_root);
+    assert_eq!(paths.profile_source(), ProfileSource::CustomDataDir);
+    assert!(custom_root.join("kestral-profile.json").is_file());
 }
 
 #[test]

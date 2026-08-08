@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use crate::atomic_json::{
     load_json_document, persist_json_document, standard_writer, AtomicFileWriter, AtomicJsonError,
 };
+use crate::profiles::PROFILE_REGISTRY_LOCK_FILE;
 
 const FORMAT_VERSION: u32 = 1;
 
@@ -58,7 +59,7 @@ impl ProfileRegistryLock {
     pub(crate) fn acquire(default_root: &std::path::Path) -> Result<Arc<Self>, String> {
         fs::create_dir_all(default_root)
             .map_err(|error| format!("create Kestral data directory failed: {error}"))?;
-        let lock_path = default_root.join("kestral-profiles.lock");
+        let lock_path = default_root.join(PROFILE_REGISTRY_LOCK_FILE);
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)

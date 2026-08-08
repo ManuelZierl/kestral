@@ -84,6 +84,7 @@ fn missing_current_profile_selection_field_is_rejected() {
 #[test]
 fn non_empty_custom_root_without_identity_is_rejected() {
     let root = temp_root("custom-root-with-data");
+    std::fs::write(root.join("kernel-state-v1.lock"), []).unwrap();
     std::fs::write(root.join("existing-data"), "not a profile").unwrap();
 
     let error =
@@ -98,7 +99,35 @@ fn non_empty_custom_root_without_identity_is_rejected() {
 #[test]
 fn non_empty_default_root_without_identity_is_rejected() {
     let root = temp_root("default-root-with-data");
+    std::fs::write(root.join("kestral-profiles.lock"), []).unwrap();
     std::fs::write(root.join("host-config.json"), "test data").unwrap();
+
+    let error = ProfileRegistryService::open(root).err().unwrap();
+
+    assert!(error.contains("missing"), "{error}");
+    assert!(error.contains("kestral-profile.json"), "{error}");
+}
+
+#[test]
+fn coordination_name_is_ignored_only_for_a_regular_file() {
+    let root = temp_root("lock-directory-without-identity");
+    std::fs::create_dir(root.join("kestral-profiles.lock")).unwrap();
+
+    let error = ProfileRegistryService::open(root).err().unwrap();
+
+    assert!(error.contains("missing"), "{error}");
+    assert!(error.contains("kestral-profile.json"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_coordination_name_is_not_ignored() {
+    use std::os::unix::fs::symlink;
+
+    let root = temp_root("lock-symlink-without-identity");
+    let target = root.with_extension("lock-target");
+    std::fs::write(&target, []).unwrap();
+    symlink(&target, root.join("kestral-profiles.lock")).unwrap();
 
     let error = ProfileRegistryService::open(root).err().unwrap();
 

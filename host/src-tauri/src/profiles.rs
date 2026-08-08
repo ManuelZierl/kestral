@@ -16,6 +16,8 @@ const IDENTITY_VERSION: u32 = 1;
 const PROFILE_REGISTRY_FILE: &str = "kestral-profiles.json";
 const PROFILE_IDENTITY_FILE: &str = "kestral-profile.json";
 const PROFILE_TRANSITION_FILE: &str = "kestral-profile-transition.json";
+pub(crate) const PROFILE_REGISTRY_LOCK_FILE: &str = "kestral-profiles.lock";
+pub(crate) const KERNEL_STATE_LOCK_FILE: &str = "kernel-state-v1.lock";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -601,10 +603,10 @@ pub(crate) fn preserve_during_profile_reset(
     if path == profile_identity_path(profile_root) {
         return true;
     }
-    if path == profile_root.join("kernel-state-v1.lock") {
+    if path == profile_root.join(KERNEL_STATE_LOCK_FILE) {
         return true;
     }
-    if profile_root == default_root && path == default_root.join("kestral-profiles.lock") {
+    if profile_root == default_root && path == default_root.join(PROFILE_REGISTRY_LOCK_FILE) {
         return true;
     }
     profile_root == default_root
@@ -719,13 +721,21 @@ fn require_empty_unidentified_root(root: &Path) -> Result<(), String> {
     if !root.exists() {
         return Ok(());
     }
-    if fs::read_dir(root)
-        .map_err(|error| format!("inspect profile root failed: {error}"))?
-        .next()
-        .transpose()
-        .map_err(|error| format!("inspect profile root entry failed: {error}"))?
-        .is_some()
+    for entry in
+        fs::read_dir(root).map_err(|error| format!("inspect profile root failed: {error}"))?
     {
+        let entry = entry.map_err(|error| format!("inspect profile root entry failed: {error}"))?;
+        let name = entry.file_name();
+        let is_coordination_file =
+            name == PROFILE_REGISTRY_LOCK_FILE || name == KERNEL_STATE_LOCK_FILE;
+        if is_coordination_file
+            && entry
+                .file_type()
+                .map_err(|error| format!("inspect profile root entry type failed: {error}"))?
+                .is_file()
+        {
+            continue;
+        }
         return Err(format!(
             "profile root contains data but is missing {}",
             profile_identity_path(root).display()
