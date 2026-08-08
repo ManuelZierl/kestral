@@ -4006,6 +4006,14 @@ fn setup_host(app: &tauri::App) -> Result<(), String> {
     Ok(())
 }
 
+fn startup_failure_message(error: &str) -> String {
+    format!(
+        "Kestral could not start:\n\n{error}\n\nIf a persisted file failed to load, it is \
+         persisted state that this version does not read. Delete the named file (or the profile \
+         data directory) and start Kestral again."
+    )
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -4021,22 +4029,20 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let result = setup_host(app);
-            if let Err(error) = &result {
-                // Startup failures otherwise die as a console-only panic; a
-                // desktop user just sees the app not open. Tell them why.
+            if let Err(error) = setup_host(app) {
                 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+                let message = startup_failure_message(&error);
+                eprintln!("Kestral startup failed: {error}");
+                let app_handle = app.handle().clone();
                 app.dialog()
-                    .message(format!(
-                        "Kestral could not start:\n\n{error}\n\nIf a persisted file failed to \
-                         load, it is persisted state that this version does not read. Delete \
-                         the named file (or the profile data directory) and start Kestral again."
-                    ))
+                    .message(message)
                     .title("Kestral failed to start")
                     .kind(MessageDialogKind::Error)
-                    .blocking_show();
+                    // Tauri setup runs on the main thread; blocking_show freezes GTK here.
+                    .show(move |_| app_handle.exit(1));
             }
-            result.map_err(Into::into)
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             available_capabilities_for,

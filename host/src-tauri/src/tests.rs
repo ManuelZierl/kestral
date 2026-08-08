@@ -46,6 +46,15 @@ fn startup_test_dir(label: &str) -> PathBuf {
 }
 
 #[test]
+fn startup_failure_message_includes_the_cause_and_recovery() {
+    let message = startup_failure_message("read host config failed: permission denied");
+
+    assert!(message.starts_with("Kestral could not start:"));
+    assert!(message.contains("read host config failed: permission denied"));
+    assert!(message.contains("Delete the named file (or the profile data directory)"));
+}
+
+#[test]
 fn failed_startup_claim_is_retryable() {
     let installed = Mutex::new(false);
 
