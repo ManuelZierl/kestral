@@ -78,8 +78,7 @@ function app(id: string): InstalledApp {
 
 const bundle: SurfaceUiBundle = {
   protocol_version: SURFACE_BRIDGE_VERSION,
-  html: "<!doctype html><html><head></head><body><button>Mark as read</button></body></html>",
-  csp: "default-src 'none'",
+  document_url: "http://127.0.0.1:41234/reading-insights",
 };
 
 afterEach(() => {
@@ -111,7 +110,7 @@ describe("ChatExtensionSlot", () => {
     });
 
     const frame = await screen.findByTitle("Text Annotator: Message annotation");
-    expect(frame.getAttribute("srcdoc")).toContain("Mark as read");
+    expect(frame.getAttribute("src")).toBe("http://127.0.0.1:41234/reading-insights");
   });
 
   it("retries a transient bundle-load failure", async () => {

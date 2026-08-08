@@ -88,6 +88,15 @@ sandboxed app surface does not sandbox its backend.
 - **Teardown:** uninstall revokes grants in both directions, closes surfaces,
   cancels active Runs, releases leases, and drops event inboxes. Reinstalling
   the same ID inherits no kernel authority by identity alone.
+- **Surface document isolation:** verified custom UI is served through an
+  opaque host route with its own response CSP, never through inherited-policy
+  `srcdoc` and never by allowing inline scripts in the trusted shell. The route
+  is unguessable, carries no app-supplied path, uses an ordinary non-Tauri
+  random-port loopback origin in native mode, permits no child frames or
+  objects, refuses Tauri IPC origins as network destinations, and is invalidated
+  on replacement, disable, or uninstall. The iframe remains opaque-origin and
+  communicates only through the source-, instance-, schema-, and binding-checked
+  surface bridge.
 - **Monotonic migration authority:** profile migration cannot turn an exact
   capability into provider-wide access, fixed resources into `all-resources`,
   a visible condition into `silent`, or a finite expiry into a later or

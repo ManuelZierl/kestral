@@ -4,11 +4,14 @@ const transport = vi.hoisted(() => ({
   invokeChatWithProgress: vi.fn(),
   invokeHost: vi.fn(),
   invokeHostWithProgress: vi.fn(),
+  isRemoteTransport: vi.fn(() => false),
+  resolveHostResourceUrl: vi.fn((value: string) => value),
 }));
 
 vi.mock("$lib/hostTransport", () => transport);
 
 import {
+  getSurfaceUi,
   submitAction,
   type ActionIntent,
   type SurfaceActionOutcome,
@@ -56,5 +59,49 @@ describe("surface action transport", () => {
 
     expect(transport.invokeHost).toHaveBeenCalledWith("submit_action", { binding, intent });
     expect(transport.invokeHostWithProgress).not.toHaveBeenCalled();
+  });
+});
+
+describe("surface document transport", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    transport.isRemoteTransport.mockReturnValue(false);
+    transport.resolveHostResourceUrl.mockImplementation((value: string) => value);
+  });
+
+  it("requests a native isolated URL without transporting app HTML", async () => {
+    transport.invokeHost.mockResolvedValue({
+      protocol_version: 3,
+      document_url: "http://127.0.0.1:41234/token",
+    });
+
+    await expect(getSurfaceUi("weather", "panel")).resolves.toEqual({
+      protocol_version: 3,
+      document_url: "http://127.0.0.1:41234/token",
+    });
+    expect(transport.invokeHost).toHaveBeenCalledWith("get_surface_ui", {
+      appId: "weather",
+      surface: "panel",
+      remote: false,
+    });
+  });
+
+  it("resolves authenticated remote surface paths against the host URL", async () => {
+    transport.isRemoteTransport.mockReturnValue(true);
+    transport.invokeHost.mockResolvedValue({
+      protocol_version: 3,
+      document_url: "/api/surfaces/token",
+    });
+    transport.resolveHostResourceUrl.mockReturnValue("https://host.example/api/surfaces/token");
+
+    await expect(getSurfaceUi("weather", "panel")).resolves.toEqual({
+      protocol_version: 3,
+      document_url: "https://host.example/api/surfaces/token",
+    });
+    expect(transport.invokeHost).toHaveBeenCalledWith("get_surface_ui", {
+      appId: "weather",
+      surface: "panel",
+      remote: true,
+    });
   });
 });

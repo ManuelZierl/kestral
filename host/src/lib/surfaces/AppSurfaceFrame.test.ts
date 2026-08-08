@@ -97,8 +97,7 @@ function app(): InstalledApp {
 function bundle(overrides: Partial<SurfaceUiBundle> = {}): SurfaceUiBundle {
   return {
     protocol_version: SURFACE_BRIDGE_VERSION,
-    html: "<!doctype html><html><head></head><body><p id=\"marker\">panel</p></body></html>",
-    csp: "default-src 'none'; connect-src 'none'; form-action 'none'",
+    document_url: "http://127.0.0.1:41234/weather-panel",
     ...overrides,
   };
 }
@@ -171,15 +170,11 @@ describe("AppSurfaceFrame sandboxing", () => {
     expect((await frame()).getAttribute("loading")).toBe("eager");
   });
 
-  it("serves the app HTML with the deny-by-default CSP and bridge SDK injected", async () => {
+  it("loads the host-owned isolated surface document instead of inherited-CSP srcdoc", async () => {
     render(AppSurfaceFrame, props());
     const iframe = await frame();
-    const srcdoc = iframe.getAttribute("srcdoc") ?? "";
-    expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
-    expect(srcdoc).toContain("connect-src 'none'");
-    expect(srcdoc).toContain("form-action 'none'");
-    expect(srcdoc).toContain("window.appHost");
-    expect(srcdoc).toContain('id="marker"');
+    expect(iframe.getAttribute("src")).toBe("http://127.0.0.1:41234/weather-panel");
+    expect(iframe.hasAttribute("srcdoc")).toBe(false);
   });
 
   it("opens the surface binding through the kernel", async () => {

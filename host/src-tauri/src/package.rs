@@ -2554,8 +2554,9 @@ pub fn translate(
             {
                 return Err(format!(
                     "surface '{}' declares an invalid ui.connect_src entry '{bad}'; each entry \
-                     must be a bare source expression such as 'https://example.com' (no spaces, \
-                     quotes, ';' or ',')",
+                     must be one exact http(s) or ws(s) origin such as 'https://example.com' \
+                     (no paths, credentials, wildcards, or scheme-only sources; host IPC origins \
+                     are reserved)",
                     surface.name
                 ));
             }

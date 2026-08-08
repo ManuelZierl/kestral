@@ -691,7 +691,8 @@ async fn dispatch(
         "get_surface_ui" => done!(crate::get_surface_ui(
             state!(),
             argument(&arguments, "appId")?,
-            argument(&arguments, "surface")?
+            argument(&arguments, "surface")?,
+            true
         )),
         "get_surface_state" => done!(
             crate::get_surface_state(
@@ -1285,6 +1286,41 @@ async fn handle_request(
 
     if parts.method == Method::GET && path == "/api/health" {
         return json_response(200, json!({ "ok": true }), origin.as_deref());
+    }
+    if parts.method == Method::GET {
+        if let Some(route_token) = path.strip_prefix("/api/surfaces/") {
+            let document = match state.host.surface_ui.lock() {
+                Ok(registry) => registry.document(route_token),
+                Err(_) => {
+                    return Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                        .header(CACHE_CONTROL, "no-store")
+                        .body(Body::from("surface UI registry lock poisoned"))
+                        .expect("static surface error response is valid");
+                }
+            };
+            let Some(document) = document else {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                    .header(CACHE_CONTROL, "no-store")
+                    .body(Body::from("surface document not found"))
+                    .expect("static surface error response is valid");
+            };
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(CONTENT_TYPE, "text/html; charset=utf-8")
+                .header(CACHE_CONTROL, "no-store")
+                .header(
+                    "Content-Security-Policy",
+                    format!("{}; frame-ancestors {}", document.csp, state.allowed_origin),
+                )
+                .header("Referrer-Policy", "no-referrer")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(Body::from(document.html))
+                .expect("host-authored surface response headers are valid");
+        }
     }
     if parts.method == Method::GET && path == "/api/approvals" {
         return json_response(

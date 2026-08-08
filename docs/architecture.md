@@ -359,6 +359,20 @@ namespaces and resolves them with the host palette before sending bounded CSS
 variables to that app's sandbox; neither declarations nor profile overrides
 enter kernel state or confer authority.
 
+Custom UI bytes remain in the host-owned surface registry after package
+verification. Each active surface receives an opaque in-memory route. Native
+mode serves that route from a host-owned random-port loopback HTTP server;
+browser-host mode serves it through the authenticated same-origin
+`/api/surfaces/` route. The ordinary loopback origin is not a Tauri-local
+protocol and receives no Tauri command capability, including on WebView2 where
+initialization scripts may enter subframes.
+Both return a host-authored response CSP and inject the versioned surface SDK
+before package code. The shell loads the route in an opaque-origin sandboxed
+iframe rather than `srcdoc`, so app script policy cannot require weakening the
+trusted shell CSP. Route replacement, disable, and uninstall invalidate the old
+document before it can be loaded again. The URL carries presentation bytes only;
+all actions still cross the existing binding-scoped bridge and action path.
+
 Authored packages declare capabilities and schemas statically so inspection can
 remain code-free. MCP-backed activation verifies the backend's advertised tools
 against those declarations. Bare MCP servers remain a distinct degraded-mode

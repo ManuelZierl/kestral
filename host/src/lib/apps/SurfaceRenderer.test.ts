@@ -98,8 +98,7 @@ describe("SurfaceRenderer routing", () => {
   it("renders a sandboxed frame when the surface has a custom UI bundle", async () => {
     getSurfaceUi.mockResolvedValueOnce({
       protocol_version: SURFACE_BRIDGE_VERSION,
-      html: "<!doctype html><html><head></head><body><p>panel</p></body></html>",
-      csp: "default-src 'none'",
+      document_url: "http://127.0.0.1:41234/weather-panel",
     });
     render(SurfaceRenderer, { app: app(panel), surface: panel, onOutcome: () => {} });
     const iframe = await screen.findByTitle("Weather: Weather panel");
@@ -110,8 +109,7 @@ describe("SurfaceRenderer routing", () => {
   it("keeps the same frame when polling returns an equivalent app snapshot", async () => {
     getSurfaceUi.mockResolvedValueOnce({
       protocol_version: SURFACE_BRIDGE_VERSION,
-      html: "<!doctype html><html><head></head><body><p>panel</p></body></html>",
-      csp: "default-src 'none'",
+      document_url: "http://127.0.0.1:41234/weather-panel",
     });
     const installed = app(panel);
     const view = render(SurfaceRenderer, { app: installed, surface: panel, onOutcome: () => {} });

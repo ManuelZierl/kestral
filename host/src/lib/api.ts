@@ -6,6 +6,8 @@ import {
   invokeChatWithProgress,
   invokeHost as invoke,
   invokeHostWithProgress,
+  isRemoteTransport,
+  resolveHostResourceUrl,
 } from "$lib/hostTransport";
 
 export type JsonValue =
@@ -849,12 +851,10 @@ export type AppEventView =
       change_kind: AppDataChangeKind;
     };
 
-// A static custom UI bundle for one app surface, served into a sandboxed
-// frame. Content + host-authored deny-by-default CSP only (surface_ui.rs).
+// A host-owned isolated document route for one custom app surface.
 export interface SurfaceUiBundle {
   protocol_version: number;
-  html: string;
-  csp: string;
+  document_url: string;
 }
 
 export interface ActionIntent {
@@ -1687,8 +1687,16 @@ export const listAppArtifacts = (appId: string) =>
   invoke<Artifact[]>("list_app_artifacts", { appId });
 export const appSurfaceEvents = (appId: string) =>
   invoke<AppEventView[]>("app_surface_events", { appId });
-export const getSurfaceUi = (appId: string, surface: string) =>
-  invoke<SurfaceUiBundle | null>("get_surface_ui", { appId, surface });
+export const getSurfaceUi = async (appId: string, surface: string) => {
+  const bundle = await invoke<SurfaceUiBundle | null>("get_surface_ui", {
+    appId,
+    surface,
+    remote: isRemoteTransport(),
+  });
+  return bundle === null
+    ? null
+    : { ...bundle, document_url: resolveHostResourceUrl(bundle.document_url) };
+};
 export const getSurfaceState = (binding: SurfaceBinding, key: string) =>
   invoke<SurfaceStateEntry>("get_surface_state", { binding, key });
 export const putSurfaceState = (

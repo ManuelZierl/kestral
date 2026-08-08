@@ -125,23 +125,32 @@ origin. For example, an equivalent Caddy configuration is:
 ```text
 kestral.example {
   header {
-    Content-Security-Policy "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
     Strict-Transport-Security "max-age=31536000"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "no-referrer"
     Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-    X-Frame-Options "DENY"
   }
   handle /api/* {
     reverse_proxy 127.0.0.1:4310
   }
   handle {
+    header {
+      Content-Security-Policy "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'; form-action 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+      X-Frame-Options "DENY"
+    }
     root * /home/kestral/browser-client
     try_files {path} /index.html
     file_server
   }
 }
 ```
+
+Keep the shell-only CSP and `X-Frame-Options` inside the static-client handler,
+not on `/api/*`. Custom app documents are returned under
+`/api/surfaces/<opaque-token>` with a stricter app-specific response CSP and
+must be frameable by that same trusted origin. A proxy that appends the shell
+CSP or `X-Frame-Options: DENY` to those responses will stop every custom app
+surface from starting.
 
 Open `https://kestral.example` and use that same URL as **Host URL**. Pair the
 first browser with the SSH-generated code, then use **Sign in with passkey** on

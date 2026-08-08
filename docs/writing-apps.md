@@ -1138,9 +1138,15 @@ A surface can bind a package-local HTML entry:
 }
 ```
 
-The host loads custom UI in an iframe with
+The host serves each activated custom surface at an opaque, lifecycle-bound
+surface-document URL and loads it in an iframe with
 `allow-scripts allow-forms allow-downloads`, an opaque origin, and a
-deny-by-default app CSP. `allow-forms` lets JavaScript receive and cancel normal
+deny-by-default response CSP. The trusted shell never enables inline scripts to
+make app UI run. Native mode uses a host-owned random-port loopback server whose
+ordinary HTTP origin receives no Tauri capability; browser-host mode uses an
+authenticated same-origin `/api/surfaces/` route.
+Neither URL is a package path, and it stops resolving when the app is disabled,
+replaced, or uninstalled. `allow-forms` lets JavaScript receive and cancel normal
 `submit` events; the host-enforced `form-action 'none'` directive still blocks
 form navigation, so configuration writes must use the surface bridge.
 `allow-downloads` permits a surface to offer a browser-managed file download,
@@ -1152,7 +1158,7 @@ namespace, or declared host-managed domain data. Keep the entry self-contained
 and do not depend on host component
 internals. The HTML entry must be UTF-8 and cannot exceed 32 MiB.
 
-From package-bundle lookup through surface opening, host-context loading, iframe
+From package-route lookup through surface opening, host-context loading, iframe
 load, and the `ready` handshake, Kestral keeps its shared animated loading mark
 visible and the partial frame concealed. The frame must call
 `window.appHost.ready()` only after it can accept the init contract. A missing
@@ -1298,11 +1304,16 @@ through `ui.connect_src`:
 }
 ```
 
-Each entry must be a bare source expression such as `https://api.example.com`,
-`https://api.example.com:8443`, `wss://stream.example.com`, or `https:`. An
-entry containing whitespace, quotes, `;`, or `,` is refused at install with a
-located error, because those characters would end the `connect-src` directive
-and let a package append directives of its own. Omit `connect_src` (or leave it
+Each entry must be one exact `http`, `https`, `ws`, or `wss` origin, such as
+`https://api.example.com`, `https://api.example.com:8443`, or
+`wss://stream.example.com`. Paths, credentials, queries, fragments, wildcards,
+scheme-only sources such as `https:`, and values containing directive syntax
+are refused at install. Broad HTTP policy is intentionally unavailable because
+it would also cover WebView2's Tauri IPC transport. The host-reserved `ipc:` and
+`http://ipc.localhost` destinations are also refused. The loopback surface
+server sends no CORS permission, route tokens are unguessable, and child frames
+are denied; surface code receives no readable network path to another app route.
+Omit `connect_src` (or leave it
 empty) and the surface gets no network access at all.
 
 ## Build and test

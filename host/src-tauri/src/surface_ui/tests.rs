@@ -92,6 +92,8 @@ fn deny_by_default_csp_denies_network_when_no_hosts() {
     assert!(csp.contains("connect-src 'none'"));
     assert!(!csp.contains("frame-ancestors"));
     assert!(csp.contains("base-uri 'none'"));
+    assert!(csp.contains("frame-src 'none'"));
+    assert!(csp.contains("object-src 'none'"));
 }
 
 #[test]
@@ -115,6 +117,41 @@ fn registry_scopes_bundles_by_app_and_surface() {
         .get(&app, &SurfaceName::new("other-surface"))
         .is_none());
     assert!(registry.get(&AppId::new("notes"), &surface).is_none());
+}
+
+#[test]
+fn registered_document_injects_the_host_sdk_before_app_scripts() {
+    let mut registry = SurfaceUiRegistry::new();
+    let app = AppId::new("mcp-weather");
+    let surface = SurfaceName::new("result-cards");
+    registry.register(app.clone(), surface.clone(), demo_weather_showcase());
+
+    let route = registry.get(&app, &surface).unwrap();
+    let document = registry.document(&route.route_token).unwrap();
+    let html = String::from_utf8(document.html).unwrap();
+
+    assert!(html.contains("app-host-surface-bridge"));
+    assert!(html.contains("window.appHost"));
+    assert!(html.find("window.appHost =").unwrap() < html.find("const grid").unwrap());
+    assert!(document.csp.contains("script-src 'unsafe-inline'"));
+}
+
+#[test]
+fn replacing_or_removing_a_surface_invalidates_its_route() {
+    let mut registry = SurfaceUiRegistry::new();
+    let app = AppId::new("mcp-weather");
+    let surface = SurfaceName::new("result-cards");
+    registry.register(app.clone(), surface.clone(), demo_weather_showcase());
+    let first = registry.get(&app, &surface).unwrap().route_token;
+
+    registry.register(app.clone(), surface.clone(), demo_weather_showcase());
+    let second = registry.get(&app, &surface).unwrap().route_token;
+    assert_ne!(first, second);
+    assert!(registry.document(&first).is_none());
+    assert!(registry.document(&second).is_some());
+
+    registry.remove_app(&app);
+    assert!(registry.document(&second).is_none());
 }
 
 #[test]
@@ -149,13 +186,48 @@ fn demo_bundle_targets_current_protocol_and_avoids_network() {
 }
 
 #[test]
+fn transport_views_keep_tokens_opaque_and_platform_scoped() {
+    let route = SurfaceUiRoute {
+        protocol_version: SURFACE_BRIDGE_VERSION,
+        route_token: "abc123".into(),
+    };
+    let remote = surface_ui_view(route.clone(), "/api/surfaces/abc123".into());
+    assert_eq!(remote.document_url, "/api/surfaces/abc123");
+    let native = surface_ui_view(route, "http://127.0.0.1:41234/abc123".into());
+    assert!(native.document_url.ends_with("/abc123"));
+    assert!(!native.document_url.contains("mcp-weather"));
+}
+
+#[test]
+fn shell_csp_allows_surface_documents_without_allowing_inline_shell_scripts() {
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+    for name in ["csp", "devCsp"] {
+        let csp = config["app"]["security"][name].as_str().unwrap();
+        assert!(csp.contains("frame-src http://127.0.0.1:*"));
+        assert!(!csp.contains("script-src 'unsafe-inline'"));
+    }
+}
+
+#[test]
+fn injected_sdk_matches_the_host_bridge_protocol() {
+    let protocol = include_str!("../../../src/lib/surfaces/surfaceBridgeProtocol.ts");
+    assert!(protocol.contains("SURFACE_BRIDGE_PROTOCOL = \"app-host-surface-bridge\""));
+    assert!(protocol.contains(&format!(
+        "SURFACE_BRIDGE_VERSION = {SURFACE_BRIDGE_VERSION}"
+    )));
+    assert!(SURFACE_CLIENT_SDK.contains("PROTOCOL = \"app-host-surface-bridge\""));
+    assert!(SURFACE_CLIENT_SDK.contains("VERSION = 3"));
+}
+
+#[test]
 fn connect_src_accepts_ordinary_source_expressions() {
     for source in [
         "https://example.com",
         "https://example.com:8443",
         "wss://stream.example.com",
-        "https:",
-        "*.example.com",
+        "http://127.0.0.1:11434",
+        "ws://localhost:8080",
     ] {
         assert!(is_valid_connect_src(source), "should accept {source}");
     }
@@ -170,9 +242,67 @@ fn connect_src_refuses_values_that_could_end_the_directive() {
         "https://x 'unsafe-eval'",
         "https://x\nscript-src *",
         "'self'",
+        "ipc:",
+        "ipc://localhost",
+        "http://ipc.localhost",
+        "http://ipc.localhost/callback",
+        "https://ipc.localhost",
+        "*",
+        "http:",
+        "https:",
+        "*.example.com",
+        "http://*",
+        "http://*.localhost",
+        "https://user@example.com",
+        "https://example.com/path",
+        "https://example.com?query=yes",
+        "https://example.com#fragment",
+        "ftp://example.com",
     ] {
         assert!(!is_valid_connect_src(source), "should refuse {source:?}");
     }
+}
+
+#[test]
+fn loopback_server_returns_an_isolated_document_and_invalidates_removed_routes() {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+
+    fn get(url: &str) -> String {
+        let rest = url.strip_prefix("http://").unwrap();
+        let (authority, path) = rest.split_once('/').unwrap();
+        let mut stream = TcpStream::connect(authority).unwrap();
+        write!(
+            stream,
+            "GET /{path} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        response
+    }
+
+    let registry = Arc::new(Mutex::new(SurfaceUiRegistry::new()));
+    let app = AppId::new("mcp-weather");
+    let surface = SurfaceName::new("result-cards");
+    registry
+        .lock()
+        .unwrap()
+        .register(app.clone(), surface.clone(), demo_weather_showcase());
+    let route = registry.lock().unwrap().get(&app, &surface).unwrap();
+    let server = RunningSurfaceServer::start(registry.clone()).unwrap();
+    let url = server.document_url(&route.route_token);
+
+    let response = get(&url);
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert!(response.contains("Content-Security-Policy:"));
+    assert!(response.contains("script-src 'unsafe-inline'"));
+    assert!(response.contains("frame-ancestors"));
+    assert!(response.contains("http://localhost:1420"));
+    assert!(response.contains("app-host-surface-bridge"));
+
+    registry.lock().unwrap().remove_app(&app);
+    assert!(get(&url).starts_with("HTTP/1.1 404"));
 }
 
 #[test]
@@ -195,5 +325,6 @@ fn injected_directive_cannot_override_the_host_policy_locks() {
 fn valid_entries_survive_alongside_a_rejected_one() {
     let csp = deny_by_default_csp(&["https://good.example", "https://bad; frame-src *"]);
     assert!(csp.contains("connect-src https://good.example;"));
-    assert!(!csp.contains("frame-src"));
+    assert!(csp.contains("frame-src 'none'"));
+    assert_eq!(csp.matches("frame-src").count(), 1);
 }

@@ -374,7 +374,7 @@
           "items": { "$ref": "#/$defs/CapabilityRef" }
         },
         "ui": {
-          "description": "Host-only static UI binding. Loaded into a sandboxed per-app webview; intent-only, secret-free, cannot render trusted chrome.",
+          "description": "Host-only static UI binding. Served from a lifecycle-bound host HTTP route into a sandboxed opaque-origin iframe; intent-only, secret-free, cannot render trusted chrome.",
           "type": "object",
           "additionalProperties": false,
           "required": ["entry"],
@@ -388,7 +388,7 @@
               "type": "string"
             },
             "connect_src": {
-              "description": "Additional CSP connect-src origins requested by this surface. Host policy remains authoritative.",
+              "description": "Additional CSP connect-src origins requested by this surface. Host policy remains authoritative and reserves its IPC and surface protocols.",
               "type": "array",
               "items": { "type": "string" },
               "default": []

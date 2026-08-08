@@ -16,6 +16,7 @@ import {
   pairRemoteConnection,
   remoteConnectionAuthenticated,
   remoteUrlDefault,
+  resolveHostResourceUrl,
   restoreRemoteConnection,
   signInRemoteConnection,
   signOutRemoteConnection,
@@ -74,6 +75,17 @@ describe("remote owner session", () => {
 
   it("defaults browser host mode to the page origin", () => {
     expect(remoteUrlDefault()).toBe(window.location.origin);
+  });
+
+  it("resolves authenticated surface routes against the configured remote host", () => {
+    sessionStorage.setItem("host.remote.url", "https://kestral.example/");
+
+    expect(resolveHostResourceUrl("/api/surfaces/opaque-token")).toBe(
+      "https://kestral.example/api/surfaces/opaque-token",
+    );
+    expect(resolveHostResourceUrl("http://127.0.0.1:41234/opaque-token")).toBe(
+      "http://127.0.0.1:41234/opaque-token",
+    );
   });
 
   it("opens remote OAuth URLs with the browser instead of a Tauri plugin", async () => {

@@ -102,7 +102,7 @@ use app_host_kernel::JsonObject;
 
 use host_paths::HostPaths;
 use profiles::{ProfileIdentity, ProfileRecord, ProfileRegistryService, ProfileView};
-use surface_ui::{SurfaceUiBundle, SurfaceUiRegistry};
+use surface_ui::{SurfaceUiRegistry, SurfaceUiView};
 
 use app_manager::{
     AppManager, AppStatusView, ManagedAppOperation, ManagedAppTransitionPlan,
@@ -153,6 +153,7 @@ pub(crate) struct Host {
     /// kernel state — pure host presentation over the grant-checked action
     /// path (see `surface_ui`).
     surface_ui: Arc<Mutex<SurfaceUiRegistry>>,
+    surface_server: Mutex<Option<surface_ui::RunningSurfaceServer>>,
     /// Bounded app-private state for sandboxed surfaces. This is presentation
     /// state, not a capability path; open bindings still scope every access.
     surface_state: Arc<Mutex<surface_state::SurfaceStateStore>>,
@@ -2512,14 +2513,30 @@ fn get_surface_ui(
     host: HostState<'_>,
     app_id: AppId,
     surface: SurfaceName,
-) -> Result<Option<SurfaceUiBundle>, String> {
+    remote: bool,
+) -> Result<Option<SurfaceUiView>, String> {
     // The registry is populated only after kernel installation and is cleared
     // during disable/uninstall. Reading it directly keeps surface startup from
     // degrading permanently when the kernel is briefly busy with another run.
-    host.surface_ui
+    let route = host
+        .surface_ui
         .lock()
         .map_err(|_| "surface UI registry lock poisoned".to_string())
-        .map(|registry| registry.get(&app_id, &surface).cloned())
+        .map(|registry| registry.get(&app_id, &surface))?;
+    let Some(route) = route else {
+        return Ok(None);
+    };
+    let document_url = if remote {
+        format!("/api/surfaces/{}", route.route_token)
+    } else {
+        host.surface_server
+            .lock()
+            .map_err(|_| "surface document server lock poisoned".to_string())?
+            .as_ref()
+            .ok_or_else(|| "surface document server is not running".to_string())?
+            .document_url(&route.route_token)
+    };
+    Ok(Some(surface_ui::surface_ui_view(route, document_url)))
 }
 
 #[tauri::command]
@@ -3925,7 +3942,7 @@ fn build_host_with_lock(
     }
     let kernel = Arc::new(Mutex::new(kernel));
     let kernel_invoker = agent_worker::KernelInvokerClient::spawn(kernel.clone());
-    let surface_ui = SurfaceUiRegistry::new();
+    let surface_ui = Arc::new(Mutex::new(SurfaceUiRegistry::new()));
     {
         let mut kernel_guard = kernel
             .lock()
@@ -3951,7 +3968,8 @@ fn build_host_with_lock(
         mcp_connections: Arc::new(McpConnections::default()),
         mcp_gateway: Mutex::new(None),
         mcp_audit: Arc::new(AuditLog::new(Some(paths.mcp_audit_path().to_path_buf()))),
-        surface_ui: Arc::new(Mutex::new(surface_ui)),
+        surface_ui,
+        surface_server: Mutex::new(None),
         surface_state: Arc::new(Mutex::new(surface_state::SurfaceStateStore::new(
             surface_state::data_root(paths.app_records_root()),
         ))),
@@ -3996,6 +4014,11 @@ fn setup_host(app: &tauri::App) -> Result<(), String> {
         pending,
         notices,
     )?;
+    let surface_server = surface_ui::RunningSurfaceServer::start(host.surface_ui.clone())?;
+    *host
+        .surface_server
+        .lock()
+        .map_err(|_| "surface document server lock poisoned".to_string())? = Some(surface_server);
     let app_handle = app.handle().clone();
     host.oauth.set_publisher(Arc::new(move |event| {
         app_handle

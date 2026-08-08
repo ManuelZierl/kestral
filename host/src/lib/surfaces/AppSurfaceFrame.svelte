@@ -34,7 +34,6 @@
     type HostToAppMessage,
     type SurfaceInitMessage,
   } from "$lib/surfaces/surfaceBridgeProtocol";
-  import { buildSurfaceSrcdoc } from "$lib/surfaces/surfaceClientSdk";
   import { loadSurfaceHostContext } from "$lib/surfaces/modelProfileEditorContext";
   import { resolvedAppearance, surfaceThemeVariables } from "$lib/stores/theme";
   import LoadingIndicator from "$lib/shell/LoadingIndicator.svelte";
@@ -66,7 +65,7 @@
   let status = $state<"loading" | "ready" | "error">("loading");
   let errorMessage = $state<string | null>(null);
   let appNotice = $state<string | null>(null);
-  let srcdoc = $state<string>("");
+  let documentUrl = $state<string>("");
   let iframeEl = $state<HTMLIFrameElement | null>(null);
   // Content height the frame reports over the bridge, so the iframe fits its
   // content instead of stranding a small control in a large fixed box. Clamped
@@ -269,7 +268,7 @@
     window.addEventListener("message", listener);
 
     // Render the frame (its `load` posts init) and start the hang guard.
-    srcdoc = buildSurfaceSrcdoc(bundle);
+    documentUrl = bundle.document_url;
     handshakeTimer = setTimeout(() => {
       if (status === "loading") {
         status = "error";
@@ -288,7 +287,7 @@
     if (destroyed || permanentError) return;
     teardown();
     initPayload = null;
-    srcdoc = "";
+    documentUrl = "";
     contentHeight = null;
     appNotice = null;
     errorMessage = null;
@@ -388,14 +387,14 @@
         label={`Loading ${app.manifest.display_name}…`}
       />
     {/if}
-    {#if srcdoc}
+    {#if documentUrl}
       <!-- Hidden zero-size frames are not eligible for lazy loading in WebKitGTK,
            but the host cannot reveal this frame until its ready handshake. -->
       <iframe
         bind:this={iframeEl}
         title={`${app.manifest.display_name}: ${surface.title}`}
         sandbox="allow-scripts allow-forms allow-downloads"
-        srcdoc={srcdoc}
+        src={documentUrl}
         onload={handleFrameLoad}
         referrerpolicy="no-referrer"
         allow=""

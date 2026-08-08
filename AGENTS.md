@@ -699,7 +699,10 @@ settings, trusted chrome, and shell behavior.
 - Custom app surfaces render in per-app **sandboxed iframes** (`allow-scripts`
   and `allow-forms`, with an opaque origin and host-enforced
   `form-action 'none'` → no Tauri/kernel/filesystem/secret/form-navigation
-  access) that talk to
+  access). Verified HTML is served from an opaque lifecycle-bound route through
+  a random-port native loopback server or authenticated remote
+  `/api/surfaces/` endpoint, with a response CSP independent of the trusted
+  shell CSP. Surfaces talk to
   the host solely through a versioned message bridge with a deny-by-default,
   per-app CSP (`host/src/lib/surfaces/`, `host/src-tauri/src/surface_ui.rs`).
   Bundled Svelte screens and MCP-derived generic forms/cards are unchanged.

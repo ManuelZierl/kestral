@@ -64,6 +64,13 @@ export function isRemoteTransport(): boolean {
   return remoteUrl() !== null;
 }
 
+export function resolveHostResourceUrl(path: string): string {
+  if (!path.startsWith("/")) return path;
+  const baseUrl = remoteUrl();
+  if (!baseUrl) throw new Error("Relative host resource URL requires a remote host connection");
+  return `${normalizedUrl(baseUrl)}${path}`;
+}
+
 function normalizedUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
