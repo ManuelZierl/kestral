@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 use super::McpClient;
 use crate::errors::McpError;
-use crate::protocol::LATEST_PROTOCOL_VERSION;
+use crate::protocol::{LATEST_PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION};
 use crate::transport::{McpTransport, RequestOptions};
 
 /// A transport that completes the handshake, then answers every `tools/list`
@@ -95,20 +95,32 @@ fn list_tools_rejects_a_repeated_pagination_cursor() {
 }
 
 #[test]
-fn connect_rejects_a_non_current_protocol_version() {
+fn connect_accepts_the_legacy_protocol_version() {
     let transport = LoopingCursorTransport {
         list_calls: AtomicUsize::new(0),
-        protocol_version: "2025-03-26",
+        protocol_version: LEGACY_PROTOCOL_VERSION,
+        cursor: json!("unused"),
+    };
+    let client = McpClient::connect(Box::new(transport)).expect("legacy revision is supported");
+    assert_eq!(client.protocol_version(), LEGACY_PROTOCOL_VERSION);
+}
+
+#[test]
+fn connect_rejects_an_unsupported_protocol_version() {
+    let transport = LoopingCursorTransport {
+        list_calls: AtomicUsize::new(0),
+        protocol_version: "2024-11-05",
         cursor: json!("unused"),
     };
     let error = match McpClient::connect(Box::new(transport)) {
-        Ok(_) => panic!("old revision must be rejected"),
+        Ok(_) => panic!("unsupported revision must be rejected"),
         Err(error) => error,
     };
     match error {
         McpError::Protocol(message) => {
-            assert!(message.contains("2025-03-26"));
+            assert!(message.contains("2024-11-05"));
             assert!(message.contains(LATEST_PROTOCOL_VERSION));
+            assert!(message.contains(LEGACY_PROTOCOL_VERSION));
         }
         other => panic!("expected a protocol error, got {other:?}"),
     }

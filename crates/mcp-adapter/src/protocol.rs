@@ -8,8 +8,24 @@ use app_host_kernel::JsonObject;
 
 use crate::errors::McpError;
 
-/// The protocol revision this adapter speaks natively.
+/// The newest protocol revision this adapter supports and requests during
+/// initialization.
 pub const LATEST_PROTOCOL_VERSION: &str = "2025-06-18";
+
+/// The first Streamable HTTP revision, retained for compatibility with MCP
+/// servers that have not moved to the latest revision.
+pub const LEGACY_PROTOCOL_VERSION: &str = "2025-03-26";
+
+pub const SUPPORTED_PROTOCOL_VERSIONS: [&str; 2] =
+    [LATEST_PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION];
+
+pub(crate) fn is_supported_protocol_version(version: &str) -> bool {
+    SUPPORTED_PROTOCOL_VERSIONS.contains(&version)
+}
+
+pub(crate) fn requires_protocol_version_header(version: &str) -> bool {
+    version == LATEST_PROTOCOL_VERSION
+}
 
 /// A tool as an MCP server advertises it, reduced to what the bridge needs.
 /// Input schemas are mandatory; output schemas are imported when the server

@@ -10,18 +10,18 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use app_host_kernel::JsonObject;
+use mcp_adapter::protocol::{LATEST_PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION};
 use mcp_adapter::transport::RequestOptions;
 use mcp_adapter::{McpClient, McpError, StreamableHttpTransport};
 
 const SESSION_ID: &str = "test-session-42";
-const PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// What the test server observed, for conformance assertions.
 #[derive(Default)]
 struct Observed {
     initialized_notification: bool,
     delete_with_session: bool,
-    delete_with_version: bool,
+    delete_version_header: Option<String>,
     /// Protocol-version headers on every request after initialize.
     post_init_version_headers: Vec<Option<String>>,
     /// Session headers on every request after initialize.
@@ -77,7 +77,7 @@ fn sse_response(message: &Value) -> tiny_http::Response<std::io::Cursor<Vec<u8>>
 /// A minimal Streamable HTTP MCP server: one endpoint, JSON or SSE answers,
 /// a session id issued at initialize, one thread per request so a slow tool
 /// cannot block the cancellation notification.
-fn start_test_server() -> TestServer {
+fn start_test_server(protocol_version: &'static str) -> TestServer {
     let server =
         Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("test server binds a port"));
     let address = server
@@ -97,7 +97,7 @@ fn start_test_server() -> TestServer {
                 break;
             }
             let observed = loop_observed.clone();
-            std::thread::spawn(move || handle(request, observed));
+            std::thread::spawn(move || handle(request, observed, protocol_version));
         }
     });
 
@@ -108,7 +108,11 @@ fn start_test_server() -> TestServer {
     }
 }
 
-fn handle(mut request: tiny_http::Request, observed: Arc<Mutex<Observed>>) {
+fn handle(
+    mut request: tiny_http::Request,
+    observed: Arc<Mutex<Observed>>,
+    protocol_version: &'static str,
+) {
     observed
         .lock()
         .unwrap()
@@ -116,11 +120,9 @@ fn handle(mut request: tiny_http::Request, observed: Arc<Mutex<Observed>>) {
         .push(header(&request, "Authorization"));
     if request.method() == &tiny_http::Method::Delete {
         let with_session = header(&request, "Mcp-Session-Id").as_deref() == Some(SESSION_ID);
-        let with_version =
-            header(&request, "MCP-Protocol-Version").as_deref() == Some(PROTOCOL_VERSION);
         let mut observed = observed.lock().unwrap();
         observed.delete_with_session = with_session;
-        observed.delete_with_version = with_version;
+        observed.delete_version_header = header(&request, "MCP-Protocol-Version");
         let _ = request.respond(tiny_http::Response::empty(200));
         return;
     }
@@ -147,7 +149,7 @@ fn handle(mut request: tiny_http::Request, observed: Arc<Mutex<Observed>>) {
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": {
-                    "protocolVersion": PROTOCOL_VERSION,
+                    "protocolVersion": protocol_version,
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "http-test-server", "version": "0.0.1"},
                 },
@@ -275,14 +277,14 @@ fn obj(value: Value) -> JsonObject {
 
 #[test]
 fn streamable_http_full_session_conforms() {
-    let server = start_test_server();
+    let server = start_test_server(LATEST_PROTOCOL_VERSION);
     let transport = StreamableHttpTransport::with_headers(
         &server.endpoint(),
         vec![("Authorization".into(), "Bearer test-credential".into())],
     )
     .unwrap();
     let client = McpClient::connect(Box::new(transport)).expect("initialize over HTTP succeeds");
-    assert_eq!(client.protocol_version(), PROTOCOL_VERSION);
+    assert_eq!(client.protocol_version(), LATEST_PROTOCOL_VERSION);
     assert_eq!(client.server_name(), "http-test-server");
 
     // Discovery arrives over an SSE response body; output schema imported.
@@ -325,7 +327,7 @@ fn streamable_http_full_session_conforms() {
         "shutdown sent DELETE with the session id"
     );
     assert!(
-        observed.delete_with_version,
+        observed.delete_version_header.as_deref() == Some(LATEST_PROTOCOL_VERSION),
         "shutdown sent DELETE with the negotiated protocol version"
     );
     assert!(
@@ -333,7 +335,7 @@ fn streamable_http_full_session_conforms() {
             && observed
                 .post_init_version_headers
                 .iter()
-                .all(|header| header.as_deref() == Some(PROTOCOL_VERSION)),
+                .all(|header| header.as_deref() == Some(LATEST_PROTOCOL_VERSION)),
         "every post-initialize request carries the negotiated MCP-Protocol-Version, got {:?}",
         observed.post_init_version_headers
     );
@@ -356,8 +358,42 @@ fn streamable_http_full_session_conforms() {
 }
 
 #[test]
+fn streamable_http_negotiates_legacy_revision_without_newer_version_header() {
+    let server = start_test_server(LEGACY_PROTOCOL_VERSION);
+    let transport = StreamableHttpTransport::new(&server.endpoint()).unwrap();
+    let client = McpClient::connect(Box::new(transport)).expect("legacy initialize succeeds");
+    assert_eq!(client.protocol_version(), LEGACY_PROTOCOL_VERSION);
+
+    let tools = client.list_tools().expect("legacy tools/list succeeds");
+    assert_eq!(tools.len(), 1);
+    client.shutdown();
+    std::thread::sleep(Duration::from_millis(200));
+
+    let observed = server.observed.lock().unwrap();
+    assert!(observed.initialized_notification);
+    assert!(observed.delete_with_session);
+    assert_eq!(observed.delete_version_header, None);
+    assert!(
+        !observed.post_init_version_headers.is_empty()
+            && observed
+                .post_init_version_headers
+                .iter()
+                .all(Option::is_none),
+        "legacy requests must omit MCP-Protocol-Version, got {:?}",
+        observed.post_init_version_headers
+    );
+    assert!(
+        observed
+            .post_init_session_headers
+            .iter()
+            .all(|header| header.as_deref() == Some(SESSION_ID)),
+        "legacy requests still carry the session id"
+    );
+}
+
+#[test]
 fn streamable_http_rejects_malformed_and_oversized_json_responses() {
-    let server = start_test_server();
+    let server = start_test_server(LATEST_PROTOCOL_VERSION);
     let transport = StreamableHttpTransport::new(&server.endpoint()).unwrap();
     let client = McpClient::connect(Box::new(transport)).unwrap();
     let options = RequestOptions::with_timeout(Duration::from_secs(10));
@@ -374,7 +410,7 @@ fn streamable_http_rejects_malformed_and_oversized_json_responses() {
 
 #[test]
 fn streamable_http_timeout_is_contained() {
-    let server = start_test_server();
+    let server = start_test_server(LATEST_PROTOCOL_VERSION);
     let transport = StreamableHttpTransport::new(&server.endpoint()).unwrap();
     let client = McpClient::connect(Box::new(transport)).unwrap();
 
@@ -392,7 +428,7 @@ fn streamable_http_timeout_is_contained() {
 
 #[test]
 fn streamable_http_cancellation_short_circuits() {
-    let server = start_test_server();
+    let server = start_test_server(LATEST_PROTOCOL_VERSION);
     let transport = StreamableHttpTransport::new(&server.endpoint()).unwrap();
     let client = McpClient::connect(Box::new(transport)).unwrap();
 

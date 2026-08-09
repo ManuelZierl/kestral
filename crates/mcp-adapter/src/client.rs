@@ -10,7 +10,8 @@ use serde_json::{json, Value};
 use crate::bridge::McpToolCall;
 use crate::errors::McpError;
 use crate::protocol::{
-    extract_tool_result, parse_tool, validate_tools, McpToolDefinition, LATEST_PROTOCOL_VERSION,
+    extract_tool_result, is_supported_protocol_version, parse_tool, validate_tools,
+    McpToolDefinition, LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS,
 };
 use crate::transport::{McpTransport, RequestOptions};
 
@@ -201,10 +202,11 @@ fn validate_initialize_result(result: &Value) -> Result<(String, String), McpErr
         .and_then(Value::as_str)
         .ok_or_else(|| McpError::Protocol("initialize result carries no protocolVersion".into()))?
         .to_string();
-    if negotiated != LATEST_PROTOCOL_VERSION {
+    if !is_supported_protocol_version(&negotiated) {
         return Err(McpError::Protocol(format!(
             "server negotiated unsupported MCP protocol version '{negotiated}'; \
-             expected '{LATEST_PROTOCOL_VERSION}'"
+             supported versions are {}",
+            SUPPORTED_PROTOCOL_VERSIONS.join(", ")
         )));
     }
     let capabilities = result

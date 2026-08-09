@@ -385,8 +385,10 @@ Configured Streamable HTTP servers may carry one host-managed static secret
 header. Header metadata remains host config; the value remains in the OS
 credential vault and is resolved only during explicit connection setup. The
 adapter validates the final URL and header, disables redirects, and applies the
-header to the whole MCP session. Neither the credential nor HTTP authentication
-becomes a kernel primitive or packaged-app backend feature.
+header to the whole MCP session. It requests MCP `2025-06-18`, accepts negotiated
+`2025-03-26` sessions for compatibility, and applies revision-specific transport
+headers only when that revision defines them. Neither the credential nor HTTP
+authentication becomes a kernel primitive or packaged-app backend feature.
 
 Managed-app lifecycle writes are serialized by a host transition guard, not by
 holding the kernel or app-manager mutex for the whole operation. Package

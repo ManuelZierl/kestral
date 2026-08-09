@@ -15,11 +15,12 @@ Kestral can consume MCP servers over a local stdio process or MCP Streamable
 HTTP. A saved server is only configuration: Kestral never connects, installs,
 or grants it automatically.
 
-The current adapter accepts exactly MCP revision `2025-06-18`. Initialization
-must include server identity, version, capabilities, and the tools capability.
-Every advertised tool must provide an object-root `inputSchema`; an advertised
-`outputSchema` must also have an object root. Malformed or non-current servers
-fail the connection instead of entering a compatibility mode.
+The current adapter requests MCP revision `2025-06-18` and also accepts a server
+negotiating the earlier `2025-03-26` revision. Initialization must include server
+identity, version, capabilities, and the tools capability. Every advertised tool
+must provide an object-root `inputSchema`; an advertised `outputSchema`, available
+from newer servers, must also have an object root. Malformed servers and revisions
+outside this supported set fail the connection.
 
 One HTTP, SSE, or stdio JSON-RPC message is limited to 8 MiB, and one complete
 paginated tool discovery is limited to 16 MiB and 10,000 tools. Invalid cursors,

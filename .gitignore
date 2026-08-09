@@ -35,3 +35,6 @@ host/*local-command-caveat*.txt
 temp.md
 notes.md
 APP_RUNTIME_TRUST_AND_MANAGED_DATA.md
+
+.notes/
+.claude/

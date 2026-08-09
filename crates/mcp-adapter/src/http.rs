@@ -1,13 +1,14 @@
-//! MCP Streamable HTTP transport (spec revision 2025-06-18).
+//! MCP Streamable HTTP transport (spec revisions 2025-03-26 and 2025-06-18).
 //!
 //! Every JSON-RPC message is an HTTP POST to the server's single MCP
 //! endpoint. The server answers a request either with a plain
 //! `application/json` body or with a `text/event-stream` body that carries
 //! the response (and possibly other messages) as SSE events — both are
 //! supported. Sessions (`Mcp-Session-Id`) and the negotiated
-//! `MCP-Protocol-Version` header are captured from the `initialize`
-//! exchange and attached to every subsequent request. Shutdown sends a
-//! best-effort HTTP DELETE to end the session.
+//! negotiated revision are captured from the `initialize` exchange. The
+//! session id is attached to every subsequent request; the newer revision's
+//! `MCP-Protocol-Version` header is attached only when that revision requires
+//! it. Shutdown sends a best-effort HTTP DELETE to end the session.
 //!
 //! Synchronous by design, like the stdio transport: the host runs MCP work
 //! on blocking workers. Timeouts bound the whole request including body
@@ -24,6 +25,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::{json, Value};
 
 use crate::errors::McpError;
+use crate::protocol::requires_protocol_version_header;
 use crate::transport::{McpTransport, RequestOptions};
 
 const NOTIFY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -88,9 +90,15 @@ impl StreamableHttpTransport {
             .headers(self.request_headers.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream");
-        // The negotiated protocol version rides on every request after
-        // initialize (the spec's MCP-Protocol-Version requirement).
-        if let Some(version) = self.negotiated_version.lock().unwrap().as_deref() {
+        // MCP-Protocol-Version became mandatory in 2025-06-18 and was not
+        // part of the 2025-03-26 Streamable HTTP revision.
+        if let Some(version) = self
+            .negotiated_version
+            .lock()
+            .unwrap()
+            .as_deref()
+            .filter(|version| requires_protocol_version_header(version))
+        {
             request = request.header("MCP-Protocol-Version", version);
         }
         if let Some(session) = self.session_id.lock().unwrap().as_deref() {
@@ -269,7 +277,12 @@ impl McpTransport for StreamableHttpTransport {
                 .timeout(SHUTDOWN_TIMEOUT)
                 .headers(self.request_headers.clone())
                 .header("Mcp-Session-Id", &session);
-            let request = if let Some(version) = self.negotiated_version.lock().unwrap().as_deref()
+            let request = if let Some(version) = self
+                .negotiated_version
+                .lock()
+                .unwrap()
+                .as_deref()
+                .filter(|version| requires_protocol_version_header(version))
             {
                 request.header("MCP-Protocol-Version", version)
             } else {
