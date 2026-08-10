@@ -9,6 +9,7 @@
   import FileResourcesSettings from "$lib/settings/FileResourcesSettings.svelte";
   import ChatPromptSettings from "$lib/settings/ChatPromptSettings.svelte";
   import PackageTrustSettings from "$lib/settings/PackageTrustSettings.svelte";
+  import PortableTransfer from "$lib/settings/PortableTransfer.svelte";
   import KestralProfileSettings from "$lib/settings/KestralProfileSettings.svelte";
   import LlmProviderSettings from "$lib/settings/LlmProviderSettings.svelte";
   import McpServerSettings from "$lib/settings/McpServerSettings.svelte";
@@ -203,6 +204,9 @@
     </header>
     <article class="card">
       <AppDataBackupSettings />
+    </article>
+    <article class="card">
+      <PortableTransfer />
     </article>
     <article class="card">
       <KestralProfileSettings />

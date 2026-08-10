@@ -404,6 +404,55 @@ export interface CreateKestralProfileRequest {
   slug: string;
 }
 
+export interface PortableAppRecovery {
+  id: string;
+  display_name: string;
+  version: string;
+  package_digest: string;
+}
+
+export interface PortableSecretRecovery {
+  owner: string;
+  name: string;
+}
+
+export interface PortableFileResourceRecovery {
+  resource_id: string;
+  display_name: string;
+  kind: string;
+}
+
+export type PortableImportTarget =
+  | { kind: "preview" }
+  | { kind: "fresh"; display_name: string; slug: string }
+  | { kind: "overwrite-current"; confirmation: string };
+
+export interface PortableExportResult {
+  path: string;
+  sha256: string;
+  size: number;
+  files: number;
+  excluded_secrets: number;
+  reinstall_apps: number;
+}
+
+export interface PortableImportResult {
+  target: string;
+  restart_required: boolean;
+  restart_instructions: string;
+  apps: PortableAppRecovery[];
+  secrets: PortableSecretRecovery[];
+  file_resources: PortableFileResourceRecovery[];
+}
+
+export interface PortableRecoveryStatus {
+  version: number;
+  imported_at: string;
+  apps: PortableAppRecovery[];
+  secrets: PortableSecretRecovery[];
+  file_resources: PortableFileResourceRecovery[];
+}
+
 export type FileResourceKind = "file" | "directory";
 export type FileResourceStatus = "active" | "removing";
 export type FileEntryKind = "file" | "directory" | "symlink" | "other";
@@ -1512,6 +1561,12 @@ export const createKestralProfile = (request: CreateKestralProfileRequest) =>
   invoke<KestralProfileView>("create_kestral_profile", { request });
 export const deleteKestralProfile = (profileId: string) =>
   invoke<void>("delete_kestral_profile", { profileId });
+export const exportPortableProfile = (destination: string) =>
+  invoke<PortableExportResult>("export_portable_profile", { destination });
+export const importPortableProfile = (archivePath: string, target: PortableImportTarget) =>
+  invoke<PortableImportResult>("import_portable_profile", { archivePath, target });
+export const getPortableRecoveryStatus = () =>
+  invoke<PortableRecoveryStatus | null>("get_portable_recovery_status");
 export const listChatThreads = () => invoke<ChatThreadSummary[]>("list_chat_threads");
 export const getChatThread = (threadId: string) => invoke<ChatThread>("get_chat_thread", { threadId });
 export const getChatPromptPreview = (candidateConfig?: JsonObject, threadId?: string) =>

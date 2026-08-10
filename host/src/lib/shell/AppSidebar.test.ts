@@ -170,6 +170,24 @@ describe("AppSidebar", () => {
     expect(screen.queryByRole("button", { name: "Chat Export" })).toBeNull();
   });
 
+  it("hides the seeded documentation MCP by default but lets the user show it", async () => {
+    const documentation = installedApp("Kestral documentation");
+    documentation.manifest.app_id = "mcp-kestral-docs";
+    apps.set([documentation]);
+    render(AppSidebar, { current: "chat", onSelect: vi.fn() });
+
+    expect(screen.queryByRole("button", { name: "Kestral documentation" })).toBeNull();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Customize navigation" }));
+    const visibility = screen.getByRole<HTMLInputElement>("checkbox", { name: "Show Kestral documentation" });
+    expect(visibility.checked).toBe(false);
+    await fireEvent.click(visibility);
+
+    expect(screen.getByRole("navigation", { name: "Primary" }).contains(
+      screen.getByRole("button", { name: "Kestral documentation" }),
+    )).toBe(true);
+  });
+
   it("keeps a contributed dashboard available as a standalone destination", () => {
     const profiles = installedApp("Model Profiles");
     profiles.manifest.surfaces = [{

@@ -84,6 +84,41 @@ describe("TrustedChrome notices", () => {
     expect(get(currentTab)).toBe("settings");
     expect(get(permissionTarget)).toMatchObject({ grantId: "grant-exact" });
   });
+
+  it("reports native download completion and its destination", async () => {
+    render(TrustedChrome, { onReady: vi.fn() });
+    await waitFor(() => expect(mocks.handlers.has("host-download:event")).toBe(true));
+
+    mocks.handlers.get("host-download:event")?.({
+      kind: "requested",
+      file_name: "chat-plan.md",
+      directory: "/home/user/Downloads",
+    });
+    expect(await screen.findByText("Saving chat-plan.md to /home/user/Downloads")).toBeTruthy();
+
+    mocks.handlers.get("host-download:event")?.({
+      kind: "finished",
+      file_name: "chat-plan.md",
+      directory: "/home/user/Downloads",
+      success: true,
+    });
+
+    expect(await screen.findByText("Saved chat-plan.md to /home/user/Downloads")).toBeTruthy();
+    expect(screen.queryByText("Saving chat-plan.md to /home/user/Downloads")).toBeNull();
+  });
+
+  it("reports a native download failure instead of claiming success", async () => {
+    render(TrustedChrome, { onReady: vi.fn() });
+    await waitFor(() => expect(mocks.handlers.has("host-download:event")).toBe(true));
+
+    mocks.handlers.get("host-download:event")?.({
+      kind: "failed",
+      file_name: "chat-plan.md",
+      error: "permission denied",
+    });
+
+    expect(await screen.findByText("Could not save chat-plan.md: permission denied")).toBeTruthy();
+  });
 });
 
 describe("TrustedChrome install checklist", () => {

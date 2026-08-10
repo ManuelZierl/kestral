@@ -37,10 +37,24 @@
     onReady: () => void;
   }
 
+  type HostDownloadEvent =
+    | { kind: "requested"; file_name: string; directory: string }
+    | { kind: "finished"; file_name: string; directory: string; success: boolean }
+    | { kind: "failed"; file_name: string; error: string };
+
+  interface DownloadNotice {
+    id: number;
+    fileName: string;
+    message: string;
+    status: "pending" | "success" | "failure";
+  }
+
   let { onReady }: Props = $props();
 
   let queue = $state<ChromeRequest[]>([]);
   let notices = $state<TrustedNoticeRecord[]>([]);
+  let downloadNotices = $state<DownloadNotice[]>([]);
+  let nextDownloadNoticeId = 0;
   let deciding = $state(false);
   let decisionError = $state<string | null>(null);
   let oauthQueue = $state<OAuthSessionState[]>([]);
@@ -93,18 +107,64 @@
       }
       activeInteraction ??= "oauth";
     });
+    const unlistenDownload = listenHostEvent<HostDownloadEvent>("host-download:event", (event) => {
+      const id = ++nextDownloadNoticeId;
+      const notice: DownloadNotice = event.kind === "requested"
+        ? {
+            id,
+            fileName: event.file_name,
+            message: `Saving ${event.file_name} to ${event.directory}`,
+            status: "pending",
+          }
+        : event.kind === "finished" && event.success
+          ? {
+              id,
+              fileName: event.file_name,
+              message: `Saved ${event.file_name} to ${event.directory}`,
+              status: "success",
+            }
+          : event.kind === "finished"
+            ? {
+                id,
+                fileName: event.file_name,
+                message: `Could not save ${event.file_name}`,
+                status: "failure",
+              }
+            : {
+                id,
+                fileName: event.file_name,
+                message: `Could not save ${event.file_name}: ${event.error}`,
+                status: "failure",
+              };
+      const retained = event.kind === "finished"
+        ? downloadNotices.filter(
+            (entry) => entry.status !== "pending" || entry.fileName !== event.file_name,
+          )
+        : downloadNotices;
+      downloadNotices = [...retained, notice].slice(-5);
+      setTimeout(() => {
+        downloadNotices = downloadNotices.filter((entry) => entry.id !== id);
+      }, 6000);
+    });
     const unsubscribeStarted = startedOAuthSessions.subscribe((sessions) => {
       for (const sessionId of sessions) {
         oauthQueue = registerOAuthSession(oauthQueue, sessionId);
         activeInteraction ??= "oauth";
       }
     });
-    Promise.all([unlistenRequest, unlistenNotice, unlistenExpired, unlistenOAuth]).then(() => onReady());
+    Promise.all([
+      unlistenRequest,
+      unlistenNotice,
+      unlistenExpired,
+      unlistenOAuth,
+      unlistenDownload,
+    ]).then(() => onReady());
     return () => {
       unlistenRequest.then((unlisten) => unlisten());
       unlistenNotice.then((unlisten) => unlisten());
       unlistenExpired.then((unlisten) => unlisten());
       unlistenOAuth.then((unlisten) => unlisten());
+      unlistenDownload.then((unlisten) => unlisten());
       unsubscribeStarted();
     };
   });
@@ -551,6 +611,9 @@
 {/if}
 
 <div class="notices" role="status" aria-live="polite">
+  {#each downloadNotices as notice (notice.id)}
+    <div class="download-notice {notice.status}">{notice.message}</div>
+  {/each}
   {#each notices as notice (notice.sequence)}
     <div class="notice">
       {#if notice.notice.kind === "grant-use"}
@@ -852,6 +915,26 @@
     display: flex;
     align-items: stretch;
     overflow: hidden;
+  }
+  .download-notice {
+    max-width: min(22.5rem, 100%);
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--color-accent-border);
+    border-radius: 10px;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: 0 8px 24px var(--color-shadow-strong);
+    overflow-wrap: anywhere;
+  }
+  .download-notice.success {
+    border-color: var(--color-success-border);
+    background: var(--color-success-soft);
+    color: var(--color-success-text);
+  }
+  .download-notice.failure {
+    border-color: var(--color-danger-border);
+    background: var(--color-danger-soft);
+    color: var(--color-danger-text);
   }
   .notice-link,
   .notice-settings {

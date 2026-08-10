@@ -26,7 +26,7 @@ beforeEach(() => {
 describe("sidebar layout", () => {
   it("parses the exact versioned representation", () => {
     expect(parseStoredSidebarLayout(JSON.stringify({
-      version: 1,
+      version: 2,
       collapsed: true,
       order: ["app:mcp-my_server/path", "host:chat"],
       hidden: ["host:apps"],
@@ -37,8 +37,21 @@ describe("sidebar layout", () => {
     });
   });
 
+  it("migrates v1 layouts to hide the seeded documentation tool by default", () => {
+    expect(parseStoredSidebarLayout(JSON.stringify({
+      version: 1,
+      collapsed: true,
+      order: ["host:chat"],
+      hidden: ["host:apps"],
+    }))).toEqual({
+      collapsed: true,
+      order: ["host:chat"],
+      hidden: ["host:apps", "app:mcp-kestral-docs"],
+    });
+  });
+
   it.each([
-    { version: 2, collapsed: false, order: [], hidden: [] },
+    { version: 3, collapsed: false, order: [], hidden: [] },
     { version: 1, collapsed: false, order: ["host:chat", "host:chat"], hidden: [] },
     { version: 1, collapsed: false, order: ["unknown"], hidden: [] },
     { version: 1, collapsed: false, order: [], hidden: [], extra: true },
@@ -67,13 +80,13 @@ describe("sidebar layout", () => {
     expect(get(sidebarLayout)).toEqual({
       collapsed: false,
       order: ["app:com.example.notes", "host:chat", "host:apps"],
-      hidden: ["host:apps"],
+      hidden: ["app:mcp-kestral-docs", "host:apps"],
     });
     expect(JSON.parse(localStorage.getItem(SIDEBAR_LAYOUT_STORAGE_KEY)!)).toEqual({
-      version: 1,
+      version: 2,
       collapsed: false,
       order: ["app:com.example.notes", "host:chat", "host:apps"],
-      hidden: ["host:apps"],
+      hidden: ["app:mcp-kestral-docs", "host:apps"],
     });
   });
 });

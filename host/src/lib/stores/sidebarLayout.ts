@@ -14,7 +14,7 @@ export interface SidebarLayout {
 }
 
 interface StoredSidebarLayout extends SidebarLayout {
-  version: 1;
+  version: 2;
 }
 
 export const SIDEBAR_LAYOUT_STORAGE_KEY = "host-sidebar-layout";
@@ -27,7 +27,12 @@ const HOST_DESTINATION_IDS = new Set([
   "host:system",
 ]);
 const MAX_DESTINATIONS = 256;
-const defaultLayout: SidebarLayout = { collapsed: false, order: [], hidden: [] };
+const DEFAULT_HIDDEN_DESTINATIONS = ["app:mcp-kestral-docs"];
+const defaultLayout: SidebarLayout = {
+  collapsed: false,
+  order: [],
+  hidden: [...DEFAULT_HIDDEN_DESTINATIONS],
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -58,8 +63,14 @@ export function parseStoredSidebarLayout(source: string): SidebarLayout {
   }
   const order = parseDestinationIds(value.order);
   const hidden = parseDestinationIds(value.hidden);
-  if (value.version !== 1 || typeof value.collapsed !== "boolean" || !order || !hidden) {
+  const supportedVersion = value.version === 1 || value.version === 2;
+  if (!supportedVersion || typeof value.collapsed !== "boolean" || !order || !hidden) {
     throw new Error("Saved sidebar customization is invalid.");
+  }
+  if (value.version === 1) {
+    for (const id of DEFAULT_HIDDEN_DESTINATIONS) {
+      if (!hidden.includes(id)) hidden.push(id);
+    }
   }
   return { collapsed: value.collapsed, order, hidden };
 }
@@ -86,7 +97,7 @@ sidebarLayout.subscribe((layout) => {
     ready = true;
     return;
   }
-  const stored: StoredSidebarLayout = { version: 1, ...layout };
+  const stored: StoredSidebarLayout = { version: 2, ...layout };
   localStorage.setItem(SIDEBAR_LAYOUT_STORAGE_KEY, JSON.stringify(stored));
   sidebarLayoutStorageError.set(null);
 });

@@ -1,6 +1,8 @@
 <script lang="ts">
   import {
     applyManagedAppTransition,
+    disconnectMcpServer,
+    listInstalledApps,
     listManagedAppRevisions,
     planManagedAppTransition,
     setAppEnabled,
@@ -40,6 +42,10 @@
   // explicit opt-in because it cannot be undone.
   let purgeSecrets = $state(false);
   let purgeData = $state(false);
+
+  const mcpServerId = $derived(
+    app.id.startsWith("mcp-") && !app.id.startsWith("mcp-export/") ? app.id.slice("mcp-".length) : null,
+  );
 
   const statusLabel = $derived(
     {
@@ -169,6 +175,20 @@
     }
   }
 
+  async function disconnectToolServer() {
+    if (!mcpServerId) return;
+    busy = true;
+    error = null;
+    try {
+      await disconnectMcpServer(mcpServerId);
+      await onChanged(await listInstalledApps());
+    } catch (failure) {
+      error = String(failure);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function confirmUninstall() {
     busy = true;
     error = null;
@@ -187,7 +207,9 @@
   <div class="head">
     <h3>{app.display_name}</h3>
     <span class="version">v{app.version}</span>
-    {#if app.bundled}
+    {#if mcpServerId}
+      <span class="tag tool-server">Tool server</span>
+    {:else if app.bundled}
       <span class="tag bundled">Bundled</span>
     {/if}
     <span class={`tag status status-${app.status}`}>{statusLabel}</span>
@@ -329,7 +351,7 @@
         {app.enabled ? "Disable" : "Enable"}
       </button>
     {/if}
-    {#if app.removable}
+    {#if app.removable && !mcpServerId}
       <button
         class="danger"
         onclick={() => {
@@ -345,7 +367,12 @@
         Uninstall
       </button>
     {/if}
-    {#if app.bundled}
+    {#if mcpServerId}
+      <button class="danger" onclick={() => void disconnectToolServer()} disabled={busy}>
+        {busy ? "Disconnecting…" : "Disconnect"}
+      </button>
+      <span class="bundled-note">Disconnecting keeps its configuration in Settings → Tool servers.</span>
+    {:else if app.bundled}
       <span class="bundled-note">Bundled app — managed by the host.</span>
     {/if}
   </div>
@@ -422,6 +449,10 @@
   }
   .bundled {
     background: var(--color-chip-purple-soft);
+    color: var(--color-text);
+  }
+  .tool-server {
+    background: var(--color-accent-soft);
     color: var(--color-text);
   }
   .status-active {

@@ -54,6 +54,8 @@ vi.mock("$lib/api", async (importOriginal) => {
       revision_id: "revision-target",
     })),
     applyManagedAppTransition: vi.fn(async () => []),
+    disconnectMcpServer: vi.fn(async () => undefined),
+    listInstalledApps: vi.fn(async () => []),
     setAppEnabled: vi.fn(async () => []),
     uninstallApp: vi.fn(async () => []),
   };
@@ -65,6 +67,8 @@ import AppManagerCard from "$lib/apps/AppManagerCard.svelte";
 const listManagedAppRevisions = vi.mocked(api.listManagedAppRevisions);
 const planManagedAppTransition = vi.mocked(api.planManagedAppTransition);
 const applyManagedAppTransition = vi.mocked(api.applyManagedAppTransition);
+const disconnectMcpServer = vi.mocked(api.disconnectMcpServer);
+const listInstalledApps = vi.mocked(api.listInstalledApps);
 
 const revisions: ManagedAppRevisionView[] = [
   {
@@ -193,4 +197,31 @@ it("does not offer managed revisions for bundled apps", async () => {
   expect(screen.queryByText("Retained revisions")).toBeNull();
   expect(screen.getByRole("button", { name: "Settings for Chat" })).toBeTruthy();
   expect(listManagedAppRevisions).not.toHaveBeenCalled();
+});
+
+it("disconnects an MCP tool-server app while preserving its configuration", async () => {
+  const onChanged = vi.fn(async (): Promise<void> => undefined);
+  render(AppManagerCard, {
+    props: {
+      app: {
+        ...app,
+        id: "mcp-team-calendar",
+        display_name: "Team Calendar",
+        bundled: true,
+        removable: true,
+      },
+      onChanged,
+    },
+  });
+
+  expect(screen.getByText("Tool server")).toBeTruthy();
+  expect(screen.queryByText("Bundled app — managed by the host.")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
+
+  await fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+  await waitFor(() => expect(disconnectMcpServer).toHaveBeenCalledWith("team-calendar"));
+  expect(listInstalledApps).toHaveBeenCalledOnce();
+  expect(onChanged).toHaveBeenCalledWith([]);
+  expect(screen.getByText(/keeps its configuration in Settings/)).toBeTruthy();
 });
