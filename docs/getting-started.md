@@ -17,6 +17,24 @@ been published and is not a production-ready general-user release. Until it is
 published, build from source. The artifact names and installation steps below
 describe the intended release candidate.
 
+## First startup
+
+A newly created profile includes a removable **Kestral documentation** tool
+server pointing to the public Kestral repository through unauthenticated GitMCP.
+After the shell's trusted permission UI is ready, Kestral makes one connection
+attempt and asks you to review the discovered tools. If accepted, it separately
+asks whether Chat may use each tool with per-use approval. You may reject either
+request; no rejected permission is granted, and Kestral still starts if the
+remote endpoint is unavailable. Manage or remove the entry later under
+**Settings → Tool servers**. See [Tool servers]({{ internal_link_prefix }}{% link tool-servers.md %})
+for the complete flow and security boundary.
+
+If you already have a `.kestral-portable.zip`, start once with a fresh profile,
+then open **Settings → Kestral profiles → Portable workspace**. Validate the
+archive and import it as a new profile; restart with the command Kestral shows.
+Credential values, passkeys, app binaries, and external file paths do not
+transfer. See [Profiles and data]({{ internal_link_prefix }}{% link profiles.md %}).
+
 ## Choice 1: Native desktop
 
 When the release is published, use the native package on a Windows or Linux

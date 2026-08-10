@@ -55,6 +55,36 @@ a profile.
 
 ## Backup and recovery
 
+### Portable workspace
+
+Open **Settings → Kestral profiles → Portable workspace** to create or import a
+single `.kestral-portable.zip` archive. Export verifies that the profile did not
+change while it was read, writes a manifest-first archive through a temporary
+file, and reports the final SHA-256 digest.
+
+Portable archives include durable kernel state, configuration, Chat threads,
+trusted notices, publisher trust, gateway audit history, and bytes under
+`apps/.data`. They deliberately exclude OS-vault secret values, remote-owner
+passkeys, app package binaries, external file contents and absolute paths,
+locks, temporary trees, and in-progress transitions.
+
+Import first validates every manifested path, size, and SHA-256 digest. You can
+then create a fresh managed profile or overwrite the current profile. A fresh
+profile is selected for the next launch. Overwrite requires the exact phrase
+`RESTORE <current-profile-slug>`, applies before stores open on restart, and
+retains the prior profile under `.kestral-profile-backups/<transaction-id>/`.
+
+After import, re-enter listed credentials, reinstall each listed third-party app
+from a package with the recorded digest, and re-register external files and
+folders. Imported third-party app registrations are dormant; their prior grant
+facts remain in history but are revoked, so reinstall uses the normal permission
+review instead of activating transferred authority. Passkeys must be paired
+again because WebAuthn credentials are origin- and authenticator-bound.
+
+In backend-only mode, the paths entered in this section are paths on the host,
+not on the browser device. The backend does not expose profile archives through
+the browser transport.
+
 Close Kestral before copying a profile root. Copying the full root preserves
 the profile's JSON stores and installed app data, but OS-protected credential
 values remain in the operating system's credential store and are not made

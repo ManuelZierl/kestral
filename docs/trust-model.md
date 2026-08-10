@@ -25,7 +25,7 @@ sandboxed app surface does not sandbox its backend.
 | Host runtime | Package lifecycle, persistence, profiles, native credentials, protocol adapters, workers, and composition enforcement | Treating unmediated native-process behavior as a granted or attributable action |
 | Host trusted chrome | Approval prompts, permission dialogs, app identity badges, dangerous-action confirmations, secret entry, data-access indicators, and warnings | Acting on behalf of an app without kernel mediation |
 | Remote owner console | Complete authenticated host administration and trusted approval presentation for the paired owner | Tenant isolation, capability-scoped integration, or ordinary app UI |
-| App surface | Displaying app content, emitting declared intents, and offering browser-managed downloads | Trusted prompts, direct execution, secrets, Tauri, direct filesystem or path access, kernel access, or imitating/overlaying trusted chrome |
+| App surface | Displaying app content, emitting declared intents, and requesting user-owned downloads | Trusted prompts, direct execution, secrets, Tauri, direct filesystem or path access, kernel access, choosing a native download path, or imitating/overlaying trusted chrome |
 | App backend | Implementing declared capabilities | Conferring its own grants or provenance; native code is still OS-powerful in the 0.1 series |
 | Remote MCP client/server | Protocol messages and advertised metadata | Authority claims; grants remain authoritative |
 
@@ -97,12 +97,23 @@ sandboxed app surface does not sandbox its backend.
   on replacement, disable, or uninstall. The iframe remains opaque-origin and
   communicates only through the source-, instance-, schema-, and binding-checked
   surface bridge.
+- **Observable native downloads:** a custom surface may request a download but
+  cannot choose its path or read the resulting file. In native desktop mode the
+  host resolves and creates the owner's download directory, chooses a
+  collision-free filename, observes WebKit completion, and renders success or
+  failure outside the app frame. Browser-host mode leaves the destination and
+  completion UI to the local browser.
 - **Monotonic migration authority:** profile migration cannot turn an exact
   capability into provider-wide access, fixed resources into `all-resources`,
   a visible condition into `silent`, or a finite expiry into a later or
   non-expiring grant. Issued and revoked grant facts remain present. Pending
   approvals, owner sessions, OAuth/WebAuthn ceremonies, leases, event inboxes,
   workers, and streams are never restored as migrated authority.
+- **Portable transfer narrows dormant app authority:** archives contain no app
+  binaries, OS-vault values, passkeys, or external file paths. Imported
+  third-party app registrations are removed, grants involving those app IDs are
+  revoked without deleting issued facts, and a matching package must pass the
+  normal verification and approval path before it can run again.
 - **Bundled declaration upgrades:** version and top-level presentation metadata
   may change without uninstalling a bundled app. Every authority and behavioral
   declaration must remain identical; otherwise the transition fails before the
@@ -258,6 +269,16 @@ as a successful model call.
 Provider text verbosity is separate from reasoning effort. The host exposes it
 only when the pinned adapter advertises and enforces the control for the selected
 model. Unsupported combinations fail rather than being silently ignored.
+
+A newly created profile contains an unauthenticated remote MCP configuration for
+the public Kestral GitMCP documentation endpoint and attempts one connection on
+that first startup. This is a disclosed network request to `gitmcp.io`; it sends
+the normal MCP handshake and tool requests but no Kestral credential. The remote
+service and its tool metadata remain untrusted. Trusted chrome separately
+controls installation grants and exact Chat grants, and Chat grants default to
+per-use approval. Rejection grants no authority, endpoint failure does not block
+startup, and the owner can disconnect or delete the server like any other MCP
+configuration.
 
 ## Residual native-code authority
 

@@ -1149,10 +1149,14 @@ Neither URL is a package path, and it stops resolving when the app is disabled,
 replaced, or uninstalled. `allow-forms` lets JavaScript receive and cancel normal
 `submit` events; the host-enforced `form-action 'none'` directive still blocks
 form navigation, so configuration writes must use the surface bridge.
-`allow-downloads` permits a surface to offer a browser-managed file download,
-but does not let it choose a path, inspect an existing file, or read the
-filesystem. The frame has no Tauri, kernel, direct filesystem, credential, or
-trusted-chrome access. It communicates through the versioned surface bridge and
+`allow-downloads` permits a surface to request a user-owned file download, but
+does not let it choose a path, inspect an existing file, or read the filesystem.
+In native desktop mode Kestral resolves and creates the owner's download
+directory, chooses a collision-free filename, observes WebKit completion, and
+shows the destination or failure in host-owned UI. In browser-host mode the
+local browser owns its normal download destination and feedback. The frame has
+no Tauri, kernel, direct filesystem, credential, or trusted-chrome access. It
+communicates through the versioned surface bridge and
 can request only declared intents, bounded state in its own app-and-surface
 namespace, or declared host-managed domain data. Keep the entry self-contained
 and do not depend on host component

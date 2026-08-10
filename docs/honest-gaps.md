@@ -117,7 +117,8 @@ hidden fallback behavior.
   future validator caching; durable commits still rewrite the complete state
   projection as described above.
 - Failed app updates restore their retained source data revision automatically,
-  but there is no general backup browser or restore UI. A code downgrade after
+  and portable workspace import/export can restore a complete profile snapshot.
+  There is still no browser for selecting and restoring one app-data revision. A code downgrade after
   an incompatible migration requires an exact publisher-declared and tested
   reverse edge; otherwise it is refused.
 - Development state created before the first public release remains disposable.

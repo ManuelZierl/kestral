@@ -83,7 +83,7 @@ runtime-agnostic and MCP-compatible rather than MCP-defined.
 |---|---|
 | `crates/kernel` | Runtime- and protocol-agnostic trusted core. It accepts generic manifests, schemas, handlers, grants, Runs, surfaces, and artifacts. It has no filesystem, network, async runtime, or UI dependency. |
 | `crates/mcp-adapter` | MCP consumer protocol, stdio and Streamable HTTP transports, session client, and translation from MCP tools to generic app declarations and handlers. |
-| `host` | Host runtime plus Tauri 2/Svelte desktop shell. The desktop shell contributes trusted chrome and a window; the runtime owns persistence, native credentials, packages, profiles, app processes, protocol adapters, and local/remote owner transports outside the kernel. |
+| `host` | Host runtime plus Tauri 2/Svelte desktop shell. The desktop shell contributes trusted chrome, a window, and observable native download handling; the runtime owns persistence, native credentials, packages, profiles, app processes, protocol adapters, and local/remote owner transports outside the kernel. |
 | LLM Provider | Bundled userland app with the stable `llm-provider` identity and `llm.generate`, `llm.models.list`, and `llm.models.refresh` capabilities. Provider protocol work runs in an invocation-scoped bundled worker only when a profile is selected; an unconfigured request fails visibly and Chat adds local host-authored setup guidance. Profiles, grants, secrets, Runs, artifacts, and provenance remain host/kernel owned. |
 | Chat | Default-installed userland app and starting surface. It provides conversation, model/tool coordination, and public extension contracts without a privileged kernel API. |
 | `kestral-pi` | Optional external headless agent app. Its worker holds no credentials and asks the host to mediate model and tool calls as attributable child Runs. |
@@ -389,6 +389,17 @@ header to the whole MCP session. It requests MCP `2025-06-18`, accepts negotiate
 `2025-03-26` sessions for compatibility, and applies revision-specific transport
 headers only when that revision defines them. Neither the credential nor HTTP
 authentication becomes a kernel primitive or packaged-app backend feature.
+
+A fresh profile seeds one ordinary unauthenticated Streamable HTTP configuration
+for the public Kestral GitMCP documentation endpoint. The host makes one
+best-effort connection attempt only while that profile is first bootstrapped,
+after trusted chrome and bundled Chat are ready. Discovered tools still install
+through the generic MCP bridge and its normal consent prompts. Chat receives no
+implicit authority: the host separately prepares exact, non-expiring,
+requires-approval grant requests for the discovered capabilities and trusted
+chrome decides each request. The saved server has no built-in identity or
+lifecycle privilege and remains editable and removable. Later process starts do
+not reconnect it automatically.
 
 Managed-app lifecycle writes are serialized by a host transition guard, not by
 holding the kernel or app-manager mutex for the whole operation. Package

@@ -31,7 +31,10 @@ more appropriate document, canvas, form, dashboard, or other focused surface.
 
 Installed apps with standalone panel or dashboard surfaces also appear in the
 sidebar. A dashboard remains available there when it also integrates with
-another app. Use the cog button on an app's **Apps** card to open its settings.
+another app. The fresh profile's Kestral documentation MCP app is hidden there
+by default to keep the workspace navigation focused; it remains available in
+**Customize navigation**. Use the cog button on an app's **Apps** card to open
+its settings.
 Chat opens **Settings → Chat**, LLM Provider opens **Settings → Model
 providers**, and File Broker opens **Settings → File resources**. Other active
 apps open **Settings → App settings**. Inactive apps show what must be resolved
@@ -45,8 +48,9 @@ host screen or installed-app destination and move it up or down. The editor is
 always available even when every destination is hidden, and **Reset to default**
 restores the standard order and visibility. Sidebar order, visibility, and
 collapsed state are stored only in the current browser or desktop webview; newly
-installed apps are appended automatically. A current-profile system reset also
-clears this browser-local layout.
+installed apps are appended automatically, except for the default-hidden Kestral
+documentation MCP destination. A current-profile system reset also clears this
+browser-local layout.
 
 ## Work in installed apps
 
@@ -357,3 +361,12 @@ files and folders but does not delete them. It also cannot erase cloud-provider
 data, operating-system logs, or files an unsandboxed backend wrote outside the
 Kestral profile root. Those boundaries are shown in the reset review rather
 than implied to be erased.
+
+## Backup and transfer
+
+Use **Settings → Kestral profiles → Portable workspace** to export the current
+profile or validate and import a `.kestral-portable.zip`. Import shows the app,
+credential, and external-file recovery work before target selection. Creating a
+fresh profile is non-destructive; overwriting the current profile requires the
+displayed `RESTORE <slug>` phrase and a restart. See {% link profiles.md %} for
+the complete inclusion and exclusion rules.

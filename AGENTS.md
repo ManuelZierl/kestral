@@ -77,9 +77,11 @@ Before adding host behavior, ask:
   protocol-agnostic and receives only generic manifests, schemas, handlers,
   and artifacts. All MCP-specific code lives in `crates/mcp-adapter` and the
   host, never in `crates/kernel`.
-- Configured MCP servers are never auto-installed or auto-granted; they
-  connect only on explicit user action, and imported tool grants default to
-  requires-approval.
+- Configured MCP servers are never auto-installed or auto-granted. The fresh
+  profile's removable Kestral documentation server makes one disclosed startup
+  connection attempt, but installation and exact Chat grants still require
+  trusted-chrome decisions and imported tool grants default to
+  requires-approval. Other servers connect only on explicit user action.
 - The host is not a chat runtime.
 - The host is not an LLM provider.
 - The host is not a workflow engine.
@@ -448,11 +450,14 @@ The Tauri 2 shell. Depends on `app-host-kernel` and `mcp-adapter`. Contributes:
   startup. See `docs/architecture.md` and `docs/trust-model.md`.
 
 - **MCP servers** (`mcp.rs` + `config.rs`): user-configured servers persist
-  in host config (`mcp_servers`, stdio or streamable-http). Nothing dials or
-  installs at startup: `connect_mcp_server` dials and discovers tools OFF
-  the kernel lock, then installs under it behind trusted-chrome grant
-  prompts; `disconnect_mcp_server` uninstalls and shuts the transport down.
-  Managed under *Settings → Tool servers*.
+  in host config (`mcp_servers`, stdio or streamable-http).
+  `connect_mcp_server` dials and discovers tools OFF the kernel lock, then
+  installs under it behind trusted-chrome grant prompts;
+  `disconnect_mcp_server` uninstalls and shuts the transport down. A fresh
+  profile seeds the removable Kestral documentation GitMCP server and makes one
+  startup connection attempt, followed by normal install and exact Chat grant
+  prompts. Other configured servers never dial at startup. Managed under
+  *Settings → Tool servers*.
 
 **Lock discipline** (`lib.rs`):
 

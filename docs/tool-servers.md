@@ -12,8 +12,16 @@ nav_order: 3
 {:toc}
 
 Kestral can consume MCP servers over a local stdio process or MCP Streamable
-HTTP. A saved server is only configuration: Kestral never connects, installs,
-or grants it automatically.
+HTTP. A saved server is normally only configuration: Kestral does not connect,
+install, or grant it until you choose **Connect**.
+
+The one first-start exception is **Kestral documentation**, an unauthenticated
+GitMCP endpoint for the public Kestral repository. A newly created profile saves
+this server and makes one connection attempt after trusted chrome is ready. You
+still decide whether to install its discovered tools and whether Chat may use
+each exact tool. Declining either request grants no authority. An unavailable
+endpoint does not block startup; choose **Connect** later to retry. The entry is an
+ordinary MCP server, so you can disconnect, edit, or delete it.
 
 The current adapter requests MCP revision `2025-06-18` and also accepts a server
 negotiating the earlier `2025-03-26` revision. Initialization must include server
@@ -82,6 +90,12 @@ trusted chrome. Approval gives the requesting app access to that capability
 with **Asks for approval** as the default policy, so the later tool call still
 requires its own decision.
 
+On a newly created profile, Kestral asks for these exact Chat grants immediately
+after you accept the first-start Kestral documentation connection. The grants
+use the same **Asks for approval** policy and trusted-chrome review as a proposal
+submitted from Chat. Rejecting one or all of them leaves those tools unavailable
+to Chat; you can request them later through the normal flow above.
+
 If another active permission already covers the capability with `notify` or
 `silent`, the card reports that effective policy instead of claiming that every
 call will ask. Use **Settings → Permissions** to change or revoke it.
@@ -99,10 +113,13 @@ briefly highlights the complete result.
 
 ## Disconnect or change a server
 
-Choose **Disconnect** before editing or deleting configuration. Disconnecting
-uninstalls the bridged app, revokes its grants, and shuts down the transport.
+Choose **Disconnect** on the generated app under **Apps**, or beside the server
+under **Settings → Tool servers**, before editing or deleting configuration.
+Disconnecting uninstalls the bridged app, revokes its grants, and shuts down the
+transport.
 The saved server can be connected again later, but Kestral does not reconnect
-it on startup.
+it on later startups. This also applies to the first-start Kestral documentation
+server after its one automatic attempt.
 
 Changing an authenticated server's endpoint or header configuration clears its
 stored credential. Enter the credential again before reconnecting; Kestral does

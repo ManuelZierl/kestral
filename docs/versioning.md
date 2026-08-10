@@ -140,9 +140,11 @@ new candidate and new external evidence.
 | Profile registry, transition, and profile identity | v1 |
 | Remote owner passkeys | v1 |
 | Pending system reset | v1 |
+| Portable workspace archive and import journal | v1 |
+| Portable post-import recovery index | v1 |
 | MCP gateway audit event | v1 JSONL record |
 | Browser custom color profiles | v2 |
-| Browser sidebar layout | v1 |
+| Browser sidebar layout | v2 |
 | Browser pending-send recovery | v1 |
 | Private surface state | v2 |
 | Host-managed app data | v1 records; v2 records, receipts, staged batches, and content-addressed document blobs |
@@ -172,6 +174,7 @@ One owner parses and evolves each durable representation:
 | File-resource registrations | `file_resources` | Profile root |
 | Remote-owner passkeys | `remote_auth` | Profile root |
 | Pending system reset | `system_reset` | Profile root |
+| Portable archive, staged import, and recovery index | `portable` | User-selected archive path, default root, and profile root |
 | MCP gateway audit | `mcp_gateway` | Profile root |
 | Custom themes and preference | Frontend Appearance store | Device-local browser storage |
 | Sidebar order, visibility, and collapsed state | Frontend Sidebar store | Device-local browser storage |
@@ -281,13 +284,16 @@ duplicate identities are reported in Appearance instead of being applied.
 The separate theme preference defaults to System and falls back to System when
 its selected custom profile no longer exists.
 
-Sidebar layout v1 is device-local browser storage with the strict shape
-`{ version: 1, collapsed, order, hidden }`. Order and visibility refer only to
+Sidebar layout v2 is device-local browser storage with the strict shape
+`{ version: 2, collapsed, order, hidden }`. Order and visibility refer only to
 stable `host:<screen>` and `app:<app-id>` destination IDs; labels and icons are
 always resolved from the current host and app manifests. Unknown saved app IDs
 do not create navigation entries, and newly available destinations append after
 the saved order. Invalid versions, fields, IDs, and duplicate entries are
-reported in the sidebar editor instead of being applied.
+reported in the sidebar editor instead of being applied. Version 1 migrates
+forward by adding the removable Kestral documentation MCP destination to
+`hidden`; all existing collapse, order, and other visibility choices remain
+unchanged. Version 2 then preserves an explicit choice to show that destination.
 
 Pending-send recovery v1 is also device-local. It stores only a thread-keyed
 idempotency request ID and exact message so a manual retry can reuse the same
@@ -386,6 +392,35 @@ credential service, malformed secret index, or file deletion failure therefore
 leaves the request for a visible retry instead of starting from a partially
 reset profile. The profile identity, profile registry, other managed profile
 roots, and any in-progress profile-registry transition are preserved.
+
+Portable workspace format v1 is a ZIP whose first member is
+`kestral-portable.json`. The manifest records the source profile and host
+version, capture time, and the relative path, byte size, and SHA-256 digest of
+every content member. Import rejects unknown manifest fields or versions,
+duplicate, unmanifested, or missing entries, unsafe paths, size or digest
+mismatches, and malformed current store documents before registration or
+overwrite.
+
+The archive carries profile-owned durable stores and `apps/.data`, but not
+package payloads, OS-vault values, remote-owner authentication, external file
+targets, lock files, temporary or transition trees, or live runtime state.
+Secret owner/name references become a re-entry checklist. File resources become
+an unmatched re-registration checklist. Third-party app records become
+digest-bound dormant recovery records; their imported kernel app registrations
+are removed and every grant involving those app IDs is added to the revoked set
+without deleting the issued grant fact. This is monotonic narrowing and forces
+normal package verification and permission review on reinstall. The imported
+default model profile is cleared so an excluded OAuth credential cannot make the
+new profile fail startup; connector definitions stay present for
+re-authentication.
+
+Fresh import creates a new managed identity under `profiles/<profile-id>/`,
+validates its current stores, commits it through the profile creation journal,
+and selects it for the next launch. Current-profile overwrite writes a v1 import
+journal and validated candidate, then runs before profile migration and before
+operational stores open. It retains the original under
+`.kestral-profile-backups/<transaction-id>/`; persisted phases make backup,
+commit, validation, and cleanup repeatable after interruption.
 
 A Run without `RunEnded` is durably closed once as `interrupted` before the host
 exposes recovered state. Pending invocations, leases, surfaces, event inboxes,
