@@ -508,6 +508,9 @@ async fn dispatch(
             .await
         ),
         "get_host_config" => done!(crate::get_host_config(state!())),
+        "get_portable_recovery_status" => {
+            done!(crate::portable::recovery_status(host.paths.root()))
+        }
         "get_config_storage_info" => done!(crate::get_config_storage_info(state!())),
         "get_active_kestral_profile" => done!(crate::get_active_kestral_profile(state!())),
         "request_system_reset" => {
@@ -516,6 +519,22 @@ async fn dispatch(
             done!(Ok::<_, String>(crate::SystemResetRequestResult {
                 restart_required: true,
             }))
+        }
+        "export_portable_profile" => done!(crate::portable::export(
+            &host.paths,
+            std::path::Path::new(&argument::<String>(&arguments, "destination")?)
+        )),
+        "import_portable_profile" => {
+            let mut profiles = host
+                .profiles
+                .lock()
+                .map_err(|_| "profile registry lock poisoned".to_string())?;
+            done!(crate::portable::import(
+                &host.paths,
+                &mut profiles,
+                std::path::Path::new(&argument::<String>(&arguments, "archivePath")?),
+                argument(&arguments, "target")?
+            ))
         }
         "update_host_config" => {
             done!(crate::update_host_config(state!(), argument(&arguments, "patch")?).await)
@@ -884,7 +903,9 @@ fn state_change_scopes(command: &str) -> Option<&'static [&'static str]> {
         | "delete_mcp_export_profile"
         | "rotate_mcp_export_token"
         | "revoke_mcp_export_token" => Some(&["mcp-export"]),
-        "create_kestral_profile" | "delete_kestral_profile" => Some(&["profiles"]),
+        "create_kestral_profile" | "delete_kestral_profile" | "import_portable_profile" => {
+            Some(&["profiles"])
+        }
         _ => None,
     }
 }
@@ -1422,6 +1443,7 @@ pub fn run_from_env() -> Result<(), String> {
         host_paths.kernel_state_path(),
         registry_lock,
     )?;
+    crate::portable::apply_pending(&host_paths)?;
     crate::profile_migration::run(&host_paths)?;
     crate::system_reset::apply_pending(&host_paths)?;
     if std::env::var_os("KESTRAL_WORKER_RESOURCE_DIR").is_none() {

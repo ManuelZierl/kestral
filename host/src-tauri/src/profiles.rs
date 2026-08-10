@@ -282,6 +282,60 @@ impl ProfileRegistryService {
         ))
     }
 
+    pub(crate) fn create_imported_profile(
+        &mut self,
+        display_name: String,
+        slug: String,
+        populate: impl FnOnce(&ProfileRecord) -> Result<(), String>,
+    ) -> Result<ProfileView, String> {
+        validate_display_name(&display_name)?;
+        validate_slug(&slug)?;
+        if self
+            .document
+            .profiles
+            .iter()
+            .any(|profile| profile.slug == slug)
+        {
+            return Err(format!("profile slug already exists: {slug}"));
+        }
+        let profile_id = format!("profile-{}", Uuid::new_v4());
+        let profile = ProfileRecord {
+            root: self.default_root.join("profiles").join(&profile_id),
+            profile_id,
+            display_name,
+            slug,
+            created_at: Utc::now().to_rfc3339(),
+        };
+        self.persist_transition(ProfileTransition::Create {
+            profile: profile.clone(),
+        })?;
+        if let Err(error) = self.create_profile_root(&profile) {
+            return Err(self.abort_create_transition(&profile, error.into_message()));
+        }
+        if let Err(error) = populate(&profile) {
+            return Err(self.abort_create_transition(&profile, error));
+        }
+        let mut candidate = self.document.clone();
+        candidate.selected_next_launch_profile_id = profile.profile_id.clone();
+        candidate.profiles.push(profile.clone());
+        if let Err(error) = self.persist_document(&candidate) {
+            if error.is_indeterminate() {
+                self.document = candidate;
+                return Err(error.into_message());
+            }
+            return Err(self.abort_create_transition(&profile, error.into_message()));
+        }
+        self.document = candidate;
+        self.clear_transition()?;
+        Ok(profile_view(
+            profile.clone(),
+            false,
+            true,
+            ProfileSource::Managed,
+            self.launch_instructions(&profile.profile_id, ProfileSource::Managed),
+        ))
+    }
+
     pub(crate) fn delete_profile(
         &mut self,
         profile_id: &str,

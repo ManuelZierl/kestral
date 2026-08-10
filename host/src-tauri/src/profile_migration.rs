@@ -125,6 +125,12 @@ pub(crate) const DURABLE_STORE_OWNERS: &[DurableStoreOwner] = &[
         location: "profile root",
     },
     DurableStoreOwner {
+        store: "portable recovery status",
+        owner: "portable",
+        format: "v1",
+        location: "profile root",
+    },
+    DurableStoreOwner {
         store: "gateway audit",
         owner: "mcp_gateway",
         format: "JSONL event v1",
@@ -472,9 +478,21 @@ fn commit_alpha_1_path_migrations(root: &Path, candidate_root: &Path) -> Result<
     sync_directory(root)
 }
 
-fn validate_profile(root: &Path, paths: &HostPaths, allow_legacy: bool) -> Result<(), String> {
+pub(crate) fn validate_profile(
+    root: &Path,
+    paths: &HostPaths,
+    allow_legacy: bool,
+) -> Result<(), String> {
     validate_identity(root, paths)?;
     validate_registry(root, paths)?;
+    validate_profile_contents(root, paths, allow_legacy)
+}
+
+pub(crate) fn validate_profile_contents(
+    root: &Path,
+    paths: &HostPaths,
+    allow_legacy: bool,
+) -> Result<(), String> {
     crate::config::HostConfigService::validate_persisted_documents(
         &root.join("host-config.json"),
         &root.join("host-secrets.json"),
@@ -514,6 +532,7 @@ fn validate_profile(root: &Path, paths: &HostPaths, allow_legacy: bool) -> Resul
     crate::surface_state::SurfaceStateStore::validate_all(&root.join("apps/.data"))?;
     crate::managed_data::ManagedDataStore::validate_all(&root.join("apps/.data"))?;
     crate::app_data::validate_all(&root.join("apps/.data"))?;
+    crate::portable::recovery_status(root)?;
     validate_package_documents(&root.join("apps"))?;
     Ok(())
 }
@@ -651,7 +670,10 @@ fn validate_package_documents(apps_root: &Path) -> Result<(), String> {
     })
 }
 
-fn validate_authority_not_widened(source_root: &Path, candidate_root: &Path) -> Result<(), String> {
+pub(crate) fn validate_authority_not_widened(
+    source_root: &Path,
+    candidate_root: &Path,
+) -> Result<(), String> {
     let source = crate::kernel_state::FileKernelStateStore::read_persisted(
         &source_root.join("kernel-state-v1.json"),
     )?;

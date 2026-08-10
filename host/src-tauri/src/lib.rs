@@ -39,6 +39,7 @@ pub mod mcp_export;
 pub mod mcp_gateway;
 mod node_worker;
 mod permissions_app;
+mod portable;
 mod profile_migration;
 // Generic capability-provider fixture for in-crate and integration tests.
 pub mod package;
@@ -53,7 +54,8 @@ mod system_reset;
 pub mod test_app;
 mod tool_mapping;
 
-use std::path::Path;
+use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -73,6 +75,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::ipc::{Channel, CommandArg, CommandItem, InvokeError};
+use tauri::webview::DownloadEvent;
 use tauri::Runtime;
 use tauri::{Emitter, Manager, State};
 
@@ -1056,6 +1059,20 @@ async fn bootstrap_startup_apps(host: HostState<'_>) -> Result<(), String> {
         Ok::<(), String>(())
     }
     .await;
+    if result.is_ok() {
+        let startup_mcp_server = host_state
+            .config
+            .lock()
+            .map_err(|_| "config lock poisoned".to_string())?
+            .take_startup_mcp_server_request();
+        if let Some(server_id) = startup_mcp_server {
+            if let Err(error) =
+                connect_mcp_server_for_host(host_state.clone(), server_id, true).await
+            {
+                eprintln!("first-start MCP connection failed: {error}");
+            }
+        }
+    }
     if result.is_ok()
         && host_state
             .config
@@ -1394,6 +1411,50 @@ fn request_system_reset<R: Runtime>(
     Ok(SystemResetRequestResult {
         restart_required: false,
     })
+}
+
+#[tauri::command]
+async fn export_portable_profile(
+    host: HostState<'_>,
+    destination: String,
+) -> Result<portable::PortableExportResult, String> {
+    let paths = host.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || portable::export(&paths, Path::new(&destination)))
+        .await
+        .map_err(|error| format!("portable export task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn import_portable_profile<R: Runtime>(
+    host: HostState<'_>,
+    app: tauri::AppHandle<R>,
+    archive_path: String,
+    target: portable::PortableImportTarget,
+) -> Result<portable::PortableImportResult, String> {
+    let paths = host.paths.clone();
+    let profiles = host.profiles.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut profiles = profiles
+            .lock()
+            .map_err(|_| "profile registry lock poisoned".to_string())?;
+        portable::import(&paths, &mut profiles, Path::new(&archive_path), target)
+    })
+    .await
+    .map_err(|error| format!("portable import task failed: {error}"))??;
+    if result.restart_required {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            app.request_restart();
+        });
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn get_portable_recovery_status(
+    host: HostState<'_>,
+) -> Result<Option<portable::RecoveryStatus>, String> {
+    portable::recovery_status(host.paths.root())
 }
 
 #[tauri::command]
@@ -2837,6 +2898,14 @@ fn has_mcp_http_auth_secret(host: HostState<'_>, server_id: String) -> Result<bo
 
 #[tauri::command]
 async fn connect_mcp_server(host: HostState<'_>, server_id: String) -> Result<(), String> {
+    connect_mcp_server_for_host(host.inner().clone(), server_id, false).await
+}
+
+async fn connect_mcp_server_for_host(
+    host: Arc<Host>,
+    server_id: String,
+    request_chat_access: bool,
+) -> Result<(), String> {
     let connections = host.mcp_connections.clone();
     connections.begin(&server_id)?;
     let config_snapshot = {
@@ -2890,14 +2959,20 @@ async fn connect_mcp_server(host: HostState<'_>, server_id: String) -> Result<()
     let (manifest, handlers) =
         mcp::dialed_server_install_parts(&server_id, &server_config, &client, &tools);
     let install = install_kernel_app_phased(
-        host.inner().clone(),
+        host.clone(),
         manifest,
         handlers,
         GrantOrigin::ManifestRequested,
     )
     .await;
     match install {
-        Ok(()) => connections.complete(&server_id, client),
+        Ok(()) => {
+            connections.complete(&server_id, client)?;
+            if request_chat_access {
+                request_mcp_chat_access(host, mcp::app_id_for_server(&server_id)).await?;
+            }
+            Ok(())
+        }
         Err(error) => {
             client.shutdown();
             connections.abort(&server_id).map_err(|state_error| {
@@ -2906,6 +2981,67 @@ async fn connect_mcp_server(host: HostState<'_>, server_id: String) -> Result<()
             Err(error)
         }
     }
+}
+
+async fn request_mcp_chat_access(host: Arc<Host>, provider: AppId) -> Result<(), String> {
+    let prepared = with_kernel_blocking(host.clone(), move |kernel| {
+        let holder = AppId::new("chat");
+        let installed = kernel
+            .installed_app(&provider)
+            .map_err(|error| error.to_string())?;
+        let display_name = installed.manifest.display_name.clone();
+        let capabilities = installed.manifest.capabilities.clone();
+        let active = kernel.grants_for(&holder);
+        capabilities
+            .into_iter()
+            .filter_map(|capability| {
+                let capability_ref = app_host_kernel::primitives::capability::CapabilityRef {
+                    provider: provider.clone(),
+                    capability: capability.name.clone(),
+                };
+                (!active
+                    .iter()
+                    .any(|grant| grant.scope.covers(&capability_ref)))
+                .then(|| {
+                    kernel.prepare_grant(
+                        &holder,
+                        GrantRequest {
+                            scope: GrantScope::ExactCapability {
+                                provider: provider.clone(),
+                                capability: capability.name,
+                            },
+                            data_scope: DataScope::None,
+                            condition: GrantCondition::RequiresApproval,
+                            duration: GrantDuration::NonExpiring,
+                            reason: format!(
+                                "Let Chat use the '{}' tool from {}.",
+                                capability_ref.capability, display_name
+                            ),
+                        },
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    })
+    .await?;
+    if prepared.is_empty() {
+        return Ok(());
+    }
+    let approvals = tauri::async_runtime::spawn_blocking(move || {
+        PreparedGrant::await_grouped_approvals(prepared).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Chat MCP grant approval task failed: {error}"))??;
+    with_kernel_blocking(host, move |kernel| {
+        for approval in approvals {
+            kernel
+                .commit_grant(approval)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -4000,6 +4136,7 @@ fn setup_host(app: &tauri::App) -> Result<(), String> {
         host_paths.kernel_state_path(),
         registry_lock,
     )?;
+    portable::apply_pending(&host_paths)?;
     profile_migration::run(&host_paths)?;
     system_reset::apply_pending(&host_paths)?;
     let notices = Arc::new(Mutex::new(
@@ -4037,6 +4174,202 @@ fn startup_failure_message(error: &str) -> String {
     )
 }
 
+const HOST_DOWNLOAD_EVENT: &str = "host-download:event";
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum HostDownloadEvent {
+    Requested {
+        file_name: String,
+        directory: String,
+    },
+    Finished {
+        file_name: String,
+        directory: String,
+        success: bool,
+    },
+    Failed {
+        file_name: String,
+        error: String,
+    },
+}
+
+fn download_file_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("download")
+        .to_string()
+}
+
+fn available_download_path(
+    directory: &Path,
+    file_name: &str,
+    is_reserved: impl Fn(&Path) -> bool,
+) -> PathBuf {
+    let requested = Path::new(file_name);
+    let stem = requested
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("download");
+    let extension = requested
+        .extension()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty());
+    let initial = directory.join(file_name);
+    if !initial.exists() && !is_reserved(&initial) {
+        return initial;
+    }
+    for suffix in 1..10_000 {
+        let candidate = match extension {
+            Some(extension) => directory.join(format!("{stem} ({suffix}).{extension}")),
+            None => directory.join(format!("{stem} ({suffix})")),
+        };
+        if !candidate.exists() && !is_reserved(&candidate) {
+            return candidate;
+        }
+    }
+    let suffix = uuid::Uuid::new_v4().simple();
+    match extension {
+        Some(extension) => directory.join(format!("{stem}-{suffix}.{extension}")),
+        None => directory.join(format!("{stem}-{suffix}")),
+    }
+}
+
+fn emit_download_event<R: Runtime>(webview: &tauri::Webview<R>, event: HostDownloadEvent) {
+    if let Err(error) = webview.emit(HOST_DOWNLOAD_EVENT, event) {
+        eprintln!("failed to emit host download event: {error}");
+    }
+}
+
+type PendingDownloads = BTreeMap<String, VecDeque<PathBuf>>;
+
+fn reserve_download(pending: &mut PendingDownloads, url: String, path: PathBuf) {
+    pending.entry(url).or_default().push_back(path);
+}
+
+fn take_download(
+    pending: &mut PendingDownloads,
+    url: &str,
+    completed_path: Option<&Path>,
+) -> Option<PathBuf> {
+    let queue = pending.get_mut(url)?;
+    let path = completed_path
+        .and_then(|completed| queue.iter().position(|reserved| reserved == completed))
+        .and_then(|index| queue.remove(index))
+        .or_else(|| queue.pop_front());
+    if queue.is_empty() {
+        pending.remove(url);
+    }
+    path
+}
+
+fn create_main_window(app: &tauri::App) -> Result<(), String> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .first()
+        .ok_or_else(|| "main window configuration is missing".to_string())?;
+    if config.create {
+        return Err("main window must be configured for manual creation".to_string());
+    }
+
+    let download_directory = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))
+        .map_err(|error| format!("resolve download directory failed: {error}"));
+    let pending = Arc::new(Mutex::new(PendingDownloads::new()));
+    tauri::WebviewWindowBuilder::from_config(app, config)
+        .map_err(|error| format!("build main window configuration failed: {error}"))?
+        .on_download(move |webview, event| match event {
+            DownloadEvent::Requested { url, destination } => {
+                let requested_name = download_file_name(destination);
+                let directory = match &download_directory {
+                    Ok(directory) => directory,
+                    Err(error) => {
+                        emit_download_event(
+                            &webview,
+                            HostDownloadEvent::Failed {
+                                file_name: requested_name,
+                                error: error.clone(),
+                            },
+                        );
+                        return false;
+                    }
+                };
+                if let Err(error) = std::fs::create_dir_all(directory) {
+                    emit_download_event(
+                        &webview,
+                        HostDownloadEvent::Failed {
+                            file_name: requested_name,
+                            error: format!("create download directory failed: {error}"),
+                        },
+                    );
+                    return false;
+                }
+                let selected = match pending.lock() {
+                    Ok(mut pending) => {
+                        let selected =
+                            available_download_path(directory, &requested_name, |candidate| {
+                                pending.values().flatten().any(|path| path == candidate)
+                            });
+                        reserve_download(&mut pending, url.to_string(), selected.clone());
+                        selected
+                    }
+                    Err(_) => {
+                        emit_download_event(
+                            &webview,
+                            HostDownloadEvent::Failed {
+                                file_name: requested_name,
+                                error: "download state lock poisoned".to_string(),
+                            },
+                        );
+                        return false;
+                    }
+                };
+                let file_name = download_file_name(&selected);
+                *destination = selected;
+                emit_download_event(
+                    &webview,
+                    HostDownloadEvent::Requested {
+                        file_name,
+                        directory: directory.display().to_string(),
+                    },
+                );
+                true
+            }
+            DownloadEvent::Finished { url, path, success } => {
+                let reserved = pending.lock().ok().and_then(|mut pending| {
+                    take_download(&mut pending, url.as_str(), path.as_deref())
+                });
+                let selected = path.or(reserved);
+                emit_download_event(
+                    &webview,
+                    HostDownloadEvent::Finished {
+                        file_name: selected
+                            .as_deref()
+                            .map(download_file_name)
+                            .unwrap_or_else(|| "download".to_string()),
+                        directory: selected
+                            .as_deref()
+                            .and_then(Path::parent)
+                            .map(|directory| directory.display().to_string())
+                            .unwrap_or_else(|| "the download directory".to_string()),
+                        success,
+                    },
+                );
+                true
+            }
+            _ => true,
+        })
+        .build()
+        .map_err(|error| format!("create main window failed: {error}"))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -4064,6 +4397,17 @@ pub fn run() {
                     .kind(MessageDialogKind::Error)
                     // Tauri setup runs on the main thread; blocking_show freezes GTK here.
                     .show(move |_| app_handle.exit(1));
+            } else if let Err(error) = create_main_window(app) {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+                let message = startup_failure_message(&error);
+                eprintln!("Kestral startup failed: {error}");
+                let app_handle = app.handle().clone();
+                app.dialog()
+                    .message(message)
+                    .title("Kestral failed to start")
+                    .kind(MessageDialogKind::Error)
+                    .show(move |_| app_handle.exit(1));
             }
             Ok(())
         })
@@ -4085,6 +4429,7 @@ pub fn run() {
             delete_mcp_server,
             clear_mcp_http_auth_secret,
             disconnect_mcp_server,
+            export_portable_profile,
             discover_connector_models_draft,
             get_chat_thread,
             get_chat_prompt_preview,
@@ -4099,6 +4444,7 @@ pub fn run() {
             get_active_kestral_profile,
             get_app_config,
             get_host_config,
+            get_portable_recovery_status,
             has_secret,
             has_mcp_http_auth_secret,
             grant_artifact_access,
@@ -4127,6 +4473,7 @@ pub fn run() {
             list_managed_app_revisions,
             inspect_package,
             inspect_git_package,
+            import_portable_profile,
             plan_managed_app_transition,
             apply_managed_app_transition,
             install_app,

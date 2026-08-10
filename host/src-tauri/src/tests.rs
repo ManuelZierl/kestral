@@ -55,6 +55,86 @@ fn startup_failure_message_includes_the_cause_and_recovery() {
 }
 
 #[test]
+fn download_path_uses_requested_name_and_avoids_existing_files() {
+    let directory = startup_test_dir("download-path");
+    let first = available_download_path(&directory, "chat-plan.md", |_| false);
+    assert_eq!(first, directory.join("chat-plan.md"));
+
+    std::fs::write(&first, "existing").unwrap();
+    let second = available_download_path(&directory, "chat-plan.md", |_| false);
+    assert_eq!(second, directory.join("chat-plan (1).md"));
+
+    std::fs::write(&second, "existing").unwrap();
+    assert_eq!(
+        available_download_path(&directory, "chat-plan.md", |_| false),
+        directory.join("chat-plan (2).md")
+    );
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[test]
+fn download_path_avoids_an_in_flight_reservation() {
+    let directory = startup_test_dir("reserved-download-path");
+    let reserved = directory.join("chat-plan.md");
+
+    assert_eq!(
+        available_download_path(&directory, "chat-plan.md", |candidate| candidate
+            == reserved),
+        directory.join("chat-plan (1).md")
+    );
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[test]
+fn pending_downloads_preserve_every_path_for_the_same_url() {
+    let mut pending = PendingDownloads::new();
+    let first = PathBuf::from("/tmp/chat-plan.md");
+    let second = PathBuf::from("/tmp/chat-plan (1).md");
+
+    reserve_download(&mut pending, "blob:export".to_string(), first.clone());
+    reserve_download(&mut pending, "blob:export".to_string(), second.clone());
+
+    assert_eq!(
+        take_download(&mut pending, "blob:export", None),
+        Some(first)
+    );
+    assert_eq!(
+        take_download(&mut pending, "blob:export", None),
+        Some(second)
+    );
+    assert!(pending.is_empty());
+}
+
+#[test]
+fn pending_downloads_match_out_of_order_completion_paths() {
+    let mut pending = PendingDownloads::new();
+    let first = PathBuf::from("/tmp/chat-plan.md");
+    let second = PathBuf::from("/tmp/chat-plan (1).md");
+
+    reserve_download(&mut pending, "blob:export".to_string(), first.clone());
+    reserve_download(&mut pending, "blob:export".to_string(), second.clone());
+
+    assert_eq!(
+        take_download(&mut pending, "blob:export", Some(&second)),
+        Some(second)
+    );
+    assert_eq!(
+        take_download(&mut pending, "blob:export", Some(&first)),
+        Some(first)
+    );
+    assert!(pending.is_empty());
+}
+
+#[test]
+fn download_file_name_never_preserves_parent_components() {
+    assert_eq!(
+        download_file_name(Path::new("../../chat-plan.md")),
+        "chat-plan.md"
+    );
+    assert_eq!(download_file_name(Path::new("")), "download");
+}
+
+#[test]
 fn failed_startup_claim_is_retryable() {
     let installed = Mutex::new(false);
 
@@ -75,6 +155,54 @@ fn completed_startup_claim_stays_claimed() {
     drop(claim);
 
     assert!(StartupClaim::acquire(&installed).unwrap().is_none());
+}
+
+#[test]
+fn startup_mcp_chat_request_grants_each_tool_with_per_use_approval() {
+    let path = startup_test_dir("startup-mcp-chat-grants");
+    let host = build_test_host(path.clone()).unwrap();
+    tauri::async_runtime::block_on(install_bundled_apps_phased(
+        host.clone(),
+        host.config.clone(),
+        host.file_resources.clone(),
+    ))
+    .unwrap();
+    let provider = AppId::new(test_app::TEST_APP_ID);
+    let (manifest, handlers) =
+        test_app::test_app_install_parts(Arc::new(Mutex::new(test_app::TestAppStore::default())));
+    tauri::async_runtime::block_on(install_kernel_app_phased(
+        host.clone(),
+        manifest,
+        handlers,
+        GrantOrigin::ManifestRequested,
+    ))
+    .unwrap();
+
+    tauri::async_runtime::block_on(request_mcp_chat_access(host.clone(), provider.clone()))
+        .unwrap();
+
+    let kernel = host.kernel.lock().unwrap();
+    let grants = kernel.grants_for(&AppId::new("chat"));
+    let tool_grants = grants
+        .iter()
+        .filter(|grant| {
+            matches!(
+                &grant.scope,
+                GrantScope::ExactCapability { provider: granted_provider, .. }
+                    if granted_provider == &provider
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(tool_grants.len(), 5);
+    assert!(tool_grants.iter().all(|grant| {
+        grant.condition == GrantCondition::RequiresApproval
+            && grant.data_scope == DataScope::None
+            && grant.expires_at.is_none()
+    }));
+
+    drop(kernel);
+    drop(host);
+    let _ = std::fs::remove_dir_all(path);
 }
 
 fn write_agent_worker_package(path: &std::path::Path) {

@@ -210,6 +210,13 @@ fn shell_csp_allows_surface_documents_without_allowing_inline_shell_scripts() {
 }
 
 #[test]
+fn main_window_is_created_programmatically_for_download_observation() {
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+    assert_eq!(config["app"]["windows"][0]["create"], false);
+}
+
+#[test]
 fn injected_sdk_matches_the_host_bridge_protocol() {
     let protocol = include_str!("../../../src/lib/surfaces/surfaceBridgeProtocol.ts");
     assert!(protocol.contains("SURFACE_BRIDGE_PROTOCOL = \"app-host-surface-bridge\""));

@@ -184,7 +184,7 @@ impl HostPaths {
         &self.profile
     }
 
-    fn new(
+    pub(crate) fn new(
         default_root: PathBuf,
         profile: ProfileIdentity,
         allow_unsafe_native_backends: bool,

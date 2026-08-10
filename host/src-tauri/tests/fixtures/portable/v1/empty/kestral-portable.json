@@ -1,0 +1,12 @@
+{
+  "format_version": 1,
+  "source_profile_id": "profile-portable-fixture",
+  "source_profile_name": "Portable fixture",
+  "source_profile_slug": "portable-fixture",
+  "source_app_version": "0.1.0-alpha.1",
+  "captured_at": "2026-08-09T00:00:00Z",
+  "contents": [],
+  "apps": [],
+  "secrets": [],
+  "file_resources": []
+}

@@ -28,6 +28,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 axum = "0.8"
 futures-util = "0.3"
 tiny_http = "0.12"

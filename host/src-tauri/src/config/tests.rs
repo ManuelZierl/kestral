@@ -739,6 +739,37 @@ fn temp_config_path() -> std::path::PathBuf {
 }
 
 #[test]
+fn fresh_config_seeds_removable_kestral_docs_server_and_requests_startup_once() {
+    let path = temp_config_path();
+    let mut service = HostConfigService::new(path.clone()).unwrap();
+
+    assert_eq!(
+        service.take_startup_mcp_server_request().as_deref(),
+        Some(KESTRAL_GITMCP_SERVER_ID)
+    );
+    assert!(service.take_startup_mcp_server_request().is_none());
+    assert_eq!(
+        service.mcp_server(KESTRAL_GITMCP_SERVER_ID),
+        Some(McpServerConfig {
+            display_name: "Kestral documentation".into(),
+            transport: McpTransportConfig::StreamableHttp {
+                url: "https://gitmcp.io/ManuelZierl/kestral".into(),
+                authentication: McpHttpAuthentication::None,
+            },
+        })
+    );
+
+    let mut reloaded = HostConfigService::new(path.clone()).unwrap();
+    assert!(reloaded.take_startup_mcp_server_request().is_none());
+    reloaded
+        .delete_mcp_server(KESTRAL_GITMCP_SERVER_ID)
+        .unwrap();
+    assert!(reloaded.mcp_server(KESTRAL_GITMCP_SERVER_ID).is_none());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn clearing_all_indexed_secrets_removes_the_protected_credentials() {
     let config_path = temp_config_path();
     let secrets_path = config_path.with_extension("secrets.json");
@@ -792,9 +823,10 @@ fn mcp_servers_roundtrip_through_persistence() {
 
     let reloaded = HostConfigService::new(path).unwrap();
     let servers = reloaded.list_mcp_servers();
-    assert_eq!(servers.len(), 2);
-    assert_eq!(servers[0].id, "remote");
-    assert_eq!(servers[1].id, "weather");
+    assert_eq!(servers.len(), 3);
+    assert_eq!(servers[0].id, KESTRAL_GITMCP_SERVER_ID);
+    assert_eq!(servers[1].id, "remote");
+    assert_eq!(servers[2].id, "weather");
     assert_eq!(
         reloaded.mcp_server("weather").unwrap().transport,
         McpTransportConfig::Stdio {
