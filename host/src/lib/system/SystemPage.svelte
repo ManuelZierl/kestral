@@ -93,8 +93,8 @@
   <article class="card">
     <h2>Activity</h2>
     <p class="muted">
-      Everything apps did this session, one entry per run. Every action an app takes is
-      recorded here — nothing runs off the record.
+      Capability work routed through Kestral this session, one entry per Run. Unsandboxed native
+      backends can also act outside this history.
     </p>
     <RunLedgerTable />
   </article>
@@ -190,13 +190,14 @@
     <p class="muted">
       Kestral is a personal-first, open-source AI workspace and lean local host for user-chosen
       apps. Chat is the default starting app, not the canonical interface for all AI work.
-      Apps have no privileged access: every action goes through the host's single action path,
-      is checked against the permissions you granted, and is recorded as a run above.
+      Capability actions routed through Kestral follow the host's single action path, are checked
+      against the permissions you granted, and are recorded as Runs above. Native app backends
+      and stdio tool servers remain OS-powerful in this alpha and can act outside that path.
     </p>
     <p class="muted">
       Installing an app is not blanket trust. The host enforces boundaries through app
       manifests, grants, host-owned approval prompts, and provenance stamped on everything
-      an app produces. Permissions are reviewed and managed under
+      an app produces through the mediated path. Permissions are reviewed and managed under
       Settings&nbsp;→&nbsp;Permissions.
     </p>
   </article>

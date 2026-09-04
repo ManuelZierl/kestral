@@ -784,7 +784,6 @@ pub struct HostConfigService {
     path: Option<PathBuf>,
     secrets_path: Option<PathBuf>,
     document: HostConfig,
-    startup_mcp_server_request: Option<String>,
     secrets: Box<dyn SecretStorage>,
     writer: Arc<dyn AtomicFileWriter>,
 }
@@ -795,7 +794,6 @@ impl Default for HostConfigService {
             path: None,
             secrets_path: None,
             document: default_host_config(),
-            startup_mcp_server_request: None,
             secrets: Box::new(InMemorySecretStore::new()),
             writer: standard_writer(),
         }
@@ -882,9 +880,6 @@ impl HostConfigService {
             version: 3,
             config: fresh_host_config(),
         });
-        let startup_mcp_server_request = fresh_document
-            .as_ref()
-            .map(|_| KESTRAL_GITMCP_SERVER_ID.to_string());
 
         // Read the raw JSON to handle version detection without schema lock-in.
         let raw = if config_path.exists() {
@@ -929,7 +924,6 @@ impl HostConfigService {
             path: Some(config_path),
             secrets_path: Some(secrets_path),
             document,
-            startup_mcp_server_request,
             secrets: secrets_store,
             writer,
         };
@@ -939,10 +933,6 @@ impl HostConfigService {
 
     pub fn get_host_config(&self) -> HostConfig {
         self.document.clone()
-    }
-
-    pub fn take_startup_mcp_server_request(&mut self) -> Option<String> {
-        self.startup_mcp_server_request.take()
     }
 
     pub fn secret_storage_path(&self) -> Option<&Path> {
@@ -2063,6 +2053,8 @@ pub(crate) const KESTRAL_GITMCP_SERVER_ID: &str = "kestral-docs";
 
 fn fresh_host_config() -> HostConfig {
     let mut config = default_host_config();
+    // This is a discoverable shortcut, not startup work. Saved MCP servers
+    // remain inert until the owner explicitly chooses Connect.
     config.mcp_servers.insert(
         KESTRAL_GITMCP_SERVER_ID.into(),
         McpServerConfig {

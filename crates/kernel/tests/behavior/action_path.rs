@@ -1,5 +1,21 @@
 use crate::helpers::*;
 
+fn install_notes_with_effect(
+    kernel: &mut Kernel,
+    condition: GrantCondition,
+    effect: CapabilityEffect,
+    handler: CapabilityHandler,
+) {
+    let mut manifest = notes_manifest(condition);
+    manifest.capabilities[0].effect = effect;
+    kernel
+        .install(
+            seal(manifest),
+            BTreeMap::from([(create_note(), handler)]),
+        )
+        .expect("notes installs");
+}
+
 #[test]
 fn silent_grant_invocation_completes_and_is_recorded() {
     let (mut kernel, _, _) = test_kernel();
@@ -54,41 +70,153 @@ fn notify_grant_shows_chrome_notice() {
 }
 
 #[test]
-fn direct_provider_surface_action_does_not_show_notify_notice() {
-    let (mut kernel, chrome, _) = test_kernel();
-    install_notes(&mut kernel, GrantCondition::Notify);
-    let binding = kernel
-        .open_surface(&notes_app(), &composer_surface())
-        .unwrap();
+fn direct_provider_surface_action_suppresses_notify_notice_for_every_effect() {
+    for effect in [
+        CapabilityEffect::Unspecified,
+        CapabilityEffect::ReadOnly,
+        CapabilityEffect::LocalWrite,
+        CapabilityEffect::ExternalWrite,
+        CapabilityEffect::Destructive,
+    ] {
+        let (mut kernel, chrome, _) = test_kernel();
+        install_notes_with_effect(
+            &mut kernel,
+            GrantCondition::Notify,
+            effect,
+            create_note_handler(),
+        );
+        let binding = kernel
+            .open_surface(&notes_app(), &composer_surface())
+            .unwrap();
 
-    let outcome = kernel
-        .submit_action(&binding, create_note_intent("direct user action"))
-        .unwrap();
+        let outcome = kernel
+            .submit_action(&binding, create_note_intent("direct user action"))
+            .unwrap();
 
-    assert!(matches!(outcome.result, InvocationResult::Completed { .. }));
-    assert!(chrome.notices.lock().unwrap().is_empty());
+        assert!(matches!(outcome.result, InvocationResult::Completed { .. }));
+        assert!(chrome.notices.lock().unwrap().is_empty());
+        assert!(chrome.approval_prompts.lock().unwrap().is_empty());
+    }
 }
 
 #[test]
-fn direct_provider_surface_action_does_not_request_per_use_approval() {
+fn low_risk_direct_provider_surface_action_counts_click_as_approval() {
+    for effect in [CapabilityEffect::ReadOnly, CapabilityEffect::LocalWrite] {
+        let (mut kernel, chrome, _) = test_kernel();
+        install_notes_with_effect(
+            &mut kernel,
+            GrantCondition::RequiresApproval,
+            effect,
+            create_note_handler(),
+        );
+        chrome.set_capability_decision(ApprovalDecision::Denied);
+        let binding = kernel
+            .open_surface(&notes_app(), &composer_surface())
+            .unwrap();
+
+        let outcome = kernel
+            .submit_action(&binding, create_note_intent("direct user action"))
+            .unwrap();
+
+        assert!(
+            matches!(outcome.result, InvocationResult::Completed { .. }),
+            "{effect:?} own-surface action should treat the click as approval"
+        );
+        assert!(chrome.approval_prompts.lock().unwrap().is_empty());
+        assert!(kernel
+            .run_view(&outcome.run_id)
+            .unwrap()
+            .approvals
+            .is_empty());
+    }
+}
+
+#[test]
+fn unvalidated_surface_initiator_cannot_bypass_trusted_approval() {
     let (mut kernel, chrome, _) = test_kernel();
-    install_notes(&mut kernel, GrantCondition::RequiresApproval);
+    let calls = Arc::new(Mutex::new(0usize));
+    install_notes_with_effect(
+        &mut kernel,
+        GrantCondition::RequiresApproval,
+        CapabilityEffect::LocalWrite,
+        counting_note_handler(calls.clone()),
+    );
     chrome.set_capability_decision(ApprovalDecision::Denied);
-    let binding = kernel
-        .open_surface(&notes_app(), &composer_surface())
+
+    // `start_run` accepts initiator metadata for attribution, but this path
+    // has not validated a live surface binding or a declared surface intent.
+    let run_id = kernel
+        .start_run(
+            Initiator::SurfaceAction {
+                app_id: notes_app(),
+                surface: composer_surface(),
+            },
+            "forged surface attribution",
+        )
         .unwrap();
 
-    let outcome = kernel
-        .submit_action(&binding, create_note_intent("direct user action"))
+    let result = kernel
+        .invoke(
+            &run_id,
+            &create_note_ref(),
+            obj(json!({"text": "must still ask"})),
+        )
         .unwrap();
 
-    assert!(matches!(outcome.result, InvocationResult::Completed { .. }));
-    assert!(chrome.approval_prompts.lock().unwrap().is_empty());
-    assert!(kernel
-        .run_view(&outcome.run_id)
-        .unwrap()
-        .approvals
-        .is_empty());
+    assert_eq!(
+        result,
+        InvocationResult::Refused {
+            reason: RefusalReason::ApprovalDenied,
+        }
+    );
+    assert_eq!(*calls.lock().unwrap(), 0);
+    assert_eq!(chrome.approval_prompts.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn high_risk_direct_provider_surface_action_requires_trusted_approval() {
+    for effect in [
+        CapabilityEffect::Unspecified,
+        CapabilityEffect::ExternalWrite,
+        CapabilityEffect::Destructive,
+    ] {
+        let (mut kernel, chrome, _) = test_kernel();
+        let calls = Arc::new(Mutex::new(0usize));
+        install_notes_with_effect(
+            &mut kernel,
+            GrantCondition::RequiresApproval,
+            effect,
+            counting_note_handler(calls.clone()),
+        );
+        chrome.set_capability_decision(ApprovalDecision::Denied);
+        let binding = kernel
+            .open_surface(&notes_app(), &composer_surface())
+            .unwrap();
+
+        let outcome = kernel
+            .submit_action(&binding, create_note_intent("direct user action"))
+            .unwrap();
+
+        assert_eq!(
+            outcome.result,
+            InvocationResult::Refused {
+                reason: RefusalReason::ApprovalDenied,
+            },
+            "{effect:?} own-surface action must enter trusted chrome"
+        );
+        assert_eq!(*calls.lock().unwrap(), 0);
+        assert_eq!(chrome.approval_prompts.lock().unwrap().len(), 1);
+        assert_eq!(
+            kernel
+                .run_view(&outcome.run_id)
+                .unwrap()
+                .approvals
+                .iter()
+                .map(|approval| approval.approved)
+                .collect::<Vec<_>>(),
+            vec![false]
+        );
+    }
 }
 
 #[test]
@@ -208,10 +336,13 @@ fn requires_approval_denial_refuses_before_any_code_runs() {
         vec![false]
     );
     assert!(view.invocations.is_empty());
-    assert_eq!(
-        chrome.approval_prompts.lock().unwrap()[0].goal,
-        "risky note"
-    );
+    let prompt = chrome.approval_prompts.lock().unwrap()[0].clone();
+    assert_eq!(prompt.goal, "risky note");
+    assert_eq!(prompt.capability_description, "Create a note from text");
+    assert_eq!(prompt.effect, CapabilityEffect::LocalWrite);
+    assert_eq!(prompt.input_summary, "{\n  \"text\": \"nope\"\n}");
+    assert!(!prompt.input_summary_truncated);
+    assert!(!format!("{prompt:?}").contains("nope"));
     let kinds: Vec<&str> = kernel
         .records_for_run(&run_id)
         .map(|r| r.event.kind())
@@ -220,6 +351,42 @@ fn requires_approval_denial_refuses_before_any_code_runs() {
         kinds,
         vec!["run-started", "approval-requested", "approval-denied"]
     );
+}
+
+#[test]
+fn approval_prompt_bounds_large_utf8_input_and_marks_the_prefix() {
+    let (mut kernel, chrome, _) = test_kernel();
+    install_notes(&mut kernel, GrantCondition::RequiresApproval);
+    chrome.set_capability_decision(ApprovalDecision::Denied);
+    let run_id = kernel
+        .start_run(
+            Initiator::App {
+                app_id: notes_app(),
+                reason: "large input".into(),
+            },
+            "review a large note",
+        )
+        .unwrap();
+
+    let result = kernel
+        .invoke(
+            &run_id,
+            &create_note_ref(),
+            obj(json!({"text": "🔒".repeat(MAX_CAPABILITY_APPROVAL_INPUT_BYTES)})),
+        )
+        .unwrap();
+
+    assert!(matches!(
+        result,
+        InvocationResult::Refused {
+            reason: RefusalReason::ApprovalDenied
+        }
+    ));
+    let prompt = chrome.approval_prompts.lock().unwrap()[0].clone();
+    assert!(prompt.input_summary_truncated);
+    assert!(prompt.input_summary.len() <= MAX_CAPABILITY_APPROVAL_INPUT_BYTES);
+    assert!(prompt.input_summary.starts_with("{\n  \"text\": \"🔒"));
+    assert!(!format!("{prompt:?}").contains('🔒'));
 }
 
 #[test]

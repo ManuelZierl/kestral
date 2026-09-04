@@ -945,6 +945,10 @@ export interface CapabilityApprovalPrompt {
   app_id: string;
   app_display_name: string;
   capability: CapabilityRef;
+  capability_description: string;
+  effect: CapabilityEffect;
+  input_summary: string;
+  input_summary_truncated: boolean;
   data_scope: DataScope;
   grant_id: string;
   run_id: string;

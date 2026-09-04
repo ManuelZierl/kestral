@@ -36,6 +36,8 @@ const configuredUrl = (import.meta.env.VITE_HOST_API_URL as string | undefined)?
 const listeners = new Map<string, Set<EventHandler<unknown>>>();
 const REMOTE_EVENT_GAP = "host-remote:event-gap";
 const MAX_DELIVERED_APPROVAL_IDS = 1_024;
+const APPROVAL_REFRESH_RETRY_INITIAL_MS = 250;
+const APPROVAL_REFRESH_RETRY_MAX_MS = 4_000;
 let eventCursor = 0;
 let eventInstanceId: string | null = null;
 let eventSource: EventSource | null = null;
@@ -43,6 +45,9 @@ let eventGeneration = 0;
 let eventRequest: { generation: number; promise: Promise<void> } | null = null;
 const deliveredApprovalIds = new Set<number>();
 const deliveredApprovalOrder: number[] = [];
+let approvalRefreshPending = false;
+let approvalRefreshRetry: ReturnType<typeof setTimeout> | null = null;
+let approvalRefreshRetryDelay = APPROVAL_REFRESH_RETRY_INITIAL_MS;
 let remoteAuthenticated = false;
 export const remoteConnectionAuthenticated = writable(false);
 
@@ -123,9 +128,9 @@ export async function invokeHost<T>(command: string, args: Record<string, unknow
   return responseValue<T>(response);
 }
 
-// An approval can arrive over both the approvals-recovery poll and the event
-// feed. Deliver each request id exactly once so a remote client never sees a
-// duplicate approval dialog.
+// Full approval prompts come only from the authoritative approvals endpoint.
+// Deliver each request id exactly once so reconnect and overlapping refreshes
+// never show a duplicate dialog.
 function deliverApproval(request: { request_id?: unknown } | null): void {
   const requestId = request?.request_id;
   if (typeof requestId !== "number" || deliveredApprovalIds.has(requestId)) return;
@@ -157,6 +162,10 @@ function resetRemoteReplayState(): void {
   eventInstanceId = null;
   deliveredApprovalIds.clear();
   deliveredApprovalOrder.length = 0;
+  approvalRefreshPending = false;
+  approvalRefreshRetryDelay = APPROVAL_REFRESH_RETRY_INITIAL_MS;
+  if (approvalRefreshRetry !== null) clearTimeout(approvalRefreshRetry);
+  approvalRefreshRetry = null;
 }
 
 function reportEventGap(detail: RemoteEventGap): void {
@@ -171,6 +180,34 @@ function recoverAfterCurrentRequest(): void {
   } else {
     void pollEvents();
   }
+}
+
+function requestApprovalRefresh(): void {
+  approvalRefreshPending = true;
+  recoverAfterCurrentRequest();
+}
+
+function completeApprovalRefresh(): void {
+  approvalRefreshPending = false;
+  approvalRefreshRetryDelay = APPROVAL_REFRESH_RETRY_INITIAL_MS;
+  if (approvalRefreshRetry !== null) clearTimeout(approvalRefreshRetry);
+  approvalRefreshRetry = null;
+}
+
+function scheduleApprovalRefreshRetry(): void {
+  if (!approvalRefreshPending || approvalRefreshRetry !== null || !isRemoteConnectionReady()) {
+    return;
+  }
+  const generation = eventGeneration;
+  approvalRefreshRetry = setTimeout(() => {
+    approvalRefreshRetry = null;
+    if (generation !== eventGeneration || !approvalRefreshPending) return;
+    recoverAfterCurrentRequest();
+  }, approvalRefreshRetryDelay);
+  approvalRefreshRetryDelay = Math.min(
+    approvalRefreshRetryDelay * 2,
+    APPROVAL_REFRESH_RETRY_MAX_MS,
+  );
 }
 
 function processRemoteEvents(
@@ -201,12 +238,16 @@ function processRemoteEvents(
   for (const request of pending?.requests ?? []) deliverApproval(request);
   let expectedSequence = eventCursor;
   let gap = serverRestarted || batch.oldest_sequence > expectedSequence;
+  let approvalRefreshNeeded = false;
   for (const event of batch.events) {
     if (event.sequence < eventCursor) continue;
     if (event.sequence > expectedSequence) gap = true;
     expectedSequence = event.sequence + 1;
     if (event.event === "trusted-chrome:request") {
-      deliverApproval(event.payload as { request_id?: unknown } | null);
+      // Remote request events intentionally contain only a wake-up id. Fetch
+      // the current pending set before displaying anything: replayed signals
+      // may refer to prompts that were already resolved or expired.
+      approvalRefreshNeeded = true;
       continue;
     }
     for (const listener of listeners.get(event.event) ?? []) listener(event.payload);
@@ -220,6 +261,7 @@ function processRemoteEvents(
       next_sequence: batch.next_sequence,
     });
   }
+  if (approvalRefreshNeeded) requestApprovalRefresh();
 }
 
 async function requestRemoteEvents(generation: number): Promise<void> {
@@ -230,9 +272,11 @@ async function requestRemoteEvents(generation: number): Promise<void> {
       pending = await responseValue<RemoteApprovalBatch>(pendingResponse);
       if (generation !== eventGeneration) return;
       adoptRemoteInstance(pending.instance_id);
+      completeApprovalRefresh();
     } catch (error) {
       if (generation !== eventGeneration) return;
       console.error("Remote host approval recovery failed", error);
+      scheduleApprovalRefreshRetry();
     }
     const requestedSequence = eventCursor;
     const response = await remoteFetch(`/api/events?after=${requestedSequence}`);

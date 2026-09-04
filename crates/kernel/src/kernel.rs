@@ -41,7 +41,7 @@ use crate::invocation::{
 };
 use crate::manifest::{GrantRequest, SealedManifest};
 use crate::primitives::artifact::{Artifact, ArtifactDraft, Provenance};
-use crate::primitives::capability::{CapabilityDeclaration, CapabilityRef};
+use crate::primitives::capability::{CapabilityDeclaration, CapabilityEffect, CapabilityRef};
 use crate::primitives::grant::{
     DataScope, DenialReason, Grant, GrantCondition, GrantDuration, GrantOrigin, GrantScope,
     GrantStatusView,
@@ -54,6 +54,7 @@ use crate::services::broker::{GrantCheck, IssueResult, PermissionBroker, SecretR
 use crate::services::chrome::{
     ApprovalDecision, CapabilityApprovalPrompt, ChromeNotice, EventSubscriptionPrompt,
     GrantIssuancePrompt, InstallApprovalDecision, InstallApprovalPrompt, TrustedChrome,
+    MAX_CAPABILITY_APPROVAL_INPUT_BYTES,
 };
 use crate::services::ledger::{payload_sha256, LedgerEvent, LedgerRecord, RunLedger};
 use crate::services::registry::{InstalledApp, Registry};
@@ -127,6 +128,20 @@ fn grant_duration_matches(grant: &Grant, duration: GrantDuration) -> bool {
         }
         _ => false,
     }
+}
+
+fn approval_input_summary(input: &JsonObject) -> (String, bool) {
+    let rendered = serde_json::to_string_pretty(input)
+        .expect("validated JSON invocation input always serializes");
+    if rendered.len() <= MAX_CAPABILITY_APPROVAL_INPUT_BYTES {
+        return (rendered, false);
+    }
+
+    let mut end = MAX_CAPABILITY_APPROVAL_INPUT_BYTES;
+    while !rendered.is_char_boundary(end) {
+        end -= 1;
+    }
+    (rendered[..end].to_string(), true)
 }
 
 /// ```compile_fail
@@ -1110,6 +1125,22 @@ impl Kernel {
         request: InvocationRequest,
         timeout: StdDuration,
     ) -> KernelResult<PrepareInvocation> {
+        self.prepare_invocation_with_context(run_id, capability, request, timeout, false)
+    }
+
+    /// Prepare an invocation with host-validated interaction context. The
+    /// surface-action exemption is deliberately private: a public caller can
+    /// record a `SurfaceAction` initiator for attribution, but only
+    /// `prepare_surface_action` can prove that the binding is live and the
+    /// capability is a declared intent of that surface.
+    fn prepare_invocation_with_context(
+        &mut self,
+        run_id: &RunId,
+        capability: &CapabilityRef,
+        request: InvocationRequest,
+        timeout: StdDuration,
+        direct_provider_surface_action: bool,
+    ) -> KernelResult<PrepareInvocation> {
         self.reap_cancelled_pending()?;
         request.data_scope.validate_invocation()?;
         let run = self.ledger.run_view(run_id)?;
@@ -1117,15 +1148,24 @@ impl Kernel {
             return Err(KernelError::RunAlreadyEnded(run_id.clone()));
         }
         let acting_app = run.initiating_app().clone();
-        let direct_provider_surface_action = matches!(
-            &run.initiator,
-            Initiator::SurfaceAction { app_id, .. }
-                if app_id == &acting_app && app_id == &capability.provider
-        );
         // A caller may still present a stale run handle after uninstall; an
         // uninstalled app must never keep acting through it.
         self.registry.app(&acting_app)?;
         let declaration = self.registry.capability(capability)?;
+        let capability_description = declaration.description.clone();
+        let capability_effect = declaration.effect;
+        // A click in the provider's own surface is sufficient per-use consent
+        // only when the declared effect is bounded to reads or local writes.
+        // Unknown, external, and destructive effects still need the trusted
+        // chrome owned by the host when the grant requires approval.
+        // This is an interaction policy, not malicious-app containment: the
+        // provider declares the effect and a SurfaceAction does not attest a
+        // physical user gesture.
+        let direct_surface_action_counts_as_approval = direct_provider_surface_action
+            && matches!(
+                declaration.effect,
+                CapabilityEffect::ReadOnly | CapabilityEffect::LocalWrite
+            );
         validate_against_schema(
             &serde_json::Value::Object(request.input.clone()),
             &declaration.input_schema,
@@ -1183,13 +1223,18 @@ impl Kernel {
         }
 
         let approval = if grant.condition == GrantCondition::RequiresApproval
-            && !direct_provider_surface_action
+            && !direct_surface_action_counts_as_approval
         {
             let app = self.registry.app(&acting_app)?;
+            let (input_summary, input_summary_truncated) = approval_input_summary(&request.input);
             let prompt = CapabilityApprovalPrompt {
                 app_id: acting_app.clone(),
                 app_display_name: app.manifest.display_name.clone(),
                 capability: capability.clone(),
+                capability_description,
+                effect: capability_effect,
+                input_summary,
+                input_summary_truncated,
                 data_scope: request.data_scope.clone(),
                 grant_id: grant.grant_id.clone(),
                 run_id: run_id.clone(),
@@ -1760,6 +1805,7 @@ impl Kernel {
                 capability: intent.capability.clone(),
             });
         }
+        let direct_provider_surface_action = binding.app_id.eq(&intent.capability.provider);
         let run_id = self.start_run(
             Initiator::SurfaceAction {
                 app_id: binding.app_id.clone(),
@@ -1767,13 +1813,15 @@ impl Kernel {
             },
             &intent.goal,
         )?;
-        let prepared = match self.prepare_invocation(
+        let prepared = match self.prepare_invocation_with_context(
             &run_id,
             &intent.capability,
             InvocationRequest {
                 input: intent.input,
                 data_scope: intent.data_scope,
             },
+            DEFAULT_INVOCATION_TIMEOUT,
+            direct_provider_surface_action,
         ) {
             Ok(prepared) => prepared,
             Err(error) => {

@@ -216,7 +216,7 @@ async function verifyEvidence(app, hostVersion, coreCommit) {
   validateExternalEvidence(evidence, app, hostVersion, coreCommit);
 }
 
-function verifyReleaseCommit(testedCoreCommit, releaseCommit) {
+function verifyReleaseCommit(testedCoreCommit, releaseCommit, hostVersion) {
   try {
     execFileSync("git", ["merge-base", "--is-ancestor", testedCoreCommit, releaseCommit]);
   } catch {
@@ -229,15 +229,15 @@ function verifyReleaseCommit(testedCoreCommit, releaseCommit) {
   )
     .split(/\r?\n/)
     .filter(Boolean);
-  validateReleaseChangedPaths(changed);
+  validateReleaseChangedPaths(changed, hostVersion);
 }
 
-export function validateReleaseChangedPaths(changed) {
+export function validateReleaseChangedPaths(changed, hostVersion) {
   // The tested core commit freezes every executable and build input. Only the
   // two self-contained release metadata files may be added after evidence.
   const allowed = new Set([
     "release/promoted-apps.json",
-    "release/v0.1.0-alpha.1-evidence.md",
+    `release/v${hostVersion}-evidence.md`,
   ]);
   const disallowed = changed.filter((path) => !allowed.has(path));
   if (disallowed.length > 0) {
@@ -262,7 +262,7 @@ async function main() {
     readFile("host/package.json", "utf8").then(JSON.parse),
   ]);
   const apps = validatePromotionDocument(promotionDocument, contractDocument, packageDocument.version, { requireEvidence });
-  if (requireEvidence) verifyReleaseCommit(promotionDocument.tested_core_commit, releaseCommit);
+  if (requireEvidence) verifyReleaseCommit(promotionDocument.tested_core_commit, releaseCommit, packageDocument.version);
   if (verifyRemotes) await Promise.all(apps.map(verifyRemoteCommit));
   if (requireEvidence) await Promise.all(apps.map((app) => verifyEvidence(app, packageDocument.version, promotionDocument.tested_core_commit)));
   console.log(`Validated ${apps.length} promoted app contracts for exact host ${packageDocument.version}${requireEvidence ? " with immutable lifecycle evidence" : ""}.`);

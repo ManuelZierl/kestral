@@ -12,6 +12,7 @@
   } from "$lib/api";
   import {
     approveLabel,
+    capabilityEffectSummary,
     dataScopeIsBroad,
     dataScopeSummary,
     conditionSummary,
@@ -419,8 +420,30 @@
             <code>{current.prompt.capability.provider}/{current.prompt.capability.capability}</code>
             one time.
           </p>
+          <p class="detail">{current.prompt.capability_description}</p>
+          <p class="consequence">
+            Provider-declared effect: {capabilityEffectSummary(current.prompt.effect)}
+          </p>
           <p class="detail">Data scope: {dataScopeSummary(current.prompt.data_scope)}</p>
           <p class="detail"><span class="attribution">The app says:</span> {current.prompt.goal}</p>
+          <section
+            class="approval-input"
+            aria-label={current.prompt.input_summary_truncated
+              ? "Action input preview"
+              : "Exact action input"}
+          >
+            <strong>
+              {current.prompt.input_summary_truncated
+                ? "Action input preview (first 4 KB)"
+                : "Exact action input"}
+            </strong>
+            <pre>{current.prompt.input_summary}</pre>
+            {#if current.prompt.input_summary_truncated}
+              <p class="scope-warning">
+                This input is larger than the approval preview. Only its first 4 KB are shown.
+              </p>
+            {/if}
+          </section>
         {:else if current.kind === "install-approval"}
           <h2 id="chrome-title">Review requested permissions</h2>
           <p>
@@ -729,6 +752,25 @@
   }
   .attribution {
     font-style: italic;
+  }
+  .approval-input {
+    margin: 0.75rem 0;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--color-chrome-panel-border);
+    border-radius: 8px;
+    background: var(--color-chrome-panel-bg);
+  }
+  .approval-input pre {
+    max-height: 12rem;
+    margin: 0.4rem 0 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--color-chrome-text);
+    font-size: 0.78rem;
+  }
+  .approval-input .scope-warning {
+    margin: 0.5rem 0 0;
   }
   .decision-error {
     padding: 0.5rem 0.65rem;

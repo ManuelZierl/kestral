@@ -7,11 +7,11 @@ import {
   validateEvidenceReport,
 } from "./check-alpha-release-evidence.mjs";
 
-const hostVersion = "0.1.0-alpha.1";
+const { version: hostVersion } = JSON.parse(await readFile("host/package.json", "utf8"));
 const coreCommit = "a".repeat(40);
 const releaseCommit = "b".repeat(40);
 const promotion = JSON.parse(await readFile("release/promoted-apps.json", "utf8"));
-const contractsReport = await readFile("release/v0.1.0-alpha.1-evidence.md", "utf8");
+const contractsReport = await readFile(`release/v${hostVersion}-evidence.md`, "utf8");
 
 function completeReport() {
   return contractsReport

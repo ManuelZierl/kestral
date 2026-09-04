@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{APP_NAME}}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: clamp(1rem, 4vw, 2rem);
+      color: var(--color-text);
+      background: var(--color-surface);
+      font: 15px/1.5 system-ui, sans-serif;
+    }
+    main { width: min(100%, 44rem); margin: 0 auto; }
+    h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2.25rem); }
+    .lede, .empty { color: var(--color-text-muted); }
+    form, .item, .draft {
+      display: flex;
+      gap: .65rem;
+      align-items: center;
+      padding: .8rem;
+      border: 1px solid var(--color-border);
+      border-radius: .75rem;
+      background: var(--color-surface-raised);
+    }
+    form { margin: 1.25rem 0 1rem; }
+    input[type="text"] {
+      min-width: 0;
+      flex: 1;
+      padding: .65rem .75rem;
+      color: var(--color-text);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: .5rem;
+      font: inherit;
+    }
+    button {
+      min-height: 2.5rem;
+      padding: .55rem .8rem;
+      color: var(--color-button-text, var(--color-text));
+      background: var(--color-accent);
+      border: 0;
+      border-radius: .5rem;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button.secondary { color: var(--color-text); background: var(--color-surface-hover); }
+    button.danger { color: var(--color-danger-text); background: transparent; }
+    button:disabled { cursor: wait; opacity: .6; }
+    button:focus-visible, input:focus-visible { outline: .2rem solid var(--color-focus-ring); outline-offset: .15rem; }
+    ul { display: grid; gap: .55rem; padding: 0; list-style: none; }
+    .item label { display: flex; flex: 1; gap: .65rem; align-items: center; min-width: 0; }
+    .item span { overflow-wrap: anywhere; }
+    .item.done span { text-decoration: line-through; color: var(--color-text-muted); }
+    .actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
+    .draft { margin-top: 1rem; align-items: flex-start; }
+    .draft p { flex: 1; margin: .1rem 0; overflow-wrap: anywhere; }
+    #status { min-height: 1.5rem; margin-top: .75rem; color: var(--color-text-muted); }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    @media (max-width: 28rem) {
+      form, .draft { align-items: stretch; flex-direction: column; }
+      form button, .draft button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{APP_NAME}}</h1>
+    <p class="lede">Shape this starter around one recurring job instead of forcing that job into Chat.</p>
+
+    <form id="add-form">
+      <label class="visually-hidden" for="new-item">New item</label>
+      <input id="new-item" name="title" type="text" maxlength="240" required autocomplete="off" placeholder="Add an item">
+      <button id="add-item" type="submit">Add</button>
+    </form>
+
+    <p id="empty" class="empty" hidden>No items yet.</p>
+    <ul id="items" aria-label="Items"></ul>
+
+    <div class="actions">
+      <button id="suggest" class="secondary" type="button">Suggest a next step with AI</button>
+      <button id="refresh" class="secondary" type="button">Refresh</button>
+    </div>
+    <div id="draft" class="draft" hidden>
+      <p id="draft-text"></p>
+      <button id="add-draft" type="button">Add suggestion</button>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+
+  <script>
+    const collection = "items";
+    const list = document.getElementById("items");
+    const empty = document.getElementById("empty");
+    const status = document.getElementById("status");
+    const input = document.getElementById("new-item");
+    const form = document.getElementById("add-form");
+    const addButton = document.getElementById("add-item");
+    const suggestButton = document.getElementById("suggest");
+    const refreshButton = document.getElementById("refresh");
+    const draft = document.getElementById("draft");
+    const draftText = document.getElementById("draft-text");
+    const addDraftButton = document.getElementById("add-draft");
+    let records = [];
+    let createPending = false;
+    let latestLoadRequest = 0;
+    const pendingRecordIds = new Set();
+    const rowControls = new Map();
+
+    function message(error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+
+    function report(error, prefix) {
+      const detail = message(error);
+      status.textContent = `${prefix}: ${detail}`;
+      window.appHost.reportError(`${prefix}: ${detail}`);
+    }
+
+    function validRecord(record) {
+      return record && typeof record.id === "string" && Number.isInteger(record.revision) &&
+        record.value && typeof record.value.title === "string" && typeof record.value.done === "boolean";
+    }
+
+    function render() {
+      list.replaceChildren();
+      rowControls.clear();
+      empty.hidden = records.length !== 0;
+      for (const record of records) {
+        const item = document.createElement("li");
+        item.className = `item${record.value.done ? " done" : ""}`;
+
+        const label = document.createElement("label");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = record.value.done;
+        checkbox.disabled = pendingRecordIds.has(record.id);
+        checkbox.addEventListener("change", () => updateItem(record, checkbox.checked));
+        const title = document.createElement("span");
+        title.textContent = record.value.title;
+        label.append(checkbox, title);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "danger";
+        remove.textContent = "Delete";
+        remove.disabled = pendingRecordIds.has(record.id);
+        remove.setAttribute("aria-label", `Delete ${record.value.title}`);
+        remove.addEventListener("click", () => deleteItem(record));
+        rowControls.set(record.id, { checkbox, remove });
+        item.append(label, remove);
+        list.append(item);
+      }
+    }
+
+    async function loadItems() {
+      const request = ++latestLoadRequest;
+      status.textContent = "Loading…";
+      try {
+        const loaded = [];
+        let after;
+        do {
+          const page = await window.appHost.data.v1.list(collection, { ...(after ? { after } : {}), limit: 100 });
+          if (request !== latestLoadRequest) return;
+          if (!page || !Array.isArray(page.records)) throw new Error("Kestral returned an invalid item list");
+          for (const record of page.records) if (validRecord(record)) loaded.push(record);
+          after = typeof page.next_after === "string" ? page.next_after : undefined;
+        } while (after);
+        if (request !== latestLoadRequest) return;
+        records = loaded;
+        render();
+        status.textContent = `${records.length} item${records.length === 1 ? "" : "s"}`;
+      } catch (error) {
+        if (request === latestLoadRequest) report(error, "Could not load items");
+      }
+    }
+
+    function beginRecordMutation(recordId) {
+      if (pendingRecordIds.has(recordId)) return false;
+      pendingRecordIds.add(recordId);
+      const controls = rowControls.get(recordId);
+      if (controls) {
+        controls.checkbox.disabled = true;
+        controls.remove.disabled = true;
+      }
+      return true;
+    }
+
+    function endRecordMutation(recordId) {
+      pendingRecordIds.delete(recordId);
+      const controls = rowControls.get(recordId);
+      if (controls) {
+        controls.checkbox.disabled = false;
+        controls.remove.disabled = false;
+      }
+    }
+
+    async function createItem(title) {
+      const normalized = title.trim().replace(/[\r\n]+/g, " ").slice(0, 240);
+      if (!normalized || createPending) return false;
+      createPending = true;
+      input.disabled = true;
+      addButton.disabled = true;
+      addDraftButton.disabled = true;
+      try {
+        await window.appHost.data.v1.create(collection, { title: normalized, done: false });
+        await loadItems();
+        return true;
+      } catch (error) {
+        report(error, "Could not add item");
+        return false;
+      } finally {
+        createPending = false;
+        input.disabled = false;
+        addButton.disabled = false;
+        addDraftButton.disabled = false;
+      }
+    }
+
+    async function updateItem(record, done) {
+      if (!beginRecordMutation(record.id)) return false;
+      try {
+        await window.appHost.data.v1.replace(collection, record.id, record.revision, { ...record.value, done });
+        await loadItems();
+        return true;
+      } catch (error) {
+        report(error, "The item changed; reloading");
+        await loadItems();
+        return false;
+      } finally {
+        endRecordMutation(record.id);
+      }
+    }
+
+    async function deleteItem(record) {
+      if (!beginRecordMutation(record.id)) return false;
+      try {
+        await window.appHost.data.v1.delete(collection, record.id, record.revision);
+        await loadItems();
+        return true;
+      } catch (error) {
+        report(error, "Could not delete item");
+        await loadItems();
+        return false;
+      } finally {
+        endRecordMutation(record.id);
+      }
+    }
+
+    async function suggestItem() {
+      suggestButton.disabled = true;
+      status.textContent = "Waiting for your approval and model…";
+      try {
+        const visibleItems = records.slice(0, 50).map((record) => `- [${record.value.done ? "x" : " "}] ${record.value.title}`).join("\n");
+        const response = await window.appHost.invoke(
+          { provider: "llm-provider", capability: "llm.generate" },
+          {
+            messages: [
+              { role: "system", content: "Suggest exactly one concrete next item. Return only its short title, with no bullet or explanation." },
+              { role: "user", content: visibleItems || "The list is empty. Suggest a useful first item." }
+            ],
+            max_output_tokens: 80
+          },
+          "Suggest one reviewable next item from the visible list"
+        );
+        const outcome = response && response.result;
+        if (!outcome || outcome.kind !== "completed") {
+          const reason = outcome && (outcome.reason || outcome.error);
+          throw new Error(reason || "The model action did not complete");
+        }
+        const content = outcome.result && outcome.result.message && outcome.result.message.content;
+        if (typeof content !== "string" || !content.trim()) throw new Error("The model returned no suggestion");
+        const proposed = content.trim().replace(/^[-*\d.)\s]+/, "").replace(/[\r\n]+/g, " ").slice(0, 240).trim();
+        if (!proposed) throw new Error("The model returned no usable suggestion");
+        draftText.textContent = proposed;
+        draft.hidden = false;
+        status.textContent = "Review the suggestion before adding it.";
+      } catch (error) {
+        report(error, "AI suggestion unavailable; your list was not changed");
+      } finally {
+        suggestButton.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (await createItem(input.value)) input.value = "";
+      input.focus();
+    });
+    refreshButton.addEventListener("click", loadItems);
+    suggestButton.addEventListener("click", suggestItem);
+    addDraftButton.addEventListener("click", async () => {
+      if (await createItem(draftText.textContent || "")) {
+        draftText.textContent = "";
+        draft.hidden = true;
+      }
+    });
+    window.appHost.onInit(loadItems);
+    window.appHost.ready();
+  </script>
+</body>
+</html>

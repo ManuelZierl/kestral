@@ -45,9 +45,9 @@ export function conditionLabel(condition: GrantCondition): string {
     case "silent":
       return "Runs silently";
     case "notify":
-      return "Notifies you";
+      return "Notifies on delegated use";
     case "requires-approval":
-      return "Asks for approval";
+      return "Approval for delegated/high-impact use";
   }
 }
 

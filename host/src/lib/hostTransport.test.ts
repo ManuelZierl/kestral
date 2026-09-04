@@ -196,6 +196,103 @@ describe("remote owner session", () => {
     expect(FakeEventSource.instances[0].closed).toBe(true);
   });
 
+  it("uses replayed approval events only to refresh the authoritative pending set", async () => {
+    let approvalPolls = 0;
+    let deliveredWakeUp = false;
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/login/start")) {
+        return new Response(JSON.stringify({ ceremony_id: "login-1", options: {} }), { status: 200 });
+      }
+      if (url.endsWith("/api/auth/login/finish")) {
+        return new Response(JSON.stringify({ authenticated: true }), { status: 200 });
+      }
+      if (url.endsWith("/api/approvals")) {
+        approvalPolls += 1;
+        return new Response(JSON.stringify({ instance_id: "instance-1", requests: [] }), { status: 200 });
+      }
+      if (url.includes("/api/events")) {
+        const events = !deliveredWakeUp
+          ? [{ sequence: 0, event: "trusted-chrome:request", payload: 41 }]
+          : [];
+        deliveredWakeUp = true;
+        return new Response(JSON.stringify({
+          instance_id: "instance-1",
+          oldest_sequence: events.length > 0 ? 0 : 1,
+          next_sequence: 1,
+          events,
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    await signInRemoteConnection("https://kestral.example");
+    const approval = vi.fn();
+    const unlisten = await listenHostEvent("trusted-chrome:request", approval);
+
+    try {
+      await vi.waitFor(() => expect(approvalPolls).toBeGreaterThanOrEqual(2));
+      expect(approval).not.toHaveBeenCalled();
+    } finally {
+      unlisten();
+    }
+  });
+
+  it("retries authoritative approval recovery after a transient failure", async () => {
+    let approvalPolls = 0;
+    let deliveredWakeUp = false;
+    const request = {
+      kind: "grant-issuance",
+      request_id: 77,
+      prompt: { app_id: "notes" },
+    };
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/login/start")) {
+        return new Response(JSON.stringify({ ceremony_id: "login-1", options: {} }), { status: 200 });
+      }
+      if (url.endsWith("/api/auth/login/finish")) {
+        return new Response(JSON.stringify({ authenticated: true }), { status: 200 });
+      }
+      if (url.endsWith("/api/approvals")) {
+        approvalPolls += 1;
+        if (approvalPolls === 2) {
+          return new Response(JSON.stringify({ error: "temporary failure" }), { status: 503 });
+        }
+        return new Response(JSON.stringify({
+          instance_id: "instance-1",
+          requests: approvalPolls >= 3 ? [request] : [],
+        }), { status: 200 });
+      }
+      if (url.includes("/api/events")) {
+        const events = !deliveredWakeUp
+          ? [{ sequence: 0, event: "trusted-chrome:request", payload: 77 }]
+          : [];
+        deliveredWakeUp = true;
+        return new Response(JSON.stringify({
+          instance_id: "instance-1",
+          oldest_sequence: events.length > 0 ? 0 : 1,
+          next_sequence: 1,
+          events,
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await signInRemoteConnection("https://kestral.example");
+    const approval = vi.fn();
+    const unlisten = await listenHostEvent("trusted-chrome:request", approval);
+
+    try {
+      await vi.waitFor(() => expect(approval).toHaveBeenCalledWith(request), { timeout: 2_000 });
+      expect(approvalPolls).toBeGreaterThanOrEqual(3);
+    } finally {
+      unlisten();
+      error.mockRestore();
+    }
+  });
+
   it("does not redeliver an event seen by both recovery and SSE", async () => {
     const batch = {
       instance_id: "instance-1",

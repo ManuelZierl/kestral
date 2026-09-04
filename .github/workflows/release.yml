@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Product version to build without publishing (for example, 0.1.0-alpha.1)
+        description: Product version to build without publishing (without a v prefix)
         required: true
         type: string
 
@@ -64,6 +64,8 @@ jobs:
           node scripts/check-promoted-app-contracts.mjs --require-evidence --verify-remotes --release-commit "$GITHUB_SHA"
       - name: Verify external app isolation
         run: node scripts/check-reference-app-isolation.mjs
+      - name: Verify focused app scaffold
+        run: node --test scripts/create-app.test.mjs
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -103,12 +105,17 @@ jobs:
         run: |
           version="${{ inputs.version }}"
           if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          evidence="release/v${version}-evidence.md"
+          notes="release/v${version}.md"
+          test -f "$evidence"
+          test -f "$notes"
           mkdir -p target/release/public
           cp THIRD-PARTY-NOTICES.txt host/build/THIRD-PARTY-NOTICES.txt
           (cd host/build && zip -qr "../../target/release/public/kestral-browser-client-${version}.zip" .)
           cp THIRD-PARTY-NOTICES.txt target/release/public/
           cp release/promoted-apps.json target/release/public/PROMOTED-APPS.json
-          cp release/v0.1.0-alpha.1-evidence.md target/release/public/RELEASE-EVIDENCE.md
+          cp "$evidence" target/release/public/RELEASE-EVIDENCE.md
+          cp "$notes" target/release/public/RELEASE-NOTES.md
       - name: Require reproducible tracked outputs
         run: git diff --exit-code
       - uses: actions/upload-artifact@v6
@@ -137,20 +144,36 @@ jobs:
       - name: Stage third-party notices
         shell: pwsh
         run: Copy-Item "target/release/independent/THIRD-PARTY-NOTICES.txt" "THIRD-PARTY-NOTICES.txt"
-      - name: Install frontend toolchain and verify provider worker
+      - name: Install frontend toolchain
         working-directory: host
-        run: |
-          npm ci
-          npm run provider-worker:check
-          npm run provider-worker:test
-          npm run provider-worker:package
+        run: npm ci
+      - name: Check provider worker
+        working-directory: host
+        run: npm run provider-worker:check
+      - name: Test provider worker
+        working-directory: host
+        run: npm run provider-worker:test
+      - name: Package provider worker
+        working-directory: host
+        run: npm run provider-worker:package
+      - name: Frontend type-check
+        working-directory: host
+        run: npm run check
+      - name: Frontend tests
+        working-directory: host
+        run: npm test
+      - name: Native Windows Rust lints
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Native Windows Rust tests
+        run: cargo test --locked --all-features
       - name: Native Windows credential integration
-        run: cargo test -p host --test os_credentials -- --ignored --exact native_credential_round_trip_keeps_json_status_only
-      - name: Build NSIS and backend binary
+        run: cargo test --locked -p host --test os_credentials -- --ignored --exact native_credential_round_trip_keeps_json_status_only
+      - name: Build backend binary
         working-directory: host
-        run: |
-          cargo build -p host --release --bin host-server
-          npm run tauri build -- --bundles nsis
+        run: cargo build --locked -p host --release --bin host-server
+      - name: Build NSIS
+        working-directory: host
+        run: npm run tauri build -- --bundles nsis
       - name: Package Windows artifacts
         shell: pwsh
         run: |
@@ -198,7 +221,7 @@ jobs:
       - name: Build AppImage, deb, and backend binary
         working-directory: host
         run: |
-          cargo build -p host --release --bin host-server
+          cargo build --locked -p host --release --bin host-server
           npm run tauri build -- --bundles appimage,deb
       - name: Smoke-test backend-only remote transport
         run: node scripts/smoke-host-server.mjs target/release/host-server
@@ -249,6 +272,7 @@ jobs:
           require_one "browser client" "kestral-browser-client-*.zip"
           require_one "promoted app record" "PROMOTED-APPS.json"
           require_one "release evidence" "RELEASE-EVIDENCE.md"
+          require_one "release notes" "RELEASE-NOTES.md"
       - name: Write CI provenance record
         run: |
           version="${{ inputs.version }}"
@@ -266,6 +290,9 @@ jobs:
       - name: Write release checksums
         working-directory: release-assets
         run: sha256sum * | LC_ALL=C sort -k2 > SHA256SUMS.txt
+      - name: Verify assembled release checksums
+        working-directory: release-assets
+        run: sha256sum --check SHA256SUMS.txt
       - uses: actions/upload-artifact@v6
         with:
           name: assembled-release
@@ -284,11 +311,14 @@ jobs:
         with:
           name: assembled-release
           path: release-assets
+      - name: Verify downloaded release checksums
+        working-directory: release-assets
+        run: sha256sum --check SHA256SUMS.txt
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           name: Kestral ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-') }}
-          body_path: release/v0.1.0-alpha.1.md
+          body_path: release-assets/RELEASE-NOTES.md
           files: release-assets/*
           fail_on_unmatched_files: true

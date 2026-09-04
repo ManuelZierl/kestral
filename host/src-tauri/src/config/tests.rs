@@ -739,15 +739,10 @@ fn temp_config_path() -> std::path::PathBuf {
 }
 
 #[test]
-fn fresh_config_seeds_removable_kestral_docs_server_and_requests_startup_once() {
+fn fresh_config_seeds_removable_kestral_docs_server_until_user_removes_it() {
     let path = temp_config_path();
-    let mut service = HostConfigService::new(path.clone()).unwrap();
+    let service = HostConfigService::new(path.clone()).unwrap();
 
-    assert_eq!(
-        service.take_startup_mcp_server_request().as_deref(),
-        Some(KESTRAL_GITMCP_SERVER_ID)
-    );
-    assert!(service.take_startup_mcp_server_request().is_none());
     assert_eq!(
         service.mcp_server(KESTRAL_GITMCP_SERVER_ID),
         Some(McpServerConfig {
@@ -760,7 +755,6 @@ fn fresh_config_seeds_removable_kestral_docs_server_and_requests_startup_once() 
     );
 
     let mut reloaded = HostConfigService::new(path.clone()).unwrap();
-    assert!(reloaded.take_startup_mcp_server_request().is_none());
     reloaded
         .delete_mcp_server(KESTRAL_GITMCP_SERVER_ID)
         .unwrap();

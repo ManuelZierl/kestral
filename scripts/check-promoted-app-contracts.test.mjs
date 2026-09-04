@@ -8,7 +8,7 @@ import {
   validateReleaseChangedPaths,
 } from "./check-promoted-app-contracts.mjs";
 
-const hostVersion = "0.1.0-alpha.1";
+const { version: hostVersion } = JSON.parse(await readFile("host/package.json", "utf8"));
 const coreCommit = "a".repeat(40);
 const contracts = JSON.parse(await readFile("release/host-extension-contracts.json", "utf8"));
 const promotion = JSON.parse(await readFile("release/promoted-apps.json", "utf8"));
@@ -47,10 +47,15 @@ test("release mode refuses missing lifecycle evidence", () => {
 });
 
 test("the post-evidence release commit can change only release metadata", () => {
-  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json"]));
-  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json", "release/v0.1.0-alpha.1-evidence.md"]));
+  const evidencePath = `release/v${hostVersion}-evidence.md`;
+  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json"], hostVersion));
+  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json", evidencePath], hostVersion));
   assert.throws(
-    () => validateReleaseChangedPaths(["release/v0.1.0-alpha.1-evidence.md", "host/src-tauri/src/package.rs"]),
+    () => validateReleaseChangedPaths([evidencePath, "host/src-tauri/src/package.rs"], hostVersion),
+    /changed tested core files/,
+  );
+  assert.throws(
+    () => validateReleaseChangedPaths([evidencePath], "0.1.0-alpha.2"),
     /changed tested core files/,
   );
 });

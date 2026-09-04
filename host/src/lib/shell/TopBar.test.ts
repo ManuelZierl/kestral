@@ -70,6 +70,11 @@ describe("TopBar", () => {
 
     render(TopBar, { tab: "chat" });
 
+    expect(
+      screen.getByText(
+        "Talk to your apps. Actions routed through Kestral are checked and recorded.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Settings for Chat" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Permissions for Chat" })).toBeTruthy();
   });

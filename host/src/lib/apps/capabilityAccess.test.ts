@@ -37,8 +37,10 @@ describe("capabilityAccess", () => {
   });
 
   it("maps grant conditions to visible badges", () => {
-    expect(capabilityAccessBadge("requires-approval")).toBe("Requires approval");
-    expect(capabilityAccessBadge("notify")).toBe("Notifies on use");
+    expect(capabilityAccessBadge("requires-approval")).toBe(
+      "Approval on delegated/high-impact use",
+    );
+    expect(capabilityAccessBadge("notify")).toBe("Notifies on delegated use");
     expect(capabilityAccessBadge("silent")).toBe("Allowed");
   });
 });

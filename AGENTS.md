@@ -77,11 +77,12 @@ Before adding host behavior, ask:
   protocol-agnostic and receives only generic manifests, schemas, handlers,
   and artifacts. All MCP-specific code lives in `crates/mcp-adapter` and the
   host, never in `crates/kernel`.
-- Configured MCP servers are never auto-installed or auto-granted. The fresh
-  profile's removable Kestral documentation server makes one disclosed startup
-  connection attempt, but installation and exact Chat grants still require
-  trusted-chrome decisions and imported tool grants default to
-  requires-approval. Other servers connect only on explicit user action.
+- Configured MCP servers are never auto-connected, auto-installed, or
+  auto-granted. A fresh profile seeds a removable Kestral documentation server
+  as an inert opt-in shortcut. It and every other server connect only on an
+  explicit user action; installation and exact Chat grants still require their
+  normal trusted-chrome decisions, and imported tool grants default to
+  requires-approval.
 - The host is not a chat runtime.
 - The host is not an LLM provider.
 - The host is not a workflow engine.
@@ -91,10 +92,16 @@ Before adding host behavior, ask:
   host-owner administration are not capability actions.
 - Apps never call each other directly.
 - Cross-app work happens through capability invocation under grants.
-- Grant interaction conditions mediate delegated authority, not a person's
-  direct use of the provider app. A declared same-app `SurfaceAction` must not
-  show a `notify` notice or require per-use approval. Cross-app, LLM, agent,
-  automation, and other programmatic calls remain fully grant-conditioned.
+- Grant interaction conditions mediate delegated authority. A declared same-app
+  `SurfaceAction` does not show a `notify` notice. Under a `requires-approval`
+  grant, its click counts as approval only for `read-only` and `local-write`
+  effects; `unspecified`, `external-write`, and `destructive` effects still
+  require trusted chrome. Cross-app, LLM, agent, automation, and other
+  programmatic calls remain fully grant-conditioned.
+- The direct-surface exception is interaction policy, not malicious-app
+  containment. Capability effects are provider-declared, and the custom-surface
+  bridge validates a live binding and intent but does not attest a physical user
+  gesture. Keep this residual explicit in trust-facing claims.
 - Event subscriptions are a limited host event feed, not cross-app RPC.
 - Raw ledger records are trusted audit data, not general plugin feed data.
 - Trusted chrome is host-owned and cannot be rendered by apps.
@@ -156,7 +163,7 @@ kernel/
 ├── Cargo.toml              # workspace root: members = ["crates/kernel", "crates/mcp-adapter", "host/src-tauri"]
 ├── README.md               # concise front page: what it is, quick start, links into docs/
 ├── docs/                    # self-contained Just the Docs product, user, architecture, operations, and contributor documentation
-├── .github/workflows/      # ci.yml (develop/main test matrix), release.yml (v* tag → GitHub Release)
+├── .github/workflows/      # ci.yml (main test matrix), release.yml (v* tag → GitHub Release)
 │
 ├── crates/kernel/          # app-host-kernel crate (the trusted core)
 │   ├── Cargo.toml          # zero infra deps: serde, chrono, uuid, jsonschema, sha2, thiserror
@@ -320,12 +327,12 @@ Likewise, if verification must rebuild `target/debug/host.exe`, tell the user
 that the running app locks that executable on Windows and ask them to stop it;
 never terminate their process yourself.
 
-CI branch model: `develop` is the default integration branch, `main` the
-release branch. PRs against `develop` run the Linux matrix (frontend
-check/tests, Tasks dist reproducibility, `cargo test --all-features`); PRs
-against `main` and pushes to `main` add the Windows matrix (native credential
-integration + installer build). A `v*` tag on `main` publishes a GitHub
-Release with the per-user NSIS installer (`.github/workflows/ci.yml`, `release.yml`).
+CI branch model: `main` is the integration and release branch. PRs against
+`main` and pushes to `main` run the Linux and Windows matrices, including
+frontend checks/tests, distribution reproducibility, `cargo test
+--all-features`, native credential integration, and installer builds. A `v*`
+tag on `main` publishes a GitHub Release with the per-user NSIS installer
+(`.github/workflows/ci.yml`, `release.yml`).
 
 Rust unit tests live beside each module as a child file: `src/foo.rs`
 declares `#[cfg(test)] mod tests;` resolved from `src/foo/tests.rs`. Never
@@ -454,10 +461,10 @@ The Tauri 2 shell. Depends on `app-host-kernel` and `mcp-adapter`. Contributes:
   `connect_mcp_server` dials and discovers tools OFF the kernel lock, then
   installs under it behind trusted-chrome grant prompts;
   `disconnect_mcp_server` uninstalls and shuts the transport down. A fresh
-  profile seeds the removable Kestral documentation GitMCP server and makes one
-  startup connection attempt, followed by normal install and exact Chat grant
-  prompts. Other configured servers never dial at startup. Managed under
-  *Settings → Tool servers*.
+  profile seeds the removable Kestral documentation GitMCP server as an inert
+  shortcut. It never dials at startup; the owner must choose **Connect**, then
+  request any exact Chat grants through the normal permission-proposal flow.
+  Managed under *Settings → Tool servers*.
 
 **Lock discipline** (`lib.rs`):
 

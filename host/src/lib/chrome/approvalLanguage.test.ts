@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   approveLabel,
+  capabilityEffectSummary,
   conditionSummary,
   dataScopeIsBroad,
   dataScopeSummary,
@@ -23,10 +24,23 @@ describe("conditionSummary", () => {
     expect(conditionSummary("silent")).toBe("Runs without asking you again");
   });
   it("distinguishes notify from silent", () => {
-    expect(conditionSummary("notify")).toBe("Runs, and tells you each time");
+    expect(conditionSummary("notify")).toBe("Notifies you on delegated use");
   });
-  it("names per-use approval", () => {
-    expect(conditionSummary("requires-approval")).toBe("Asks your approval each time");
+  it("distinguishes approval-gated use from low-risk direct actions", () => {
+    expect(conditionSummary("requires-approval")).toBe(
+      "Asks before delegated or higher-impact use",
+    );
+  });
+});
+
+describe("capabilityEffectSummary", () => {
+  it("makes external and unknown effects explicit", () => {
+    expect(capabilityEffectSummary("external-write")).toBe("Writes to an external system");
+    expect(capabilityEffectSummary("unspecified")).toContain("consequential effects");
+  });
+
+  it("does not overstate a provider-declared read-only effect", () => {
+    expect(capabilityEffectSummary("read-only")).toBe("Reads data without declaring a write");
   });
 });
 

@@ -38,9 +38,9 @@ The release candidate contains exactly these end-user artifacts:
 | `kestral-browser-client-0.1.0-alpha.1.zip` | Static trusted owner console for split deployment. |
 
 `THIRD-PARTY-NOTICES.txt`, `BUILD-PROVENANCE.txt`, `PROMOTED-APPS.json`,
-`RELEASE-EVIDENCE.md`, and `SHA256SUMS.txt` accompany that matrix. External apps
-remain independently built and distributed; they are not Kestral release
-artifacts.
+`RELEASE-EVIDENCE.md`, `RELEASE-NOTES.md`, and `SHA256SUMS.txt` accompany that
+matrix. External apps remain independently built and distributed; they are not
+Kestral release artifacts.
 
 The alpha compatibility-evidence set contains Daily Notes, Chat Export,
 Whiteboard, Model Profiles, Kestral Pi, and Reading Insights. The promoted-app

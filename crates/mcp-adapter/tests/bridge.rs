@@ -6,14 +6,14 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
-use app_host_kernel::ids::{AppId, ArtifactTypeName, CapabilityName};
+use app_host_kernel::ids::{AppId, ArtifactTypeName, CapabilityName, SurfaceName};
 use app_host_kernel::invocation::{CapabilityHandler, InvocationRequest, InvocationResult};
 use app_host_kernel::kernel::Kernel;
 use app_host_kernel::primitives::capability::{CapabilityEffect, CapabilityRef};
 use app_host_kernel::primitives::grant::DataScope;
 use app_host_kernel::primitives::grant::GrantCondition;
 use app_host_kernel::primitives::run::{Initiator, RunTerminalState};
-use app_host_kernel::primitives::surface::SurfaceKind;
+use app_host_kernel::primitives::surface::{ActionIntent, SurfaceKind};
 use app_host_kernel::services::chrome::{
     ApprovalDecision, CapabilityApprovalPrompt, ChromeNotice, ChromeNoticeError,
     EventSubscriptionPrompt, GrantIssuancePrompt, TrustedChrome,
@@ -139,6 +139,11 @@ fn criterion_5_degraded_mode_does_real_work_safely() {
         .grant_requests
         .iter()
         .all(|g| g.condition == GrantCondition::RequiresApproval));
+    assert!(manifest
+        .manifest
+        .capabilities
+        .iter()
+        .all(|capability| capability.effect == CapabilityEffect::Unspecified));
     let surface_kinds: Vec<(&str, SurfaceKind)> = manifest
         .manifest
         .surfaces
@@ -175,24 +180,42 @@ fn criterion_5_degraded_mode_does_real_work_safely() {
     );
     install(&mut kernel, manifest, handlers);
 
-    let run_id = kernel
-        .start_run(
-            Initiator::App {
-                app_id: server_id.clone(),
-                reason: "form submitted".into(),
+    // The generated form is the provider's own surface, but a bare MCP tool
+    // has an unspecified effect. Its default approval-required grant must
+    // therefore still enter trusted chrome rather than treating the form
+    // submit click as sufficient consent.
+    let binding = kernel
+        .open_surface(&server_id, &SurfaceName::new("get_forecast-form"))
+        .unwrap();
+    let (run_id, prepared) = kernel
+        .prepare_surface_action(
+            &binding,
+            ActionIntent {
+                capability: CapabilityRef {
+                    provider: server_id,
+                    capability: CapabilityName::new("get_forecast"),
+                },
+                input: obj(json!({"city": "Berlin"})),
+                data_scope: DataScope::None,
+                goal: "check the weather in Berlin".into(),
             },
-            "check the weather in Berlin",
         )
         .unwrap();
-    let result = invoke(
-        &mut kernel,
-        &run_id,
-        &CapabilityRef {
-            provider: server_id,
-            capability: CapabilityName::new("get_forecast"),
-        },
-        obj(json!({"city": "Berlin"})),
-    );
+    let prepared = match prepared {
+        app_host_kernel::kernel::PrepareInvocation::Prepared(prepared) => prepared,
+        app_host_kernel::kernel::PrepareInvocation::Refused(result) => {
+            panic!("expected prepared MCP form action, got {result:?}")
+        }
+    };
+    let result = match kernel
+        .authorize_invocation(prepared.await_approval())
+        .unwrap()
+    {
+        app_host_kernel::kernel::AuthorizeInvocation::Authorized(authorized) => {
+            kernel.finalize_invocation(authorized.execute()).unwrap()
+        }
+        app_host_kernel::kernel::AuthorizeInvocation::Refused(result) => result,
+    };
     kernel
         .end_run(&run_id, RunTerminalState::Completed)
         .unwrap();

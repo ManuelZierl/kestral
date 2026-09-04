@@ -110,7 +110,9 @@ exact or `all-resources` grant to the exact current IDs before preparation.
 ## Five primitives
 
 - **Capability:** something the system can do, declared and invoked through the
-  kernel with input/output schemas and an advisory effect. MCP tools and
+  kernel with input/output schemas and a provider-declared effect
+  classification. Effects do not grant authority or prove actual behavior. They
+  inform UI and the narrow own-surface confirmation policy. MCP tools and
   host-provided actions such as artifact access are adapter-specific forms of
   this broader primitive.
 - **Surface:** a visual place an app renders. It receives data and emits only
@@ -279,12 +281,21 @@ across live kernel instances, so a decision or handler result prepared against
 one kernel cannot be consumed by another.
 
 Grant interaction conditions apply to delegated authority. When a person uses
-a declared action in the provider app's own live surface, that
-`SurfaceAction` remains a schema-validated, grant-checked, attributable Run, but
-`notify` does not create a trusted notice and `requires-approval` does not add a
-second confirmation. The surface action is already the person's explicit
-command. Calls to another app or LLM provider, agent and automation work, and
-all other programmatic invocations retain their configured grant condition.
+a declared action in the provider app's own live surface, that `SurfaceAction`
+remains a schema-validated, grant-checked, attributable Run and `notify` does
+not create a trusted notice. Under a `requires-approval` grant, the click itself
+counts as approval only for `read-only` and `local-write` effects. `unspecified`,
+`external-write`, and `destructive` effects still enter trusted chrome. Calls to
+another app or LLM provider, agent and automation work, and all other
+programmatic invocations retain their configured grant condition.
+
+This exception is convenience for an honestly declared, user-driven surface;
+it is not an isolation boundary against a malicious app. Effect metadata comes
+from the provider, and a custom iframe's bridge message proves the live surface
+binding and declared intent but not a physical user gesture. A dishonest surface
+can therefore mislabel an effect or submit a nominally low-risk intent without a
+click. Grants and audit still apply, but closing that gap requires host-attested
+user activation or removing the exception for untrusted custom surfaces.
 
 The ledger records the requested data scope on invocation and approval events.
 Invocation input and result bodies are not duplicated into audit history; the
@@ -391,15 +402,15 @@ headers only when that revision defines them. Neither the credential nor HTTP
 authentication becomes a kernel primitive or packaged-app backend feature.
 
 A fresh profile seeds one ordinary unauthenticated Streamable HTTP configuration
-for the public Kestral GitMCP documentation endpoint. The host makes one
-best-effort connection attempt only while that profile is first bootstrapped,
-after trusted chrome and bundled Chat are ready. Discovered tools still install
-through the generic MCP bridge and its normal consent prompts. Chat receives no
-implicit authority: the host separately prepares exact, non-expiring,
-requires-approval grant requests for the discovered capabilities and trusted
+for the public Kestral GitMCP documentation endpoint. It remains inert until the
+owner explicitly chooses **Connect** under **Settings → Tool servers**; startup
+does not contact the endpoint, discover tools, install an app, or request a
+grant. Discovered tools then install through the generic MCP bridge and its
+normal consent prompts. Chat receives no implicit authority: the owner requests
+exact tool access through the ordinary permission-proposal flow, and trusted
 chrome decides each request. The saved server has no built-in identity or
-lifecycle privilege and remains editable and removable. Later process starts do
-not reconnect it automatically.
+lifecycle privilege and remains editable and removable. Kestral never reconnects
+it automatically.
 
 Managed-app lifecycle writes are serialized by a host transition guard, not by
 holding the kernel or app-manager mutex for the whole operation. Package

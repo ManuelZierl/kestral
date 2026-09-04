@@ -110,11 +110,20 @@ text and a replacement grant does not revive it.
 
 Grant interaction policies govern delegated access. Clicking an action in the
 provider app's own surface is already your explicit instruction, so Kestral
-does not show a `notify` notice or ask for a second per-use approval for that
-same-app action. The action still follows the normal validated Run path and is
-auditable. Calls from another app, Chat or an LLM workflow, an agent,
-automation, or other programmatic code continue to use the grant's configured
-silent, notify, or approval-required policy.
+does not show a `notify` notice for that same-app action. If the policy requires
+approval, the click itself is enough only for an action declared `read-only` or
+`local-write`. An action declared `unspecified`, `external-write`, or
+`destructive` still opens trusted chrome for confirmation. Every action still
+follows the normal validated Run path and is auditable. Calls from another app,
+Chat or an LLM workflow, an agent, automation, or other programmatic code
+continue to use the grant's configured silent, notify, or approval-required
+policy.
+
+{: .warning }
+This shortcut is not proof that a person clicked. Effect labels come from the
+installed provider, and a custom surface can submit its declared intent through
+the bridge without a verifiable browser user gesture. Treat custom apps as code
+you trust; the alpha does not make this exception a malicious-app sandbox.
 
 ## Let Chat use artifacts
 

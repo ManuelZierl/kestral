@@ -23,6 +23,20 @@ Kestral supports two extension paths in the 0.1 series:
 | [App package]({{ internal_link_prefix }}{% link writing-apps.md %}) | A named, versioned product with declared permissions, optional custom UI, configuration, artifacts, and managed lifecycle | `app.json`, checksummed UI/backend payload, kernel manifest, handlers, and surfaces |
 | [Bare MCP server]({{ internal_link_prefix }}{% link tool-servers.md %}) | Making existing tools usable quickly, without a Kestral package | Generic app identity, form surfaces, result artifacts, and approval-required grants from MCP tool schemas |
 
+For a new purpose-built experience, start with the repository's working,
+dependency-free scaffold rather than an empty manifest:
+
+```bash
+node scripts/create-app.mjs ../my-focus-app \
+  --id com.example.my-focus-app \
+  --name "My Focus App"
+```
+
+It produces an installable custom dashboard with host-managed data, integrity
+hashes, and one narrow model action whose result remains reviewable before it
+changes app state. [Writing app packages]({{ internal_link_prefix }}{% link writing-apps.md %})
+explains how to turn that starter into a specific product.
+
 Kestral can also act as an MCP provider. See
 [Serving capabilities over MCP]({{ internal_link_prefix }}{% link mcp-provider.md %}) when a remote MCP
 client should call a narrow set of capabilities already installed in Kestral.

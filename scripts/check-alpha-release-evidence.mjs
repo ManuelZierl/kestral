@@ -206,10 +206,11 @@ export function parseArguments(args) {
 
 async function main() {
   const { requireComplete, releaseCommit } = parseArguments(process.argv.slice(2));
-  const [report, promotion, packageDocument] = await Promise.all([
-    readFile("release/v0.1.0-alpha.1-evidence.md", "utf8"),
+  const packageDocument = await readFile("host/package.json", "utf8").then(JSON.parse);
+  const evidencePath = `release/v${packageDocument.version}-evidence.md`;
+  const [report, promotion] = await Promise.all([
+    readFile(evidencePath, "utf8"),
     readFile("release/promoted-apps.json", "utf8").then(JSON.parse),
-    readFile("host/package.json", "utf8").then(JSON.parse),
   ]);
   const result = validateEvidenceReport(report, promotion, packageDocument.version, { requireComplete, releaseCommit });
   console.log(`Validated release evidence structure for ${packageDocument.version}${requireComplete ? ` at tested core ${result.testedCoreCommit}` : " (pending allowed)"}.`);

@@ -27,6 +27,7 @@ pub use app_host_kernel::services::broker::{GrantCheck, IssueResult};
 pub use app_host_kernel::services::chrome::{
     ApprovalDecision, CapabilityApprovalPrompt, ChromeNotice, ChromeNoticeError,
     EventSubscriptionPrompt, GrantIssuancePrompt, TrustedChrome,
+    MAX_CAPABILITY_APPROVAL_INPUT_BYTES,
 };
 pub use app_host_kernel::services::ledger::{LedgerEvent, RunLedger};
 pub use app_host_kernel::JsonObject;
