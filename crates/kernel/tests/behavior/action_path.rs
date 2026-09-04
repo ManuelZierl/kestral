@@ -9,10 +9,7 @@ fn install_notes_with_effect(
     let mut manifest = notes_manifest(condition);
     manifest.capabilities[0].effect = effect;
     kernel
-        .install(
-            seal(manifest),
-            BTreeMap::from([(create_note(), handler)]),
-        )
+        .install(seal(manifest), BTreeMap::from([(create_note(), handler)]))
         .expect("notes installs");
 }
 

@@ -213,7 +213,11 @@ impl RemoteChrome {
             // the full prompt. The replay ring carries only a wake-up id so
             // validated invocation input is not retained after resolution and
             // an old event cannot resurrect a stale approval dialog.
-            || self.events.publish(CHROME_REQUEST_EVENT, &request_id).is_ok(),
+            || {
+                self.events
+                    .publish(CHROME_REQUEST_EVENT, &request_id)
+                    .is_ok()
+            },
             move || {
                 let _ = events.publish(CHROME_REQUEST_EXPIRED_EVENT, &request_id);
             },
@@ -280,7 +284,11 @@ impl TrustedChrome for RemoteChrome {
             request_id,
             request.clone(),
             denied,
-            || self.events.publish(CHROME_REQUEST_EVENT, &request_id).is_ok(),
+            || {
+                self.events
+                    .publish(CHROME_REQUEST_EVENT, &request_id)
+                    .is_ok()
+            },
             move || {
                 let _ = events.publish(CHROME_REQUEST_EXPIRED_EVENT, &request_id);
             },

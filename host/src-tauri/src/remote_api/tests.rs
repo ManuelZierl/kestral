@@ -252,9 +252,7 @@ fn event_hubs_identify_distinct_backend_processes() {
 #[test]
 fn event_pressure_drops_streaming_before_trusted_chrome() {
     let events = RemoteEventHub::default();
-    events
-        .publish(CHROME_REQUEST_EVENT, &1_u64)
-        .unwrap();
+    events.publish(CHROME_REQUEST_EVENT, &1_u64).unwrap();
     for sequence in 0..=MAX_EVENTS {
         events
             .publish("chat-stream:request", &json!({ "sequence": sequence }))
@@ -404,10 +402,8 @@ fn remote_chrome_groups_one_apps_permissions_into_one_install_request() {
 fn remote_chrome_replay_retains_only_a_capability_approval_wake_up_id() {
     let pending = Arc::new(PendingApprovals::default());
     let events = Arc::new(RemoteEventHub::default());
-    let notice_path = std::env::temp_dir().join(format!(
-        "remote-capability-notices-{}.json",
-        Uuid::new_v4()
-    ));
+    let notice_path =
+        std::env::temp_dir().join(format!("remote-capability-notices-{}.json", Uuid::new_v4()));
     let chrome = Arc::new(RemoteChrome {
         pending: pending.clone(),
         notices: Arc::new(Mutex::new(
@@ -469,7 +465,9 @@ fn remote_chrome_replay_retains_only_a_capability_approval_wake_up_id() {
         .find(|event| event.event == CHROME_REQUEST_EVENT)
         .expect("approval wake-up was published");
     assert_eq!(wake_up.payload, json!(request_id));
-    assert!(!serde_json::to_string(&batch).unwrap().contains("do-not-replay"));
+    assert!(!serde_json::to_string(&batch)
+        .unwrap()
+        .contains("do-not-replay"));
 
     pending.resolve(request_id, false).unwrap();
     assert_eq!(approval.join().unwrap(), ApprovalDecision::Denied);
