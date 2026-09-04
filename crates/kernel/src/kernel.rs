@@ -150,7 +150,7 @@ fn approval_input_summary(input: &JsonObject) -> (String, bool) {
 /// ```
 pub struct PreparedInvocation {
     id: u64,
-    approval: Option<CapabilityApprovalPrompt>,
+    approval: Option<Box<CapabilityApprovalPrompt>>,
     chrome: Arc<dyn TrustedChrome>,
     cancelled: Arc<AtomicBool>,
     cancel_on_drop: bool,
@@ -374,7 +374,7 @@ impl PreparedInvocation {
         let decision = self
             .approval
             .as_ref()
-            .map(|prompt| self.chrome.approve_capability(prompt.clone()));
+            .map(|prompt| self.chrome.approve_capability(prompt.as_ref().clone()));
         self.cancel_on_drop = false;
         ApprovalResult {
             id: self.id,
@@ -1246,7 +1246,7 @@ impl Kernel {
                 grant_id: grant.grant_id.clone(),
                 data_scope: request.data_scope.clone(),
             })?;
-            Some(prompt)
+            Some(Box::new(prompt))
         } else {
             self.record(LedgerEvent::CapabilityInvoked {
                 run_id: run_id.clone(),
