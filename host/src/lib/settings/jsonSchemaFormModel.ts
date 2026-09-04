@@ -60,8 +60,9 @@ export function supportsJsonSchemaForm(schema: JsonObject): boolean {
   if ("additionalProperties" in schema
     && schema.additionalProperties !== false
     && schema.additionalProperties !== undefined) return false;
-  const properties = schema.properties;
-  if (properties === undefined) return true;
+  // A schema may require keys without declaring their property schemas. Those
+  // inputs need the JSON editor, not an empty scalar form.
+  const properties = schema.properties === undefined ? {} : schema.properties;
   if (typeof properties !== "object" || properties === null || Array.isArray(properties)) {
     return false;
   }

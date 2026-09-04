@@ -266,25 +266,34 @@ function processRemoteEvents(
 
 async function requestRemoteEvents(generation: number): Promise<void> {
   let pending: RemoteApprovalBatch | null = null;
+  // Recovery is incomplete until both authoritative snapshots have been read
+  // from the same backend instance and the pending prompts can be delivered.
+  approvalRefreshPending = true;
   try {
     try {
       const pendingResponse = await remoteFetch("/api/approvals");
       pending = await responseValue<RemoteApprovalBatch>(pendingResponse);
       if (generation !== eventGeneration) return;
       adoptRemoteInstance(pending.instance_id);
-      completeApprovalRefresh();
     } catch (error) {
       if (generation !== eventGeneration) return;
       console.error("Remote host approval recovery failed", error);
-      scheduleApprovalRefreshRetry();
     }
     const requestedSequence = eventCursor;
     const response = await remoteFetch(`/api/events?after=${requestedSequence}`);
     const batch = await responseValue<RemoteEventBatch>(response);
+    if (generation !== eventGeneration) return;
+    if (pending && pending.instance_id === batch.instance_id) {
+      // Clear before processing: a newer wake-up in this batch must be able to
+      // request another refresh without having that request cleared afterward.
+      completeApprovalRefresh();
+    }
     processRemoteEvents(batch, pending, generation);
   } catch (error) {
     if (generation !== eventGeneration) return;
     console.error("Remote host event polling failed", error);
+  } finally {
+    if (generation === eventGeneration) scheduleApprovalRefreshRetry();
   }
 }
 

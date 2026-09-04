@@ -66,6 +66,7 @@ async function surfaceHarness(initialRecords = []) {
   const elements = new Map(ids.map((id) => [id, new Element()]));
   elements.get("draft").hidden = true;
   let initialize;
+  let invoke = async () => undefined;
   let create = async () => ({});
   let list = async () => ({ records: initialRecords, next_after: null });
   let replace = async () => ({});
@@ -96,7 +97,9 @@ async function surfaceHarness(initialRecords = []) {
         },
       },
     },
-    async invoke() {},
+    invoke(...args) {
+      return invoke(...args);
+    },
     onInit(callback) {
       initialize = callback;
     },
@@ -125,6 +128,9 @@ async function surfaceHarness(initialRecords = []) {
     listCalls,
     replaceCalls,
     reportedErrors,
+    setInvoke(implementation) {
+      invoke = implementation;
+    },
     setCreate(implementation) {
       create = implementation;
     },
@@ -286,4 +292,42 @@ test("a row serializes rapid toggle and delete actions through its reload", asyn
   assert.equal(currentRemove.disabled, false);
   assert.equal(harness.replaceCalls.length, 1);
   assert.equal(harness.deleteCalls.length, 0);
+});
+
+for (const nextTitle of ["A newer suggestion", "The same suggestion"]) {
+  test(`saving an older draft preserves a newer model response: ${nextTitle}`, async () => {
+    const harness = await surfaceHarness();
+    const draft = harness.elements.get("draft");
+    const draftText = harness.elements.get("draft-text");
+    const suggest = harness.listener("suggest", "click");
+    const addDraft = harness.listener("add-draft", "click");
+    const response = (content) => ({
+      result: { kind: "completed", result: { message: { content } } },
+    });
+    harness.setInvoke(async () => response("The same suggestion"));
+    await suggest();
+
+    const model = deferred();
+    harness.setInvoke(() => model.promise);
+    const suggesting = suggest();
+    const create = deferred();
+    harness.setCreate(() => create.promise);
+    const saving = addDraft();
+    assert.equal(harness.createCalls[0][1].title, "The same suggestion");
+
+    model.resolve(response(nextTitle));
+    await suggesting;
+    create.resolve({});
+    await saving;
+
+    assert.equal(draft.hidden, false);
+    assert.equal(draftText.textContent, nextTitle);
+    assert.equal(harness.createCalls.length, 1);
+    assert.equal(harness.elements.get("add-draft").disabled, false);
+  });
+}
+
+test("the hidden attribute overrides the draft's flex layout", async () => {
+  const html = await readFile(new URL("../src/ui/index.html", import.meta.url), "utf8");
+  assert.match(html, /\[hidden\]\s*\{\s*display:\s*none\s*!important\s*;/);
 });

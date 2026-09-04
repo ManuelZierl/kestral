@@ -6,6 +6,7 @@
   <title>{{APP_NAME}}</title>
   <style>
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       padding: clamp(1rem, 4vw, 2rem);
@@ -106,6 +107,7 @@
     const addDraftButton = document.getElementById("add-draft");
     let records = [];
     let createPending = false;
+    let draftRevision = 0;
     let latestLoadRequest = 0;
     const pendingRecordIds = new Set();
     const rowControls = new Map();
@@ -275,6 +277,7 @@
         if (typeof content !== "string" || !content.trim()) throw new Error("The model returned no suggestion");
         const proposed = content.trim().replace(/^[-*\d.)\s]+/, "").replace(/[\r\n]+/g, " ").slice(0, 240).trim();
         if (!proposed) throw new Error("The model returned no usable suggestion");
+        draftRevision += 1;
         draftText.textContent = proposed;
         draft.hidden = false;
         status.textContent = "Review the suggestion before adding it.";
@@ -293,7 +296,8 @@
     refreshButton.addEventListener("click", loadItems);
     suggestButton.addEventListener("click", suggestItem);
     addDraftButton.addEventListener("click", async () => {
-      if (await createItem(draftText.textContent || "")) {
+      const submittedDraftRevision = draftRevision;
+      if (await createItem(draftText.textContent || "") && draftRevision === submittedDraftRevision) {
         draftText.textContent = "";
         draft.hidden = true;
       }
