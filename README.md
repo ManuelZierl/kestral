@@ -30,6 +30,15 @@ can be installed as packages or built independently without forking the host.
 Capability actions routed through Kestral use the same grants, Runs, and
 provenance path whether an app is bundled or installed later.
 
+The alpha now treats app lifecycle and trust as product behavior rather than
+only infrastructure: the Apps workspace exposes installation, curated discovery,
+app creation guidance, permission repair, and failed-runtime recovery. Sandboxed
+custom surfaces cannot silently use the own-surface approval shortcut: when an
+approval-required read/local-write action relies on that shortcut, the host asks
+for a physical confirmation outside the app frame before forwarding it. Release
+CI also enforces explicit size ceilings for the shipping Linux and Windows
+artifacts.
+
 > **Status: preparing v0.1.0-alpha.1.** This planned first public testing release
 > has not been published. It is for developers, early technical testers, and
 > contributors. It is not
