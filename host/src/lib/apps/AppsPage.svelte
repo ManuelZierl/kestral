@@ -13,7 +13,7 @@
   import { grants } from "$lib/stores/grants";
   import { activeAppId } from "$lib/stores/hostState";
 
-  const developerGuideUrl = "https://github.com/ManuelZierl/kestral/blob/develop/docs/writing-apps.md";
+  const developerGuideUrl = "https://manuelzierl.github.io/kestral/writing-apps.html";
 
   let managedApps = $state<AppStatusView[]>([]);
   let loaded = $state(false);
