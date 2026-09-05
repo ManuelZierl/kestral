@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, truncate } from "node:fs/promises";
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,12 +15,17 @@ async function withTempDirectory(callback) {
   }
 }
 
+async function sparseFile(path, size) {
+  await writeFile(path, "");
+  await truncate(path, size);
+}
+
 test("accepts Linux release artifacts within the configured ceilings", async () => {
   await withTempDirectory(async (directory) => {
-    await truncate(join(directory, "kestral-0.1.0-alpha.1-linux-x86_64.AppImage"), MIB);
-    await truncate(join(directory, "kestral-0.1.0-alpha.1-linux-x86_64.deb"), MIB);
-    await truncate(join(directory, "kestral-0.1.0-alpha.1-linux-x86_64-server.tar.gz"), MIB);
-    await truncate(join(directory, "kestral-browser-client-0.1.0-alpha.1.zip"), MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-linux-x86_64.AppImage"), MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-linux-x86_64.deb"), MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-linux-x86_64-server.tar.gz"), MIB);
+    await sparseFile(join(directory, "kestral-browser-client-0.1.0-alpha.1.zip"), MIB);
 
     const result = await checkProductBudgets("linux", directory);
     assert.deepEqual(result.failures, []);
@@ -38,8 +43,8 @@ test("fails closed when a required release artifact is absent", async () => {
 
 test("reports an artifact that exceeds its ceiling", async () => {
   await withTempDirectory(async (directory) => {
-    await truncate(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-portable.zip"), 301 * MIB);
-    await truncate(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-nsis.exe"), MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-portable.zip"), 301 * MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-nsis.exe"), MIB);
 
     const result = await checkProductBudgets("windows", directory);
     assert.equal(result.failures.length, 1);
