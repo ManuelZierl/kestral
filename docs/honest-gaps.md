@@ -34,11 +34,12 @@ hidden fallback behavior.
   startup does not.
 - The base installer bundles the provider worker, its pinned provider SDK graph,
   and a Node runtime. External apps are independently built, tested, and
-  released. Installer and installed size, cold and warm startup, idle CPU and
-  memory, per-worker resources, app startup, and time to first useful result do
-  not yet have a published baseline, release ceilings, or regression gates.
-  "Lean" therefore remains a product goal rather than a demonstrated release
-  result.
+  released. CI now enforces release-artifact size ceilings for the Linux
+  AppImage, Debian package, backend archive, browser client, Windows portable
+  archive, and NSIS installer. Cold and warm startup, idle CPU and memory,
+  per-worker resources, app startup, and time to first useful result still lack
+  published baselines and regression ceilings. "Lean" is therefore partly
+  release-gated, not yet a complete runtime performance contract.
 
 ## Isolation and app runtime
 
@@ -50,15 +51,18 @@ hidden fallback behavior.
   can activate. The opt-in is host-wide rather than scoped to one package.
 - Custom app UI is sandboxed in an opaque-origin iframe, but OS-level per-frame
   process isolation is not guaranteed.
-- The own-surface approval shortcut is not backed by user-gesture attestation.
-  Capability effects are provider-declared, and the custom iframe bridge proves
-  a live binding and declared intent but not a physical click. A dishonest app
-  can label an external or destructive action `read-only`/`local-write`, or
-  script that nominally low-risk submission, to avoid a second trusted-chrome
-  prompt under an approval-required grant. The grant and Run remain enforced
-  and audited. Closing this requires a host-attested activation token or removal
-  of the exception for untrusted custom surfaces.
-- App backends have no general crash-loop or automatic restart policy.
+- Approval-required own-surface `read-only`/`local-write` actions now require a
+  host-owned physical confirmation before the sandboxed frame may forward the
+  request into the kernel shortcut. The frame cannot synthesize that host
+  confirmation. Capability effects remain provider-declared, however, so this
+  attests the human gesture rather than independently proving that an app's
+  declared effect accurately describes its implementation. Cross-app,
+  external-write, and destructive actions continue through normal kernel-owned
+  trusted chrome.
+- App backends have no general crash-loop or automatic restart policy. The Apps
+  screen exposes failed startup state and a manual retry that tears down the
+  failed lifecycle and reactivates the same inspected revision through the
+  ordinary enable path.
 - The file broker resolves a requested path, proves the result is inside the
   granted resource root, and then re-opens it by path. The opened handle is
   checked to be the same file the containment check saw, but a directory
