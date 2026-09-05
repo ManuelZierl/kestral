@@ -958,9 +958,9 @@ fn hex_digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn sync_parent(path: &Path) -> Result<(), String> {
+fn sync_parent(_path: &Path) -> Result<(), String> {
     #[cfg(unix)]
-    if let Some(parent) = path.parent() {
+    if let Some(parent) = _path.parent() {
         File::open(parent)
             .and_then(|file| file.sync_all())
             .map_err(|error| format!("sync portable directory failed: {error}"))?;

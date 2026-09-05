@@ -31,10 +31,11 @@ more appropriate document, canvas, form, dashboard, or other focused surface.
 
 Installed apps with standalone panel or dashboard surfaces also appear in the
 sidebar. A dashboard remains available there when it also integrates with
-another app. The fresh profile's Kestral documentation MCP app is hidden there
-by default to keep the workspace navigation focused; it remains available in
-**Customize navigation**. Use the cog button on an app's **Apps** card to open
-its settings.
+another app. The fresh profile's saved Kestral documentation server does not
+become an app until you explicitly connect it. Its generated MCP app is hidden
+in the sidebar by default to keep the workspace navigation focused; after
+connection, it remains available in **Customize navigation**. Use the cog button
+on an app's **Apps** card to open its settings.
 Chat opens **Settings → Chat**, LLM Provider opens **Settings → Model
 providers**, and File Broker opens **Settings → File resources**. Other active
 apps open **Settings → App settings**. Inactive apps show what must be resolved
@@ -368,5 +369,6 @@ Use **Settings → Kestral profiles → Portable workspace** to export the curre
 profile or validate and import a `.kestral-portable.zip`. Import shows the app,
 credential, and external-file recovery work before target selection. Creating a
 fresh profile is non-destructive; overwriting the current profile requires the
-displayed `RESTORE <slug>` phrase and a restart. See {% link profiles.md %} for
-the complete inclusion and exclusion rules.
+displayed `RESTORE <slug>` phrase and a restart. See
+[Profiles and data]({{ internal_link_prefix }}{% link profiles.md %}) for the
+complete inclusion and exclusion rules.

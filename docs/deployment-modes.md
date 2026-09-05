@@ -364,6 +364,9 @@ boundary.
 Remote events are a bounded feed. A client detects an evicted, selectively
 dropped, or regressed sequence and refreshes authoritative state. Pending
 approvals and missed events are recovered when SSE connects or reconnects.
+Approval events retain only a wake-up ID in that replay feed; the browser fetches
+full prompts from the authoritative current-pending endpoint, so resolved input
+previews cannot be replayed as stale dialogs.
 State-changing commands emit scoped refresh notifications; a visible browser
 also performs an infrequent authoritative reconciliation as a safety net. The
 Ubuntu backend remains the durable authority even when the browser disconnects.

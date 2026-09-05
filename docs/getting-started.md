@@ -21,13 +21,13 @@ describe the intended release candidate.
 
 A newly created profile includes a removable **Kestral documentation** tool
 server pointing to the public Kestral repository through unauthenticated GitMCP.
-After the shell's trusted permission UI is ready, Kestral makes one connection
-attempt and asks you to review the discovered tools. If accepted, it separately
-asks whether Chat may use each tool with per-use approval. You may reject either
-request; no rejected permission is granted, and Kestral still starts if the
-remote endpoint is unavailable. Manage or remove the entry later under
-**Settings → Tool servers**. See [Tool servers]({{ internal_link_prefix }}{% link tool-servers.md %})
-for the complete flow and security boundary.
+This is an inert saved shortcut: Kestral does not contact the endpoint, discover
+tools, install an app, or request permissions during startup. To opt in, open
+**Settings → Tool servers**, review the saved URL, and choose **Connect**. You
+can edit or remove the entry without contacting it. Connected tools and any
+later Chat access use the same trusted-chrome review as every other tool server.
+See [Tool servers]({{ internal_link_prefix }}{% link tool-servers.md %}) for the
+complete flow and security boundary.
 
 If you already have a `.kestral-portable.zip`, start once with a fresh profile,
 then open **Settings → Kestral profiles → Portable workspace**. Validate the
@@ -188,9 +188,27 @@ Use **Reconnect ChatGPT account** if OpenAI revokes the session, or
 
 ## Add a focused app
 
-After the first message, open **Apps → Install an app** to review and install a
-task-specific app, or browse [Curated apps]({{ internal_link_prefix }}{% link curated-apps.md %}) for an
-independently maintained starting point. A focused app can provide its own
+After the first message, either install a task-specific app or shape one around
+your own recurring work. From a Kestral source checkout, the shortest custom-app
+path is:
+
+```bash
+node scripts/create-app.mjs ../my-focus-app \
+  --id com.example.my-focus-app \
+  --name "My Focus App"
+cd ../my-focus-app
+npm test
+```
+
+The generated dependency-free project contains a working custom dashboard,
+durable host-managed data, and an optional approval-gated model suggestion.
+Install its `dist/` directory through **Apps → Install an app**. See
+[Writing app packages]({{ internal_link_prefix }}{% link writing-apps.md %}) to
+replace the starter's item model and interface with your use case.
+
+You can instead review another package under **Apps → Install an app**, or
+browse [Curated apps]({{ internal_link_prefix }}{% link curated-apps.md %}) for
+an independently maintained starting point. A focused app can provide its own
 workspace surface and may separately request permission for Chat or another app
 to use its capabilities.
 

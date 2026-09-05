@@ -513,8 +513,8 @@
                   Approval
                   <select bind:value={editCondition} disabled={busyKeys.has(key)} use:focusOnMount>
                     <option value="silent">Runs silently</option>
-                    <option value="notify">Notifies you</option>
-                    <option value="requires-approval">Asks for approval</option>
+                    <option value="notify">Notifies on delegated use</option>
+                    <option value="requires-approval">Approval for delegated/high-impact use</option>
                   </select>
                 </label>
                 {#if entry.scope.provider.startsWith("mcp-") && editCondition !== "requires-approval"}
@@ -659,8 +659,8 @@
         <label>Approval
           <select bind:value={customCondition} disabled={customBusy}>
             <option value="silent">Runs silently</option>
-            <option value="notify">Notifies you</option>
-            <option value="requires-approval">Asks for approval</option>
+            <option value="notify">Notifies on delegated use</option>
+            <option value="requires-approval">Approval for delegated/high-impact use</option>
           </select>
         </label>
         {#if customProvider.startsWith("mcp-") && customCondition !== "requires-approval"}

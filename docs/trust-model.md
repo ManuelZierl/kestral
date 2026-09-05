@@ -48,10 +48,26 @@ sandboxed app surface does not sandbox its backend.
 - **One action path:** input, grant, deadline, and lifecycle state are checked
   before execution and again before a result commits.
 - **Direct human control:** a declared same-app action from the provider's live
-  surface is already an explicit human command. It remains grant-checked and
-  audited, but grant interaction conditions cannot add a notice or per-use
-  approval. Delegated cross-app, LLM, agent, automation, and programmatic calls
+  surface is an explicit human command. It remains grant-checked and audited,
+  and does not add a `notify` notice. Under a `requires-approval` grant, only a
+  `read-only` or `local-write` action may treat that click as the approval;
+  `unspecified`, `external-write`, and `destructive` actions still enter trusted
+  chrome. Delegated cross-app, LLM, agent, automation, and programmatic calls
   remain condition-gated.
+- **Informed per-use approval:** trusted chrome receives a preparation-time
+  snapshot of the provider's capability description and declared effect, the
+  exact requested data scope, and up to the first 4 KB of the validated JSON
+  input. A larger input is visibly marked as truncated. The input preview is
+  carried only by the pending approval and is not copied into the ledger. In
+  remote mode the replay feed stores only a wake-up ID; the full prompt comes
+  from the authoritative current-pending endpoint.
+- **No surface-gesture attestation:** the own-surface exception above is an
+  interaction policy for cooperative apps, not malicious-app containment.
+  Effect metadata is provider-declared, and the custom iframe bridge validates
+  the live binding, schema, and declared intent but cannot prove that a person
+  clicked. A dishonest surface can mislabel an effect or script a nominally
+  low-risk submission. Grants and audit still apply; host-attested activation or
+  a narrower exception is required to close this residual.
 - **Scoped audit:** invocation and approval records identify the exact requested
   data scope, not only the broader grant that covered it.
 - **Broad resource grants stay explicit:** an `all-resources` grant covers every
@@ -271,14 +287,13 @@ only when the pinned adapter advertises and enforces the control for the selecte
 model. Unsupported combinations fail rather than being silently ignored.
 
 A newly created profile contains an unauthenticated remote MCP configuration for
-the public Kestral GitMCP documentation endpoint and attempts one connection on
-that first startup. This is a disclosed network request to `gitmcp.io`; it sends
-the normal MCP handshake and tool requests but no Kestral credential. The remote
-service and its tool metadata remain untrusted. Trusted chrome separately
-controls installation grants and exact Chat grants, and Chat grants default to
-per-use approval. Rejection grants no authority, endpoint failure does not block
-startup, and the owner can disconnect or delete the server like any other MCP
-configuration.
+the public Kestral GitMCP documentation endpoint. The saved shortcut is inert:
+startup does not contact `gitmcp.io`, perform an MCP handshake, install its
+tools, or request grants. If the owner explicitly chooses **Connect**, the
+remote service and its tool metadata remain untrusted, and trusted chrome
+controls installation through the normal MCP flow. Chat receives no automatic
+access; the owner must separately propose and approve each exact grant. The
+owner can edit or delete the saved server without contacting it.
 
 ## Residual native-code authority
 

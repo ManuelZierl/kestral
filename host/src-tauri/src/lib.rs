@@ -1059,20 +1059,6 @@ async fn bootstrap_startup_apps(host: HostState<'_>) -> Result<(), String> {
         Ok::<(), String>(())
     }
     .await;
-    if result.is_ok() {
-        let startup_mcp_server = host_state
-            .config
-            .lock()
-            .map_err(|_| "config lock poisoned".to_string())?
-            .take_startup_mcp_server_request();
-        if let Some(server_id) = startup_mcp_server {
-            if let Err(error) =
-                connect_mcp_server_for_host(host_state.clone(), server_id, true).await
-            {
-                eprintln!("first-start MCP connection failed: {error}");
-            }
-        }
-    }
     if result.is_ok()
         && host_state
             .config
@@ -2898,14 +2884,10 @@ fn has_mcp_http_auth_secret(host: HostState<'_>, server_id: String) -> Result<bo
 
 #[tauri::command]
 async fn connect_mcp_server(host: HostState<'_>, server_id: String) -> Result<(), String> {
-    connect_mcp_server_for_host(host.inner().clone(), server_id, false).await
+    connect_mcp_server_for_host(host.inner().clone(), server_id).await
 }
 
-async fn connect_mcp_server_for_host(
-    host: Arc<Host>,
-    server_id: String,
-    request_chat_access: bool,
-) -> Result<(), String> {
+async fn connect_mcp_server_for_host(host: Arc<Host>, server_id: String) -> Result<(), String> {
     let connections = host.mcp_connections.clone();
     connections.begin(&server_id)?;
     let config_snapshot = {
@@ -2968,9 +2950,6 @@ async fn connect_mcp_server_for_host(
     match install {
         Ok(()) => {
             connections.complete(&server_id, client)?;
-            if request_chat_access {
-                request_mcp_chat_access(host, mcp::app_id_for_server(&server_id)).await?;
-            }
             Ok(())
         }
         Err(error) => {
@@ -2981,67 +2960,6 @@ async fn connect_mcp_server_for_host(
             Err(error)
         }
     }
-}
-
-async fn request_mcp_chat_access(host: Arc<Host>, provider: AppId) -> Result<(), String> {
-    let prepared = with_kernel_blocking(host.clone(), move |kernel| {
-        let holder = AppId::new("chat");
-        let installed = kernel
-            .installed_app(&provider)
-            .map_err(|error| error.to_string())?;
-        let display_name = installed.manifest.display_name.clone();
-        let capabilities = installed.manifest.capabilities.clone();
-        let active = kernel.grants_for(&holder);
-        capabilities
-            .into_iter()
-            .filter_map(|capability| {
-                let capability_ref = app_host_kernel::primitives::capability::CapabilityRef {
-                    provider: provider.clone(),
-                    capability: capability.name.clone(),
-                };
-                (!active
-                    .iter()
-                    .any(|grant| grant.scope.covers(&capability_ref)))
-                .then(|| {
-                    kernel.prepare_grant(
-                        &holder,
-                        GrantRequest {
-                            scope: GrantScope::ExactCapability {
-                                provider: provider.clone(),
-                                capability: capability.name,
-                            },
-                            data_scope: DataScope::None,
-                            condition: GrantCondition::RequiresApproval,
-                            duration: GrantDuration::NonExpiring,
-                            reason: format!(
-                                "Let Chat use the '{}' tool from {}.",
-                                capability_ref.capability, display_name
-                            ),
-                        },
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())
-    })
-    .await?;
-    if prepared.is_empty() {
-        return Ok(());
-    }
-    let approvals = tauri::async_runtime::spawn_blocking(move || {
-        PreparedGrant::await_grouped_approvals(prepared).map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|error| format!("Chat MCP grant approval task failed: {error}"))??;
-    with_kernel_blocking(host, move |kernel| {
-        for approval in approvals {
-            kernel
-                .commit_grant(approval)
-                .map_err(|error| error.to_string())?;
-        }
-        Ok(())
-    })
-    .await
 }
 
 #[tauri::command]

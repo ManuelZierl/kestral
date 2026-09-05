@@ -1,17 +1,16 @@
 name: CI
 
 # Branch model:
-#   develop — default branch; PRs against develop run Linux tests and package builds.
-#   main    — release branch; PRs against main (and pushes to main) run the
-#             full matrix including Windows, native credential integration,
-#             and Windows package builds.
+#   main — integration and release branch. Pull requests and pushes run the
+#          full matrix including Windows, native credential integration, and
+#          Windows package builds.
 # Releases are produced by release.yml when a v* tag lands on main.
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 permissions:
   contents: read
@@ -43,12 +42,14 @@ jobs:
           working-directory: docs
       - name: Verify product versions
         run: node scripts/check-release-version.mjs
+      - name: Test promoted app contract verifier
+        run: node --test scripts/check-promoted-app-contracts.test.mjs
       - name: Verify promoted app contracts
-        run: |
-          node --test scripts/check-promoted-app-contracts.test.mjs
-          node scripts/check-promoted-app-contracts.mjs
+        run: node scripts/check-promoted-app-contracts.mjs
       - name: Verify external app isolation
         run: node scripts/check-reference-app-isolation.mjs
+      - name: Verify focused app scaffold
+        run: node --test scripts/create-app.test.mjs
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -58,11 +59,12 @@ jobs:
         run: npm ci
       - name: Generate third-party notices
         run: node scripts/generate-third-party-notices.mjs
-      - name: Provider worker checks and tests
+      - name: Check provider worker
         working-directory: host
-        run: |
-          npm run provider-worker:check
-          npm run provider-worker:test
+        run: npm run provider-worker:check
+      - name: Test provider worker
+        working-directory: host
+        run: npm run provider-worker:test
       - name: Package provider worker
         working-directory: host
         run: npm run provider-worker:package
@@ -140,22 +142,25 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify product versions
         run: node scripts/check-release-version.mjs
+      - name: Test promoted app contract verifier
+        run: node --test scripts/check-promoted-app-contracts.test.mjs
       - name: Verify promoted app contracts
-        run: |
-          node --test scripts/check-promoted-app-contracts.test.mjs
-          node scripts/check-promoted-app-contracts.mjs
+        run: node scripts/check-promoted-app-contracts.mjs
       - name: Verify external app isolation
         run: node scripts/check-reference-app-isolation.mjs
+      - name: Verify focused app scaffold
+        run: node --test scripts/create-app.test.mjs
       - name: Install frontend toolchain
         working-directory: host
         run: npm ci
       - name: Generate third-party notices
         run: node scripts/generate-third-party-notices.mjs
-      - name: Provider worker checks and tests
+      - name: Check provider worker
         working-directory: host
-        run: |
-          npm run provider-worker:check
-          npm run provider-worker:test
+        run: npm run provider-worker:check
+      - name: Test provider worker
+        working-directory: host
+        run: npm run provider-worker:test
       - name: Package provider worker
         working-directory: host
         run: npm run provider-worker:package
@@ -176,16 +181,18 @@ jobs:
         run: cargo test --all-features
       - name: Native Windows credential integration
         run: cargo test -p host --test os_credentials -- --ignored --exact native_credential_round_trip_keeps_json_status_only
-      - name: Build Windows desktop packages and backend
+      - name: Build Windows backend
         working-directory: host
-        run: |
-          cargo build -p host --release --bin host-server
-          npm run tauri build -- --bundles nsis
+        run: cargo build -p host --release --bin host-server
+      - name: Build Windows desktop package
+        working-directory: host
+        run: npm run tauri build -- --bundles nsis
       - name: Package portable Windows build
         shell: pwsh
-        run: |
-          scripts/package-windows-release.ps1
-          Copy-Item "THIRD-PARTY-NOTICES.txt" "target/release/public/THIRD-PARTY-NOTICES.txt"
+        run: scripts/package-windows-release.ps1
+      - name: Stage Windows third-party notices
+        shell: pwsh
+        run: Copy-Item "THIRD-PARTY-NOTICES.txt" "target/release/public/THIRD-PARTY-NOTICES.txt"
       - name: Require reproducible tracked outputs
         run: git diff --exit-code
       - uses: actions/upload-artifact@v6

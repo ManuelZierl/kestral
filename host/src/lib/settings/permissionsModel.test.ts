@@ -221,7 +221,9 @@ describe("groupPermissions", () => {
 describe("conditionLabel", () => {
   it("humanizes every condition", () => {
     expect(conditionLabel("silent")).toBe("Runs silently");
-    expect(conditionLabel("notify")).toBe("Notifies you");
-    expect(conditionLabel("requires-approval")).toBe("Asks for approval");
+    expect(conditionLabel("notify")).toBe("Notifies on delegated use");
+    expect(conditionLabel("requires-approval")).toBe(
+      "Approval for delegated/high-impact use",
+    );
   });
 });

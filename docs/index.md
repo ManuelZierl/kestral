@@ -8,11 +8,19 @@ nav_order: 1
 
 # Kestral documentation
 
-Kestral is a personal-first, open-source AI workspace and lean local host for
-user-chosen apps. Chat is the default starting app, not the canonical interface
-for all AI work. The workspace becomes more capable as you install or build
-focused apps for work better served by a document, canvas, form, dashboard, or
-other dedicated interface.
+Kestral is a personal-first, open-source workspace where you can build or
+install focused AI apps for your own recurring work. Its central product bet is
+that people should not be limited to Chat, generic integrations with existing
+services, or a vendor's fixed set of applications. When a use case needs a
+different interface or data model, its owner should be able to make that a
+Kestral app.
+
+That app might be a notes workspace organized around one person's capture and
+review ritual, a domain-specific work queue, or a focused document, canvas,
+form, or dashboard. The app owns the task-specific experience while Kestral
+provides the shared host capabilities: installation and updates, provider and
+credential mediation, permissions, Runs, artifacts, and provenance. Chat is the
+default starting app, not the canonical interface for all AI work.
 
 Version `0.1.0-alpha.1` is the planned first public testing release and has not
 been published. The candidate supports a native Windows or Linux desktop and a
@@ -37,7 +45,7 @@ series and are not isolated from that account's files or network by the kernel.
 | [Curated apps]({{ internal_link_prefix }}{% link curated-apps.md %}) | Discover reviewed independent apps and propose a listing |
 | [Tool servers]({{ internal_link_prefix }}{% link tool-servers.md %}) | Connect local or remote MCP servers explicitly |
 | [Permissions and files]({{ internal_link_prefix }}{% link permissions-and-files.md %}) | Understand grants and share only selected files or folders |
-| [Extending Kestral]({{ internal_link_prefix }}{% link extending-kestral.md %}) | Build app packages or expose capabilities over MCP |
+| [Extending Kestral]({{ internal_link_prefix }}{% link extending-kestral.md %}) | Turn a specific recurring need into an app package, or expose existing capabilities over MCP |
 | [Architecture]({{ internal_link_prefix }}{% link architecture.md %}) | Understand the kernel, adapters, host, and action path |
 | [Operations]({{ internal_link_prefix }}{% link operations.md %}) | Deployment, state, versioning, and release limitations |
 | [Roadmap]({{ internal_link_prefix }}{% link roadmap.md %}) | Review explicitly non-shipped product direction and constraints |
@@ -45,10 +53,13 @@ series and are not isolated from that account's files or network by the kernel.
 ## Product boundary
 
 Kestral's product bet is that Chat is a useful entrance to AI, but often not the
-best interface for repeated, structured, visual, or stateful work. Conversational
-apps, notes, development tools, canvases, automations, and new interaction
-patterns should coexist as apps in one personal workspace. The owner chooses the
-models and apps instead of adopting one suite's complete product assumptions.
+best interface for repeated, structured, visual, or stateful work. Connecting a
+general AI client to Notion, a task manager, or another predefined service still
+leaves the service's product assumptions in place. Kestral instead makes the
+focused application itself replaceable: owners can install one that fits or
+build a highly specific app around their own workflow. Conversational apps,
+notes, development tools, canvases, automations, and new interaction patterns
+can coexist in one personal workspace.
 
 The host owns only shared mechanisms: app identity and lifecycle, sandboxed
 surfaces, trusted chrome, provider and credential mediation, grants, capability

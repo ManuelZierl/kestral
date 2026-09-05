@@ -22,8 +22,9 @@ impl CapabilityRef {
     }
 }
 
-/// Advisory effect metadata for UI and export defaults. Effects never grant
-/// authority; grants remain the only permission mechanism.
+/// Provider-declared effect metadata for UI, export defaults, and the
+/// direct-surface approval exception. It is not proof of actual behavior.
+/// Effects never grant authority; grants remain the only permission mechanism.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CapabilityEffect {

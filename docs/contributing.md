@@ -101,20 +101,22 @@ and recovery cases:
 
 ## Branch and release model
 
-`develop` is the integration branch. Pull requests to `develop` run Linux tests
-and package builds. `main` is the release branch; its pull requests and pushes
-also run Windows credential integration and package builds. A `v*` tag contained
-in `main` runs the release workflow, verifies the tag against every product
-version, builds Windows and Linux artifacts, requires the complete matrix,
-writes checksums, and marks versions with `-alpha.N` or `-beta.N` as GitHub
-prereleases.
+`main` is the integration and release branch. Pull requests to `main` and pushes
+to it run Linux and Windows tests, native Windows credential integration, and
+package builds. A `v*` tag contained in `main` runs the release workflow,
+verifies the tag against every product version, reruns the release gates on
+Linux and Windows, builds both platform artifact sets, requires the complete
+matrix, writes and verifies checksums, and marks versions with `-alpha.N` or
+`-beta.N` as GitHub prereleases.
 
 Before creating a tag, run the **Release** workflow manually from the intended
 `main` commit and enter the manifest version without a `v` prefix. This
 `workflow_dispatch` path executes validation, both platform builds, artifact
 download, matrix checks, provenance, and checksums, then retains the assembled
 release as a workflow artifact without creating a GitHub Release. Only a `v*`
-tag push enables the publish job and its repository write permission.
+tag push enables the publish job and its repository write permission. The tag
+workflow rebuilds and retests the tagged commit; it publishes the assembled
+artifact downloaded within that same run, not the earlier manual-run bytes.
 
 ### Promoted external app gate
 
@@ -153,7 +155,7 @@ Evidence cannot name the same commit that first records its own hash. Use one
 clean tested core commit for the candidate binaries and lifecycle runs, then one
 metadata-only commit that fills `tested_core_commit`, `evidence_url`, and
 `evidence_sha256` in `release/promoted-apps.json` and completes
-`release/v0.1.0-alpha.1-evidence.md`. Release validation requires the tested
+`release/v<version>-evidence.md`. Release validation requires the tested
 commit to be an ancestor and refuses any intervening change outside those two
 release metadata files. The tested core commit is an executable/build source
 freeze; changing any source or build input requires a new candidate.

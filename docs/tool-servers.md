@@ -15,13 +15,12 @@ Kestral can consume MCP servers over a local stdio process or MCP Streamable
 HTTP. A saved server is normally only configuration: Kestral does not connect,
 install, or grant it until you choose **Connect**.
 
-The one first-start exception is **Kestral documentation**, an unauthenticated
-GitMCP endpoint for the public Kestral repository. A newly created profile saves
-this server and makes one connection attempt after trusted chrome is ready. You
-still decide whether to install its discovered tools and whether Chat may use
-each exact tool. Declining either request grants no authority. An unavailable
-endpoint does not block startup; choose **Connect** later to retry. The entry is an
-ordinary MCP server, so you can disconnect, edit, or delete it.
+A newly created profile includes one saved shortcut named **Kestral
+documentation**, an unauthenticated GitMCP endpoint for the public Kestral
+repository. It follows the same rule: startup makes no network request and does
+not discover tools, install an app, or request a grant. Review the URL and choose
+**Connect** only when you want to use it. The entry is an ordinary MCP server,
+so you can edit or delete it without contacting the endpoint.
 
 The current adapter requests MCP revision `2025-06-18` and also accepts a server
 negotiating the earlier `2025-03-26` revision. Initialization must include server
@@ -53,8 +52,15 @@ rather than reported as an empty success.
    trusted-chrome permission requests.
 
 After connection, the server appears as an app. Its tools receive generic form
-surfaces and result artifacts derived from their JSON Schemas. Calls require
-approval by default.
+surfaces and result artifacts derived from their JSON Schemas. Simple scalar
+properties receive individual controls. Arrays, nested objects, unions, and
+other structured inputs use an explicitly labelled JSON-object editor with the
+advertised schema available alongside it; Kestral never flattens those values
+into misleading text fields. Calls require approval by default. Because bare
+MCP metadata does not reliably describe side effects, generated capabilities
+are `unspecified`; submitting their own generic forms therefore still opens
+trusted chrome under that default policy. A packaged app can provide a custom
+surface when the tool needs a guided end-user workflow.
 
 Bearer authentication sends `Authorization: Bearer <credential>` on every MCP
 HTTP request. Custom secret-header authentication accepts an HTTP header name
@@ -87,14 +93,13 @@ not expose the MCP tools themselves as callable until their grants exist.
 Review the proposal card in Chat and choose **Review and grant**. Kestral
 revalidates the connected provider and capability, then shows the exact grant in
 trusted chrome. Approval gives the requesting app access to that capability
-with **Asks for approval** as the default policy, so the later tool call still
-requires its own decision.
+with **Approval for delegated/high-impact use** as the default policy, so the
+later tool call still requires its own decision.
 
-On a newly created profile, Kestral asks for these exact Chat grants immediately
-after you accept the first-start Kestral documentation connection. The grants
-use the same **Asks for approval** policy and trusted-chrome review as a proposal
-submitted from Chat. Rejecting one or all of them leaves those tools unavailable
-to Chat; you can request them later through the normal flow above.
+The saved Kestral documentation shortcut follows this same flow. Connecting it
+does not automatically give Chat access or open a second grant prompt. Request
+only the exact documentation tools you want through the proposal and
+trusted-chrome review above.
 
 If another active permission already covers the capability with `notify` or
 `silent`, the card reports that effective policy instead of claiming that every
@@ -118,8 +123,8 @@ under **Settings → Tool servers**, before editing or deleting configuration.
 Disconnecting uninstalls the bridged app, revokes its grants, and shuts down the
 transport.
 The saved server can be connected again later, but Kestral does not reconnect
-it on later startups. This also applies to the first-start Kestral documentation
-server after its one automatic attempt.
+it on later startups. The seeded Kestral documentation shortcut follows the
+same rule: every connection begins with an explicit **Connect** action.
 
 Changing an authenticated server's endpoint or header configuration clears its
 stored credential. Enter the credential again before reconnecting; Kestral does

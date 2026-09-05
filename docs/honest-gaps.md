@@ -50,6 +50,14 @@ hidden fallback behavior.
   can activate. The opt-in is host-wide rather than scoped to one package.
 - Custom app UI is sandboxed in an opaque-origin iframe, but OS-level per-frame
   process isolation is not guaranteed.
+- The own-surface approval shortcut is not backed by user-gesture attestation.
+  Capability effects are provider-declared, and the custom iframe bridge proves
+  a live binding and declared intent but not a physical click. A dishonest app
+  can label an external or destructive action `read-only`/`local-write`, or
+  script that nominally low-risk submission, to avoid a second trusted-chrome
+  prompt under an approval-required grant. The grant and Run remain enforced
+  and audited. Closing this requires a host-attested activation token or removal
+  of the exception for untrusted custom surfaces.
 - App backends have no general crash-loop or automatic restart policy.
 - The file broker resolves a requested path, proves the result is inside the
   granted resource root, and then re-opens it by path. The opened handle is

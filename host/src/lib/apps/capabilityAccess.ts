@@ -29,8 +29,8 @@ export function mostInteractiveCondition(view: CapabilityUseView): GrantConditio
 
 export function capabilityAccessBadge(condition: GrantCondition | null): string | null {
   if (condition === null) return null;
-  if (condition === "requires-approval") return "Requires approval";
-  if (condition === "notify") return "Notifies on use";
+  if (condition === "requires-approval") return "Approval on delegated/high-impact use";
+  if (condition === "notify") return "Notifies on delegated use";
   return "Allowed";
 }
 

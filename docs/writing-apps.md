@@ -52,6 +52,40 @@ normalized path, byte length, and exact staged file body, sorted by path. It
 covers `app.json` and all declared payload. This differs from the kernel
 manifest seal, which covers only the translated kernel declaration.
 
+## Scaffold a focused app
+
+The Kestral source repository includes a dependency-free project scaffold for
+the shortest useful custom-app path. It creates a working dashboard with its
+own durable item model, a sandboxed custom surface, and an optional
+review-before-apply model suggestion:
+
+```bash
+node scripts/create-app.mjs ../my-focus-app \
+  --id com.example.my-focus-app \
+  --name "My Focus App"
+cd ../my-focus-app
+npm test
+```
+
+This is a repository helper, not a separately published CLI. The generated
+project needs Node.js 22 or newer but has no package dependencies. It builds a
+ready-to-install `dist/` directory, and its own `npm run build` command updates
+the SHA-256 asset declarations after UI changes. Install `dist/` through
+**Apps → Install an app**.
+
+The starter remains useful when model access is denied or unconfigured. Its UI
+has no direct network origin and it runs no backend process; pressing the model
+button is the only path that requests the exact
+`llm-provider/llm.generate` capability. The returned text stays visibly staged
+until the person chooses **Add suggestion**. The generated safety test makes
+those defaults explicit so later authority changes are visible in code review.
+
+Start by replacing the item schema and interface with one concrete recurring
+job. Keep task-specific interaction and data in the app; add host capabilities
+only for work that crosses an app, model, file, or external-system boundary.
+Kestral's package inspection remains the authoritative full schema and semantic
+validator.
+
 ## Minimal manifest
 
 This package contributes metadata only and therefore uses `backend.kind =
@@ -614,7 +648,7 @@ The `manifest` can declare:
 
 | Field | Purpose |
 |---|---|
-| `capabilities` | Named actions through which this app, Chat, or another granted caller can do work. Each has an input and optional output JSON Schema plus an advisory effect. |
+| `capabilities` | Named actions through which this app, Chat, or another granted caller can do work. Each has an input and optional output JSON Schema plus an effect classification used for risk presentation and own-surface confirmation policy. |
 | `surfaces` | Focused panels, cards, forms, pickers, or dashboards that emit declared intents. |
 | `agents`, `skills`, `assistant_profiles`, `automations` | Data contributions interpreted by capable userland apps; the kernel does not become an agent or scheduler. Skills are reviewed, enabled, and digested by Chat but never grant authority. Assistant profiles reference locally declared skills and only suggest capabilities or an engine contract. |
 | `connectors` | Names and descriptions of required secrets, never secret values. |
@@ -625,6 +659,18 @@ The `manifest` can declare:
 | `config_declarations` | One host-stored config section in the 0.1 series. The generic host editor supports scalar fields; apps with structured values edit them through a standalone dashboard. |
 | `grant_requests` | Permissions the app needs; requests confer no authority. |
 | `event_subscriptions` | Limited minimized host event topics, not cross-app RPC. |
+
+A bundle-free `form` surface uses Kestral's generic capability editor. Object
+schemas made entirely of declared string, number, integer, and boolean
+properties receive individual controls. Arrays, nested objects, unions, schema
+composition, and other structured inputs instead receive a labelled JSON-object
+editor with the declared schema visible for reference. The editor preserves the
+JSON structure and keeps the submitted input available after completion or
+failure. The latest Run ID, returned result, and produced artifact identities
+remain visible beside the form. Ship a custom surface when an end-user workflow
+needs richer guidance than raw JSON. Browser-side JSON numbers must be finite;
+integer-valued inputs outside JavaScript's safe integer range are refused
+instead of being rounded. Model exact larger identifiers as strings.
 
 For a config schema string that needs line breaks, set
 `"x-kestral-input": "multiline"` on the property. The host renders that field
@@ -1070,14 +1116,22 @@ grant, never as an invocation data scope. State that breadth in `reason`.
 Prefer exact capabilities and `requires-approval` for external writes or
 destructive effects.
 
-Grant interaction conditions are delegation policy, not extra confirmation for
-the provider app's own UI. A declared capability invoked by a person from that
-provider's live surface remains grant-checked and audited, but the host does not
-emit a `notify` notice or request per-use approval. The same capability keeps
-its configured condition when another app, an LLM or agent flow, automation, or
-other programmatic initiator invokes it. Apps should still provide an
-in-surface confirmation for an irreversible direct action when recovery is not
-available.
+Grant interaction conditions are delegation policy. A declared capability
+invoked by a person from that provider's live surface remains grant-checked and
+audited, but the host does not emit a `notify` notice. Under a
+`requires-approval` grant, the direct click counts as approval only when the
+declared effect is `read-only` or `local-write`. `unspecified`, `external-write`,
+and `destructive` effects still require trusted chrome. The same capability
+keeps its configured condition when another app, an LLM or agent flow,
+automation, or other programmatic initiator invokes it. Apps should still
+provide an in-surface confirmation for an irreversible direct action when
+recovery is not available.
+
+Declare effects truthfully. The kernel does not infer behavior from handler
+code, and the custom-surface bridge cannot attest that an intent came from a
+physical user gesture. The low-risk own-surface shortcut is therefore a UX
+policy for cooperative apps, not permission to relabel external or destructive
+work as `local-write`.
 
 ## Backend kinds
 

@@ -7,7 +7,14 @@
 // helpers turn the enums into result sentences. Kept pure so they are unit
 // testable without mounting the modal.
 
-import type { ChromeRequest, DataScope, GrantCondition, GrantDuration, GrantScope } from "$lib/api";
+import type {
+  CapabilityEffect,
+  ChromeRequest,
+  DataScope,
+  GrantCondition,
+  GrantDuration,
+  GrantScope,
+} from "$lib/api";
 import { dataScopeLabel } from "$lib/system/dataScopeLabel";
 
 /** A result sentence describing what a grant condition means for the user. */
@@ -16,9 +23,9 @@ export function conditionSummary(condition: GrantCondition): string {
     case "silent":
       return "Runs without asking you again";
     case "notify":
-      return "Runs, and tells you each time";
+      return "Notifies you on delegated use";
     case "requires-approval":
-      return "Asks your approval each time";
+      return "Asks before delegated or higher-impact use";
   }
 }
 
@@ -36,6 +43,22 @@ export function dataScopeSummary(scope: DataScope): string {
 
 export function dataScopeIsBroad(scope: DataScope): boolean {
   return scope.kind === "all-resources";
+}
+
+/** Describe the provider's declared effect without presenting it as attested fact. */
+export function capabilityEffectSummary(effect: CapabilityEffect): string {
+  switch (effect) {
+    case "unspecified":
+      return "Unspecified — may have consequential effects";
+    case "read-only":
+      return "Reads data without declaring a write";
+    case "local-write":
+      return "Writes local Kestral or app data";
+    case "external-write":
+      return "Writes to an external system";
+    case "destructive":
+      return "May irreversibly delete or replace data";
+  }
 }
 
 /** Render a span of seconds as an approximate, human-readable interval. */

@@ -148,7 +148,11 @@ async function extract(archivePath, destination) {
     const script = "& { param($Archive, $Destination) Expand-Archive -LiteralPath $Archive -DestinationPath $Destination -Force }";
     await run("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, archivePath, destination]);
   } else {
-    await run("tar", ["-xJf", archivePath, "-C", destination]);
+    // Archive ownership is irrelevant because only the executable and license
+    // are copied into the runtime directory. Avoid privileged extraction
+    // failures on rootless/container filesystems when the installer itself is
+    // running as root.
+    await run("tar", ["--no-same-owner", "-xJf", archivePath, "-C", destination]);
   }
 }
 

@@ -6,11 +6,13 @@
 //! implement it. Only kernel services hold a reference to the chrome, so
 //! apps cannot reach it.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{AppId, EventTopic, GrantId, RunId};
-use crate::primitives::capability::CapabilityRef;
+use crate::primitives::capability::{CapabilityEffect, CapabilityRef};
 use crate::primitives::grant::{DataScope, GrantCondition, GrantDuration, GrantScope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,17 +38,51 @@ pub struct GrantIssuancePrompt {
     pub reason: String,
 }
 
+/// Maximum UTF-8 size of the exact invocation-input prefix sent to trusted
+/// chrome. The full input remains inside the pending invocation; it is neither
+/// copied into the ledger nor exposed to app surfaces by this prompt.
+pub const MAX_CAPABILITY_APPROVAL_INPUT_BYTES: usize = 4096;
+
 /// Shown when a requires-approval grant is about to be exercised.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityApprovalPrompt {
     pub app_id: AppId,
     pub app_display_name: String,
     pub capability: CapabilityRef,
+    /// Snapshotted from the installed provider declaration during preparation,
+    /// so trusted chrome need not trust or race a second registry lookup.
+    pub capability_description: String,
+    pub effect: CapabilityEffect,
+    /// Pretty-printed exact JSON, or its UTF-8-safe prefix when the input is too
+    /// large for a bounded approval dialog.
+    pub input_summary: String,
+    pub input_summary_truncated: bool,
     pub data_scope: DataScope,
     pub grant_id: GrantId,
     pub run_id: RunId,
     pub goal: String,
+}
+
+// Invocation inputs must reach trusted chrome to support informed consent, but
+// should not leak through incidental debug logging or assertion output.
+impl fmt::Debug for CapabilityApprovalPrompt {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CapabilityApprovalPrompt")
+            .field("app_id", &self.app_id)
+            .field("app_display_name", &self.app_display_name)
+            .field("capability", &self.capability)
+            .field("capability_description", &self.capability_description)
+            .field("effect", &self.effect)
+            .field("input_summary", &"<redacted>")
+            .field("input_summary_truncated", &self.input_summary_truncated)
+            .field("data_scope", &self.data_scope)
+            .field("grant_id", &self.grant_id)
+            .field("run_id", &self.run_id)
+            .field("goal", &self.goal)
+            .finish()
+    }
 }
 
 /// Shown at install when an app asks to consume the kernel event feed.
