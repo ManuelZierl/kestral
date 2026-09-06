@@ -89,7 +89,7 @@ describe("surface action attestation", () => {
     ).toBe(false);
   });
 
-  it("mirrors grant selection for diagnostics without using it as the attestation gate", () => {
+  it("mirrors resource coverage when reporting the effective grant condition", () => {
     const requested: DataScope = { kind: "resources", resource_ids: ["a"] };
     const grants: GrantView[] = [
       grant("silent", {
@@ -103,5 +103,14 @@ describe("surface action attestation", () => {
       }),
     ];
     expect(effectiveGrantCondition(grants, appId, capability, requested)).toBe("requires-approval");
+  });
+
+  it("reports the broker's least-interactive covering condition", () => {
+    const grants = [
+      grant("requires-approval", { grant_id: "approval" }),
+      grant("notify", { grant_id: "notify" }),
+      grant("silent", { grant_id: "silent" }),
+    ];
+    expect(effectiveGrantCondition(grants, appId, capability, none)).toBe("silent");
   });
 });
