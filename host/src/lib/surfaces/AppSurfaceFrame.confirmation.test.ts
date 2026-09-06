@@ -1,5 +1,6 @@
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tick } from "svelte";
 
 import type {
   ActionIntent,
@@ -75,7 +76,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await cleanup();
-  await act();
+  await tick();
   vi.restoreAllMocks();
 });
 
@@ -129,8 +130,9 @@ async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-
   const onOutcome = vi.fn();
   const view = render(AppSurfaceFrame, { props: { app: app(effect), surface, bundle, onOutcome } });
   const fixture = within(view.container);
-  await act();
+  await tick();
   const iframe = await fixture.findByTitle("Weather: Weather panel") as HTMLIFrameElement;
+  await tick();
   const source = iframe.contentWindow!;
   const postMessage = vi.spyOn(source, "postMessage");
   // Complete the same init/ready sequence as the real iframe before invoking.
@@ -138,18 +140,16 @@ async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-
   await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
     expect.objectContaining({ type: "init", instanceId: binding.instance_id }), "*",
   ));
-  await act(() => {
-    window.dispatchEvent(frameMessage(source, { type: "ready" }));
-  });
+  window.dispatchEvent(frameMessage(source, { type: "ready" }));
+  await tick();
   await waitFor(() => {
     expect(iframe.isConnected).toBe(true);
     expect(iframe.classList.contains("loading")).toBe(false);
   });
-  await act(() => {
-    window.dispatchEvent(frameMessage(source, {
-      type: "request", requestId: 11, op: { kind: "invoke", ...intent },
-    }));
-  });
+  window.dispatchEvent(frameMessage(source, {
+    type: "request", requestId: 11, op: { kind: "invoke", ...intent },
+  }));
+  await tick();
   const dialog = await fixture.findByRole("alertdialog");
   return { ...view, iframe, dialog, fixture, postMessage, onOutcome };
 }
@@ -198,7 +198,7 @@ describe("AppSurfaceFrame action confirmation", () => {
   it("cancels a pending confirmation when the surface unmounts", async () => {
     const { unmount, fixture, onOutcome } = await requestOwnAction();
     await unmount();
-    await act();
+    await tick();
     await waitFor(() => expect(api.closeSurface).toHaveBeenCalledWith(binding));
     expect(api.submitAction).not.toHaveBeenCalled();
     expect(onOutcome).not.toHaveBeenCalled();
