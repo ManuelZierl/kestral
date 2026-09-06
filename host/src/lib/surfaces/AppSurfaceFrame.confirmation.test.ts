@@ -137,9 +137,9 @@ async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-
   const postMessage = vi.spyOn(source, "postMessage");
   // Complete the same init/ready sequence as the real iframe before invoking.
   await fireEvent.load(iframe);
-  await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+  await vi.waitFor(() => expect(postMessage.mock.calls).toContainEqual([
     expect.objectContaining({ type: "init", instanceId: binding.instance_id }), "*",
-  ));
+  ]));
   window.dispatchEvent(frameMessage(source, { type: "ready" }));
   await tick();
   await vi.waitFor(() => {
@@ -167,7 +167,7 @@ describe("AppSurfaceFrame action confirmation", () => {
       )).toBe(false);
 
       await fireEvent.click(fixture.getByRole("button", { name: "Continue" }));
-      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(okResponse(11, outcome), "*"));
+      await vi.waitFor(() => expect(postMessage.mock.calls).toContainEqual([okResponse(11, outcome), "*"]));
       expect(api.submitAction).toHaveBeenCalledOnce();
       expect(api.submitAction).toHaveBeenCalledWith(binding, intent, expect.any(Function));
       expect(onOutcome).toHaveBeenCalledOnce();
@@ -187,9 +187,9 @@ describe("AppSurfaceFrame action confirmation", () => {
     } else {
       await fireEvent.keyDown(dialog, { key: "Escape" });
     }
-    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(postMessage.mock.calls).toContainEqual([
       errorResponse(11, "Action cancelled before execution."), "*",
-    ));
+    ]));
     expect(api.submitAction).not.toHaveBeenCalled();
     expect(onOutcome).not.toHaveBeenCalled();
     expect(fixture.queryByRole("alertdialog")).toBeNull();
