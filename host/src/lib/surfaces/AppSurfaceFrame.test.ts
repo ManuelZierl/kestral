@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { InstalledApp, SurfaceDeclaration, SurfaceUiBundle } from "$lib/api";
-import { SURFACE_BRIDGE_PROTOCOL, SURFACE_BRIDGE_VERSION } from "./surfaceBridgeProtocol";
+import type { ActionIntent, CapabilityDeclaration, InstalledApp, SurfaceDeclaration, SurfaceUiBundle } from "$lib/api";
+import { errorResponse, okResponse, SURFACE_BRIDGE_PROTOCOL, SURFACE_BRIDGE_VERSION } from "./surfaceBridgeProtocol";
 import { resolvedAppearance } from "$lib/stores/theme";
 import { themes } from "$lib/design/colors";
 import AppSurfaceFrame from "./AppSurfaceFrame.svelte";
@@ -32,6 +32,7 @@ vi.mock("$lib/api", async (importOriginal) => {
       run_id: "run-1",
       result: { kind: "completed", result: {}, artifacts: [] },
     })),
+    listGrants: vi.fn(async () => []),
     getAppConfig: vi.fn(async () => ({})),
     getSurfaceState: vi.fn(async () => ({ revision: 0, value: null })),
     putSurfaceState: vi.fn(async (_binding, _key, expectedRevision, value) => ({
@@ -376,5 +377,100 @@ describe("AppSurfaceFrame guards", () => {
     expect(alert.textContent).toContain("config store unavailable");
     expect(screen.queryByTitle("Weather: Weather panel")).toBeNull();
     await waitFor(() => expect(closeSurface).toHaveBeenCalled());
+  });
+});
+
+// Exercise the real message bridge and host confirmation together. Awaiting an
+// invoke response before answering the dialog deadlocks an approval-gated test.
+const forecastIntent: ActionIntent = {
+  capability: { provider: "weather", capability: "get_forecast" },
+  input: { city: "Berlin" },
+  data_scope: { kind: "none" },
+  goal: "Get the forecast",
+};
+
+async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-only") {
+  const ownApp = app();
+  ownApp.manifest.capabilities = [{
+    name: "get_forecast",
+    description: "Get the forecast for a city",
+    input_schema: { type: "object" },
+    effect,
+  }];
+  const onOutcome = vi.fn();
+  const view = render(AppSurfaceFrame, props({ app: ownApp, onOutcome }));
+  const iframe = await frame();
+  const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
+  window.dispatchEvent(readyEventFrom(iframe.contentWindow));
+  window.dispatchEvent(requestEventFrom(iframe.contentWindow, 11, {
+    kind: "invoke",
+    ...forecastIntent,
+  }));
+  return { ...view, iframe, postMessage, onOutcome };
+}
+
+describe("AppSurfaceFrame action confirmation", () => {
+  it.each(["read-only", "local-write"] as const)(
+    "forwards an approved %s outcome only through the invoke response, with no self-echo event",
+    async (effect) => {
+      const { iframe, postMessage, onOutcome } = await requestOwnAction(effect);
+      const dialog = await screen.findByRole("alertdialog");
+      expect(iframe.contains(dialog)).toBe(false);
+      expect(api.submitAction).not.toHaveBeenCalled();
+      expect(onOutcome).not.toHaveBeenCalled();
+      expect(postMessage.mock.calls.some(([message]) =>
+        message.type === "response" && message.requestId === 11,
+      )).toBe(false);
+
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+      const outcome = {
+        run_id: "run-1",
+        result: { kind: "completed", result: {}, artifacts: [] },
+      };
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(okResponse(11, outcome), "*"));
+      expect(api.submitAction).toHaveBeenCalledOnce();
+      expect(api.submitAction).toHaveBeenCalledWith(
+        { app_id: "weather", surface: "panel", instance_id: "i-1" },
+        forecastIntent,
+        expect.any(Function),
+      );
+      expect(onOutcome).toHaveBeenCalledOnce();
+      expect(onOutcome).toHaveBeenCalledWith(outcome);
+      const responses = postMessage.mock.calls.filter(([message]) =>
+        message.type === "response" && message.requestId === 11,
+      );
+      expect(responses).toHaveLength(1);
+      expect(postMessage.mock.calls.some(([message]) => message.type === "event")).toBe(false);
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    },
+  );
+
+  it.each(["Cancel", "Escape"])("does not execute after %s", async (decision) => {
+    const { postMessage, onOutcome } = await requestOwnAction();
+    const dialog = await screen.findByRole("alertdialog");
+    if (decision === "Cancel") {
+      await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    } else {
+      await fireEvent.keyDown(dialog, { key: "Escape" });
+    }
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      errorResponse(11, "Action cancelled before execution."),
+      "*",
+    ));
+    expect(api.submitAction).not.toHaveBeenCalled();
+    expect(onOutcome).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("cancels a pending confirmation when the surface unmounts", async () => {
+    const { unmount, onOutcome } = await requestOwnAction();
+    await screen.findByRole("alertdialog");
+    await unmount();
+    await waitFor(() => expect(closeSurface).toHaveBeenCalledWith({
+      app_id: "weather", surface: "panel", instance_id: "i-1",
+    }));
+    expect(api.submitAction).not.toHaveBeenCalled();
+    expect(onOutcome).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });
