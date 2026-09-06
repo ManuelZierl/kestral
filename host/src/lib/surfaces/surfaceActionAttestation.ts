@@ -55,6 +55,10 @@ export function effectiveGrantCondition(
  * gap where authority can change after the frontend check but before kernel
  * preparation.
  *
+ * The grants and data-scope parameters remain in the signature because the
+ * caller already has that contract and the diagnostic helper uses the same
+ * inputs. They are intentionally not consulted for this security decision.
+ *
  * Cross-app, external-write, destructive and unspecified effects are already
  * routed through the kernel's normal trusted-chrome policy and must not gain a
  * parallel frontend approval path.
