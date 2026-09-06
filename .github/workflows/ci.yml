@@ -78,7 +78,14 @@ jobs:
         run: npm run check
       - name: Frontend tests
         working-directory: host
-        run: npm test
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-junit.xml
+      - name: Preserve frontend test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-linux
+          path: host/vitest-junit.xml
+          if-no-files-found: ignore
       - name: Split development launcher and gateway
         working-directory: host
         run: npm run test:split-dev
@@ -178,7 +185,14 @@ jobs:
         run: npm run check
       - name: Frontend tests
         working-directory: host
-        run: npm test
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-junit.xml
+      - name: Preserve frontend test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-windows
+          path: host/vitest-junit.xml
+          if-no-files-found: ignore
       - name: Frontend dependency audit
         working-directory: host
         run: npm audit --audit-level=high
