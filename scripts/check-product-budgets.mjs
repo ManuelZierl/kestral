@@ -74,7 +74,7 @@ export async function checkProductBudgets(platform, directory) {
   const failures = [];
 
   for (const budget of PRODUCT_BUDGETS[platform]) {
-    const matches = matchingFiles(files, budget);
+    const matches = matchingFiles(files, budget).sort();
     const label = budget.contains ? `*${budget.suffix}*${budget.extension ?? ""}` : `*${budget.suffix}`;
     if (matches.length === 0) {
       failures.push(`required ${platform} release artifact '${label}' is missing`);
@@ -82,7 +82,7 @@ export async function checkProductBudgets(platform, directory) {
     }
     if (matches.length !== 1) {
       failures.push(
-        `required ${platform} release artifact '${label}' is ambiguous: ${matches.sort().join(", ")}`,
+        `required ${platform} release artifact '${label}' is ambiguous: ${matches.join(", ")}`,
       );
       continue;
     }
