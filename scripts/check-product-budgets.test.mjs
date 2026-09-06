@@ -41,6 +41,20 @@ test("fails closed when a required release artifact is absent", async () => {
   });
 });
 
+test("fails closed when more than one artifact matches a release slot", async () => {
+  await withTempDirectory(async (directory) => {
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-portable.zip"), MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.2-windows-x86_64-portable.zip"), MIB);
+    await sparseFile(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-nsis.exe"), MIB);
+
+    const result = await checkProductBudgets("windows", directory);
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0], /ambiguous/);
+    assert.match(result.failures[0], /alpha\.1/);
+    assert.match(result.failures[0], /alpha\.2/);
+  });
+});
+
 test("reports an artifact that exceeds its ceiling", async () => {
   await withTempDirectory(async (directory) => {
     await sparseFile(join(directory, "kestral-0.1.0-alpha.1-windows-x86_64-portable.zip"), 301 * MIB);
