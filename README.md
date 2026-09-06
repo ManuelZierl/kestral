@@ -36,8 +36,8 @@ app creation guidance, permission repair, and failed-runtime recovery. As a
 conservative host-side guard, a sandboxed custom surface cannot use its own
 read/local-write action path without a physical confirmation in host-owned UI
 outside the app frame. This is intentionally stricter than standing
-silent/notify grants; the longer-term fix is to move a single-use gesture proof
-into the kernel boundary or remove the kernel's direct-surface approval shortcut.
+silent/notify grants; the longer-term fix is a single-use gesture proof consumed
+by the kernel, or removal of the kernel's direct-surface approval shortcut.
 Release CI also enforces explicit size ceilings for the shipping Linux and
 Windows artifacts.
 
