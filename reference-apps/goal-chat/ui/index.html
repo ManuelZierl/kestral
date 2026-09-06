@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Goal Chat</title>
+  <style>
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; color: var(--color-text); background: var(--color-surface); font: 15px/1.5 system-ui, sans-serif; }
+    button, textarea, input { font: inherit; }
+    button { min-height: 2.5rem; border: 0; border-radius: .55rem; padding: .55rem .85rem; font-weight: 650; cursor: pointer; color: var(--color-button-text, var(--color-text)); background: var(--color-accent); }
+    button.secondary { color: var(--color-text); background: var(--color-surface-hover); border: 1px solid var(--color-border); }
+    button.danger { color: var(--color-danger-text); background: transparent; border: 1px solid var(--color-border); }
+    button:disabled { opacity: .6; cursor: wait; }
+    button:focus-visible, textarea:focus-visible, input:focus-visible { outline: .2rem solid var(--color-focus-ring); outline-offset: .15rem; }
+    textarea, input { width: 100%; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .55rem; padding: .65rem .75rem; resize: vertical; }
+    textarea { min-height: 5rem; }
+    h1, h2, h3, p { margin-top: 0; }
+    .shell { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem); }
+    .chat { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; border-right: 1px solid var(--color-border); }
+    .chat-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface-raised); }
+    .chat-header-row, .panel-header, .composer-actions { display: flex; gap: .65rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    h1 { font-size: 1.15rem; margin-bottom: .2rem; }
+    .muted { color: var(--color-text-muted); }
+    .goal-strip { margin-top: .75rem; padding: .65rem .75rem; border-radius: .55rem; background: var(--color-surface-hover); overflow-wrap: anywhere; }
+    .messages { min-height: 0; overflow-y: auto; padding: 1rem max(1rem, calc((100% - 50rem) / 2)); display: flex; flex-direction: column; gap: .8rem; }
+    .message { max-width: 46rem; padding: .8rem .9rem; border: 1px solid var(--color-border); border-radius: .75rem; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--color-surface-raised); }
+    .message.user { align-self: flex-end; background: var(--color-surface-hover); }
+    .message.assistant { align-self: flex-start; }
+    .message .role { display: block; margin-bottom: .3rem; font-size: .78rem; font-weight: 700; color: var(--color-text-muted); }
+    .empty { margin: auto; max-width: 34rem; text-align: center; color: var(--color-text-muted); padding: 2rem; }
+    .composer { padding: .85rem 1rem 1rem; border-top: 1px solid var(--color-border); background: var(--color-surface-raised); }
+    .composer form { width: min(100%, 50rem); margin: 0 auto; }
+    .composer textarea { min-height: 4.5rem; max-height: 15rem; }
+    .composer-actions { margin-top: .55rem; justify-content: flex-end; }
+    .state-panel { min-width: 0; overflow-y: auto; padding: 1rem; background: var(--color-surface-raised); }
+    .panel-header { margin-bottom: 1rem; }
+    .panel-header h2 { margin: 0; font-size: 1rem; }
+    .state-section { margin-bottom: .9rem; padding: .8rem; border: 1px solid var(--color-border); border-radius: .7rem; background: var(--color-surface); }
+    .state-section h3 { font-size: .85rem; margin-bottom: .45rem; }
+    .state-section p { margin-bottom: .4rem; color: var(--color-text-muted); font-size: .8rem; }
+    .state-section textarea { min-height: 4.4rem; }
+    .state-section textarea.tall { min-height: 10rem; }
+    .state-actions { position: sticky; bottom: 0; display: flex; gap: .6rem; padding-top: .75rem; background: var(--color-surface-raised); }
+    #status { min-height: 1.4rem; margin: .45rem 0 0; font-size: .82rem; color: var(--color-text-muted); }
+    .mobile-state { display: none; }
+    @media (max-width: 52em) {
+      .shell { display: block; }
+      .chat { min-height: 100vh; min-height: 100dvh; border-right: 0; }
+      .state-panel { position: fixed; inset: 0; z-index: 2; }
+      .state-panel[hidden] { display: none !important; }
+      .mobile-state { display: inline-flex; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="chat" aria-label="Goal-oriented conversation">
+      <header class="chat-header">
+        <div class="chat-header-row">
+          <div>
+            <h1>Goal Chat</h1>
+            <div class="muted">The transcript is history. Goal and working solution are the active state.</div>
+          </div>
+          <div>
+            <button id="open-state" class="secondary mobile-state" type="button">Working state</button>
+            <button id="new-conversation" class="secondary" type="button">New conversation</button>
+          </div>
+        </div>
+        <div id="goal-strip" class="goal-strip">No goal yet — start by describing what you want to achieve.</div>
+      </header>
+
+      <div id="messages" class="messages" aria-live="polite">
+        <div id="empty" class="empty">Start with the problem, question, decision, or outcome you want to work toward. Goal Chat will maintain an explicit interpretation and evolving working solution alongside the conversation.</div>
+      </div>
+
+      <div class="composer">
+        <form id="composer-form">
+          <label for="composer-input" class="muted">Message</label>
+          <textarea id="composer-input" maxlength="20000" required placeholder="What are you trying to achieve, or what changed?"></textarea>
+          <div class="composer-actions">
+            <button id="send" type="submit">Send</button>
+          </div>
+          <p id="status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
+    <aside id="state-panel" class="state-panel" aria-label="Working state">
+      <div class="panel-header">
+        <h2>Working state</h2>
+        <button id="close-state" class="secondary mobile-state" type="button">Close</button>
+      </div>
+
+      <section class="state-section">
+        <h3>Your stated goal</h3>
+        <p>Owned by you. The model never overwrites this field automatically.</p>
+        <textarea id="user-goal" maxlength="12000" placeholder="What you explicitly want from this conversation"></textarea>
+      </section>
+
+      <section class="state-section">
+        <h3>Model interpretation</h3>
+        <p>What the model currently believes you are trying to achieve. Editable.</p>
+        <textarea id="goal-interpretation" maxlength="12000" placeholder="Not inferred yet"></textarea>
+      </section>
+
+      <section class="state-section">
+        <h3>Working solution</h3>
+        <p>The current best consolidated result, not merely the latest answer.</p>
+        <textarea id="working-solution" class="tall" maxlength="60000" placeholder="No working solution yet"></textarea>
+      </section>
+
+      <section class="state-section"><h3>Open questions</h3><p>One item per line.</p><textarea id="open-questions" maxlength="16000"></textarea></section>
+      <section class="state-section"><h3>Decisions</h3><p>Settled choices worth carrying forward.</p><textarea id="decisions" maxlength="16000"></textarea></section>
+      <section class="state-section"><h3>Constraints</h3><p>Requirements or boundaries the solution must respect.</p><textarea id="constraints" maxlength="16000"></textarea></section>
+      <section class="state-section"><h3>Assumptions</h3><p>Model assumptions that may need correction.</p><textarea id="assumptions" maxlength="16000"></textarea></section>
+
+      <div class="state-actions">
+        <button id="save-state" type="button">Save state</button>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const STATE_COLLECTION = "state";
+    const MESSAGE_COLLECTION = "messages";
+    const MAX_CONTEXT_MESSAGES = 30;
+    const EMPTY_STATE = Object.freeze({
+      user_goal: "",
+      goal_interpretation: "",
+      working_solution: "",
+      open_questions: [],
+      decisions: [],
+      constraints: [],
+      assumptions: []
+    });
+
+    const els = Object.fromEntries([
+      "messages", "empty", "composer-form", "composer-input", "send", "status", "goal-strip",
+      "new-conversation", "open-state", "close-state", "state-panel", "user-goal",
+      "goal-interpretation", "working-solution", "open-questions", "decisions", "constraints",
+      "assumptions", "save-state"
+    ].map((id) => [id, document.getElementById(id)]));
+
+    let stateRecord = null;
+    let messages = [];
+    let sending = false;
+    let stateSaving = false;
+
+    const outputSchema = {
+      type: "object",
+      additionalProperties: false,
+      required: ["reply", "goal_interpretation", "working_solution", "open_questions", "decisions", "constraints", "assumptions"],
+      properties: {
+        reply: { type: "string", minLength: 1 },
+        goal_interpretation: { type: "string" },
+        working_solution: { type: "string" },
+        open_questions: { type: "array", items: { type: "string" }, maxItems: 40 },
+        decisions: { type: "array", items: { type: "string" }, maxItems: 80 },
+        constraints: { type: "array", items: { type: "string" }, maxItems: 80 },
+        assumptions: { type: "array", items: { type: "string" }, maxItems: 80 }
+      }
+    };
+
+    function cloneEmptyState() { return { ...EMPTY_STATE, open_questions: [], decisions: [], constraints: [], assumptions: [] }; }
+    function errorText(error) { return error instanceof Error ? error.message : String(error); }
+    function report(error, prefix) {
+      const detail = errorText(error);
+      els.status.textContent = `${prefix}: ${detail}`;
+      window.appHost.reportError(`${prefix}: ${detail}`);
+    }
+    function normalizeLines(value) {
+      return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 80);
+    }
+    function currentEditorState() {
+      return {
+        user_goal: els["user-goal"].value.trim(),
+        goal_interpretation: els["goal-interpretation"].value.trim(),
+        working_solution: els["working-solution"].value.trim(),
+        open_questions: normalizeLines(els["open-questions"].value),
+        decisions: normalizeLines(els.decisions.value),
+        constraints: normalizeLines(els.constraints.value),
+        assumptions: normalizeLines(els.assumptions.value)
+      };
+    }
+    function stateValue(record) {
+      const value = record?.value;
+      if (!value || typeof value !== "object") return cloneEmptyState();
+      return {
+        user_goal: typeof value.user_goal === "string" ? value.user_goal : "",
+        goal_interpretation: typeof value.goal_interpretation === "string" ? value.goal_interpretation : "",
+        working_solution: typeof value.working_solution === "string" ? value.working_solution : "",
+        open_questions: Array.isArray(value.open_questions) ? value.open_questions.filter((x) => typeof x === "string") : [],
+        decisions: Array.isArray(value.decisions) ? value.decisions.filter((x) => typeof x === "string") : [],
+        constraints: Array.isArray(value.constraints) ? value.constraints.filter((x) => typeof x === "string") : [],
+        assumptions: Array.isArray(value.assumptions) ? value.assumptions.filter((x) => typeof x === "string") : []
+      };
+    }
+    function fillStateEditor(value) {
+      els["user-goal"].value = value.user_goal;
+      els["goal-interpretation"].value = value.goal_interpretation;
+      els["working-solution"].value = value.working_solution;
+      els["open-questions"].value = value.open_questions.join("\n");
+      els.decisions.value = value.decisions.join("\n");
+      els.constraints.value = value.constraints.join("\n");
+      els.assumptions.value = value.assumptions.join("\n");
+      els["goal-strip"].textContent = value.goal_interpretation || value.user_goal || "No goal yet — start by describing what you want to achieve.";
+    }
+    function validMessage(record) {
+      const v = record?.value;
+      return record && typeof record.id === "string" && Number.isInteger(record.revision) && v &&
+        (v.role === "user" || v.role === "assistant") && typeof v.content === "string" && typeof v.created_at === "string";
+    }
+    function renderMessages() {
+      els.messages.replaceChildren();
+      els.empty.hidden = messages.length !== 0;
+      if (!els.empty.hidden) els.messages.append(els.empty);
+      for (const record of messages) {
+        const article = document.createElement("article");
+        article.className = `message ${record.value.role}`;
+        const role = document.createElement("span");
+        role.className = "role";
+        role.textContent = record.value.role === "user" ? "You" : "Assistant";
+        const content = document.createElement("div");
+        content.textContent = record.value.content;
+        article.append(role, content);
+        els.messages.append(article);
+      }
+      els.messages.scrollTop = els.messages.scrollHeight;
+    }
+    async function listAll(collection) {
+      const records = [];
+      let after;
+      do {
+        const page = await window.appHost.data.v1.list(collection, { ...(after ? { after } : {}), limit: 100 });
+        if (!page || !Array.isArray(page.records)) throw new Error(`Invalid ${collection} data returned by Kestral`);
+        records.push(...page.records);
+        after = typeof page.next_after === "string" ? page.next_after : undefined;
+      } while (after);
+      return records;
+    }
+    async function load() {
+      els.status.textContent = "Loading…";
+      try {
+        const [states, storedMessages] = await Promise.all([listAll(STATE_COLLECTION), listAll(MESSAGE_COLLECTION)]);
+        stateRecord = states[0] || null;
+        messages = storedMessages.filter(validMessage).sort((a, b) => a.value.created_at.localeCompare(b.value.created_at));
+        fillStateEditor(stateValue(stateRecord));
+        renderMessages();
+        els.status.textContent = "";
+      } catch (error) { report(error, "Could not load Goal Chat"); }
+    }
+    async function persistState(nextState) {
+      if (stateRecord) {
+        await window.appHost.data.v1.replace(STATE_COLLECTION, stateRecord.id, stateRecord.revision, nextState);
+      } else {
+        await window.appHost.data.v1.create(STATE_COLLECTION, nextState);
+      }
+      const states = await listAll(STATE_COLLECTION);
+      stateRecord = states[0] || null;
+      fillStateEditor(stateValue(stateRecord));
+    }
+    async function saveEditedState() {
+      if (stateSaving || sending) return;
+      stateSaving = true;
+      els["save-state"].disabled = true;
+      try {
+        await persistState(currentEditorState());
+        els.status.textContent = "Working state saved.";
+      } catch (error) { report(error, "Could not save state"); }
+      finally { stateSaving = false; els["save-state"].disabled = false; }
+    }
+    function modelSystemPrompt() {
+      return `You are the reasoning engine for Goal Chat, a goal-oriented conversation.\n\nThe transcript is historical evidence. The explicit working state is the primary orientation for the conversation. Your job on every turn is to do two things at once: (1) answer the user's latest message naturally and usefully, and (2) maintain a consolidated working state for the overall goal.\n\nRules:\n- Never claim the model interpretation is the user's exact wording. The user's stated goal is supplied separately and is user-owned.\n- goal_interpretation is your current concise interpretation of what the user is trying to achieve. Update it when the conversation materially changes or clarifies the goal.\n- working_solution is the current best consolidated result for the whole goal, not a summary of the latest reply. Preserve useful settled content and improve it incrementally.\n- open_questions contains unresolved questions that materially block or shape the goal. Remove them when resolved.\n- decisions contains settled choices. Do not silently reverse prior decisions; if the user changes one, update it explicitly.\n- constraints contains requirements and boundaries that remain relevant.\n- assumptions contains model assumptions that could be wrong and matter to the result. Remove assumptions once confirmed or disproved.\n- Lack of a state change is acceptable: preserve fields exactly when nothing relevant changed.\n- Do not manufacture decisions, constraints, or user preferences.\n- Keep state concise enough to be useful as future context.\n- The visible reply should address the latest user message directly; do not narrate these bookkeeping rules.\nReturn only data matching the requested JSON schema.`;
+    }
+    function contextPayload(latestState) {
+      const recent = messages.slice(-MAX_CONTEXT_MESSAGES).map((record) => ({ role: record.value.role, content: record.value.content }));
+      return JSON.stringify({
+        user_owned_goal: latestState.user_goal,
+        working_state: {
+          goal_interpretation: latestState.goal_interpretation,
+          working_solution: latestState.working_solution,
+          open_questions: latestState.open_questions,
+          decisions: latestState.decisions,
+          constraints: latestState.constraints,
+          assumptions: latestState.assumptions
+        },
+        recent_transcript: recent
+      });
+    }
+    function parseModelResult(response) {
+      const outcome = response?.result;
+      if (!outcome || outcome.kind !== "completed") throw new Error(outcome?.reason || outcome?.error || "The model action did not complete");
+      const content = outcome.result?.message?.content;
+      if (typeof content !== "string" || !content.trim()) throw new Error("The model returned no content");
+      let parsed;
+      try { parsed = JSON.parse(content); } catch { throw new Error("The model returned invalid structured output"); }
+      if (!parsed || typeof parsed.reply !== "string" || !parsed.reply.trim()) throw new Error("The model returned no reply");
+      for (const key of ["goal_interpretation", "working_solution"]) if (typeof parsed[key] !== "string") throw new Error(`Invalid ${key} in model response`);
+      for (const key of ["open_questions", "decisions", "constraints", "assumptions"]) {
+        if (!Array.isArray(parsed[key]) || parsed[key].some((x) => typeof x !== "string")) throw new Error(`Invalid ${key} in model response`);
+      }
+      return parsed;
+    }
+    async function createMessage(role, content) {
+      await window.appHost.data.v1.create(MESSAGE_COLLECTION, { role, content, created_at: new Date().toISOString() });
+    }
+    async function sendMessage(text) {
+      const content = text.trim();
+      if (!content || sending) return false;
+      sending = true;
+      els.send.disabled = true;
+      els["composer-input"].disabled = true;
+      try {
+        await createMessage("user", content);
+        const loadedMessages = await listAll(MESSAGE_COLLECTION);
+        messages = loadedMessages.filter(validMessage).sort((a, b) => a.value.created_at.localeCompare(b.value.created_at));
+        renderMessages();
+
+        let before = currentEditorState();
+        if (!before.user_goal && messages.filter((m) => m.value.role === "user").length === 1) {
+          before = { ...before, user_goal: content };
+          await persistState(before);
+        } else if (!stateRecord) {
+          await persistState(before);
+        }
+
+        els.status.textContent = "Updating the working solution…";
+        const response = await window.appHost.invoke(
+          { provider: "llm-provider", capability: "llm.generate" },
+          {
+            messages: [
+              { role: "system", content: modelSystemPrompt() },
+              { role: "user", content: contextPayload(before) }
+            ],
+            response_format: outputSchema,
+            max_output_tokens: 5000
+          },
+          "Respond to the latest message and update Goal Chat's explicit working state"
+        );
+        const result = parseModelResult(response);
+        const nextState = {
+          user_goal: before.user_goal,
+          goal_interpretation: result.goal_interpretation.trim(),
+          working_solution: result.working_solution.trim(),
+          open_questions: result.open_questions.map((x) => x.trim()).filter(Boolean),
+          decisions: result.decisions.map((x) => x.trim()).filter(Boolean),
+          constraints: result.constraints.map((x) => x.trim()).filter(Boolean),
+          assumptions: result.assumptions.map((x) => x.trim()).filter(Boolean)
+        };
+        await persistState(nextState);
+        await createMessage("assistant", result.reply.trim());
+        const refreshed = await listAll(MESSAGE_COLLECTION);
+        messages = refreshed.filter(validMessage).sort((a, b) => a.value.created_at.localeCompare(b.value.created_at));
+        renderMessages();
+        els.status.textContent = "";
+        return true;
+      } catch (error) {
+        report(error, "Could not complete this turn; your message was kept and working state was not replaced");
+        return false;
+      } finally {
+        sending = false;
+        els.send.disabled = false;
+        els["composer-input"].disabled = false;
+      }
+    }
+    async function clearCollection(collection) {
+      const records = await listAll(collection);
+      for (const record of records) await window.appHost.data.v1.delete(collection, record.id, record.revision);
+    }
+    async function newConversation() {
+      if (sending || stateSaving) return;
+      if (messages.length > 0 || stateRecord) {
+        const ok = window.confirm("Start a new conversation? This clears this Goal Chat conversation and its working state.");
+        if (!ok) return;
+      }
+      els["new-conversation"].disabled = true;
+      try {
+        await clearCollection(MESSAGE_COLLECTION);
+        await clearCollection(STATE_COLLECTION);
+        stateRecord = null;
+        messages = [];
+        fillStateEditor(cloneEmptyState());
+        renderMessages();
+        els.status.textContent = "New conversation started.";
+        els["composer-input"].focus();
+      } catch (error) { report(error, "Could not start a new conversation"); }
+      finally { els["new-conversation"].disabled = false; }
+    }
+
+    els["composer-form"].addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submitted = els["composer-input"].value;
+      if (await sendMessage(submitted)) els["composer-input"].value = "";
+      els["composer-input"].focus();
+    });
+    els["composer-input"].addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); els["composer-form"].requestSubmit(); }
+    });
+    els["save-state"].addEventListener("click", saveEditedState);
+    els["new-conversation"].addEventListener("click", newConversation);
+    els["open-state"].addEventListener("click", () => { els["state-panel"].hidden = false; });
+    els["close-state"].addEventListener("click", () => { if (matchMedia("(max-width: 52em)").matches) els["state-panel"].hidden = true; });
+    window.appHost.onInit(() => {
+      if (matchMedia("(max-width: 52em)").matches) els["state-panel"].hidden = true;
+      return load();
+    });
+    window.appHost.ready();
+  </script>
+</body>
+</html>
