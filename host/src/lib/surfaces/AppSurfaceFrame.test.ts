@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ActionIntent, CapabilityDeclaration, InstalledApp, SurfaceDeclaration, SurfaceUiBundle } from "$lib/api";
 import { errorResponse, okResponse, SURFACE_BRIDGE_PROTOCOL, SURFACE_BRIDGE_VERSION } from "./surfaceBridgeProtocol";
@@ -57,6 +57,19 @@ const closeSurface = vi.mocked(api.closeSurface);
 const getAppConfig = vi.mocked(api.getAppConfig);
 const updateAppConfig = vi.mocked(api.updateAppConfig);
 const loadSurfaceHostContext = vi.mocked(editorContext.loadSurfaceHostContext);
+
+beforeEach(() => {
+  openSurface.mockReset().mockResolvedValue({ app_id: "weather", surface: "panel", instance_id: "i-1" });
+  closeSurface.mockReset().mockResolvedValue(undefined);
+  getAppConfig.mockReset().mockResolvedValue({});
+  updateAppConfig.mockReset().mockImplementation(async (_id, config) => config);
+  loadSurfaceHostContext.mockReset().mockResolvedValue({});
+  vi.mocked(api.listGrants).mockReset().mockResolvedValue([]);
+  vi.mocked(api.submitAction).mockReset().mockImplementation(async () => ({
+    run_id: "run-1",
+    result: { kind: "completed", result: {}, artifacts: [] },
+  }));
+});
 
 function surface(overrides: Partial<SurfaceDeclaration> = {}): SurfaceDeclaration {
   return {
@@ -146,8 +159,6 @@ function requestEventFrom(source: Window | null, requestId: number, op: Record<s
 }
 
 afterEach(async () => {
-  // Finish component teardown while its mocks and timer environment still
-  // belong to this test. A late cleanup must not remove the next test's frame.
   await cleanup();
   await act();
   vi.restoreAllMocks();
@@ -163,8 +174,6 @@ describe("AppSurfaceFrame sandboxing", () => {
     const sandbox = iframe.getAttribute("sandbox") ?? "";
     expect(sandbox).toBe("allow-scripts allow-forms allow-downloads");
     expect(sandbox).toContain("allow-downloads");
-    // The critical negative: no allow-same-origin means an opaque origin, so
-    // the frame cannot reach the host window, Tauri, cookies, or storage.
     expect(sandbox).not.toContain("allow-same-origin");
     expect(iframe.getAttribute("allow")).toBe("");
     expect(iframe.getAttribute("referrerpolicy")).toBe("no-referrer");
@@ -172,7 +181,6 @@ describe("AppSurfaceFrame sandboxing", () => {
 
   it("loads eagerly so the hidden frame can complete its readiness handshake", async () => {
     render(AppSurfaceFrame, props());
-
     expect((await frame()).getAttribute("loading")).toBe("eager");
   });
 
@@ -194,44 +202,29 @@ describe("AppSurfaceFrame sandboxing", () => {
     render(AppSurfaceFrame, props());
     const iframe = await frame();
     const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
-
     await fireEvent.load(iframe);
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "init",
-        theme: "dark",
-        variables: expect.objectContaining({ "--color-text": themes.dark.text }),
-      }),
-      "*",
-    );
-
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "init", theme: "dark",
+      variables: expect.objectContaining({ "--color-text": themes.dark.text }),
+    }), "*");
     resolvedAppearance.set({ theme: "light", colors: themes.light, appColors: {} });
-    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "theme",
-        theme: "light",
-        variables: expect.objectContaining({ "--color-text": themes.light.text }),
-      }),
-      "*",
-    ));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "theme", theme: "light",
+      variables: expect.objectContaining({ "--color-text": themes.light.text }),
+    }), "*"));
   });
 
   it("renders app identity in host chrome, outside the frame", async () => {
     render(AppSurfaceFrame, props());
     const strip = await screen.findByTestId("surface-identity");
     expect(strip.textContent).toContain("Weather");
-    // The identity strip is a sibling of the iframe, never inside it.
-    const iframe = await frame();
-    expect(strip.contains(iframe)).toBe(false);
+    expect(strip.contains(await frame())).toBe(false);
   });
 
   it("in fill mode keeps the strip only as a loading indicator", async () => {
     render(AppSurfaceFrame, props({ fill: true }));
     const iframe = await frame();
-    // While loading, the strip shows who is loading…
     expect(screen.getByTestId("surface-identity")).toBeTruthy();
-    // …and once ready the surrounding host chrome (top bar) carries identity,
-    // so the whole workspace belongs to the app.
     window.dispatchEvent(readyEventFrom(iframe.contentWindow));
     await waitFor(() => expect(screen.queryByTestId("surface-identity")).toBeNull());
   });
@@ -248,7 +241,6 @@ describe("AppSurfaceFrame lifecycle", () => {
   it("ignores a spoofed ready from a foreign window", async () => {
     render(AppSurfaceFrame, props());
     await frame();
-    // A different window claiming ready must not flip the surface to ready.
     window.dispatchEvent(readyEventFrom(window));
     await Promise.resolve();
     expect(screen.getByText(/loading…/)).toBeTruthy();
@@ -257,7 +249,6 @@ describe("AppSurfaceFrame lifecycle", () => {
   it("isolates a hung frame as an error instead of hanging the host", async () => {
     render(AppSurfaceFrame, props({ handshakeTimeoutMs: 20 }));
     await frame();
-    // Never send ready; the hang guard should fire.
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy(), { timeout: 500 });
     expect(screen.getByRole("alert").textContent).toContain("didn't respond");
     expect(screen.queryByTitle("Weather: Weather panel")).toBeNull();
@@ -266,28 +257,18 @@ describe("AppSurfaceFrame lifecycle", () => {
   it("releases the kernel binding immediately when a frame hangs, not only on unmount", async () => {
     render(AppSurfaceFrame, props({ handshakeTimeoutMs: 20 }));
     await frame();
-    // The hang guard must tear down while the component stays mounted, so a
-    // hung frame leaves no kernel binding or message listener behind.
-    await waitFor(() =>
-      expect(closeSurface).toHaveBeenCalledWith({
-        app_id: "weather",
-        surface: "panel",
-        instance_id: "i-1",
-      }),
-    );
+    await waitFor(() => expect(closeSurface).toHaveBeenCalledWith({
+      app_id: "weather", surface: "panel", instance_id: "i-1",
+    }));
   });
 
   it("closes the surface binding on unmount", async () => {
     const { unmount } = render(AppSurfaceFrame, props());
     await frame();
-    unmount();
-    await waitFor(() =>
-      expect(closeSurface).toHaveBeenCalledWith({
-        app_id: "weather",
-        surface: "panel",
-        instance_id: "i-1",
-      }),
-    );
+    await unmount();
+    await waitFor(() => expect(closeSurface).toHaveBeenCalledWith({
+      app_id: "weather", surface: "panel", instance_id: "i-1",
+    }));
   });
 });
 
@@ -313,15 +294,12 @@ describe("AppSurfaceFrame guards", () => {
       .mockRejectedValueOnce(new Error("kernel busy: another host operation owns the kernel"))
       .mockRejectedValueOnce(new Error("kernel busy: another host operation owns the kernel"));
     render(AppSurfaceFrame, props());
-
     await vi.waitFor(() => expect(openSurface).toHaveBeenCalledOnce());
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText(/loading…/)).toBeTruthy();
-
     await vi.advanceTimersByTimeAsync(1000);
     await vi.waitFor(() => expect(openSurface).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("alert")).toBeNull();
-
     await vi.advanceTimersByTimeAsync(1000);
     await vi.waitFor(() => expect(openSurface).toHaveBeenCalledTimes(3));
     expect(await screen.findByTitle("Weather: Weather panel")).toBeTruthy();
@@ -331,11 +309,9 @@ describe("AppSurfaceFrame guards", () => {
     vi.useFakeTimers();
     openSurface.mockRejectedValueOnce(new Error("kernel busy: another host operation owns the kernel"));
     const { unmount } = render(AppSurfaceFrame, props());
-
     await vi.waitFor(() => expect(openSurface).toHaveBeenCalledOnce());
-    unmount();
+    await unmount();
     await vi.advanceTimersByTimeAsync(1000);
-
     expect(openSurface).toHaveBeenCalledOnce();
   });
 
@@ -343,11 +319,9 @@ describe("AppSurfaceFrame guards", () => {
     vi.useFakeTimers();
     loadSurfaceHostContext.mockRejectedValueOnce("kernel busy: another host operation owns the kernel");
     render(AppSurfaceFrame, props());
-
     await vi.waitFor(() => expect(loadSurfaceHostContext).toHaveBeenCalledOnce());
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText(/loading…/)).toBeTruthy();
-
     await vi.advanceTimersByTimeAsync(1000);
     await vi.waitFor(() => expect(loadSurfaceHostContext).toHaveBeenCalledTimes(2));
     expect(await screen.findByTitle("Weather: Weather panel")).toBeTruthy();
@@ -360,14 +334,10 @@ describe("AppSurfaceFrame guards", () => {
       .mockRejectedValueOnce(new Error("kernel busy: another host operation owns the kernel"));
     render(AppSurfaceFrame, props());
     const iframe = await frame();
-
-    window.dispatchEvent(requestEventFrom(
-      iframe.contentWindow,
-      7,
-      { kind: "update-config", config: { profiles: [] } },
-    ));
+    window.dispatchEvent(requestEventFrom(iframe.contentWindow, 7, {
+      kind: "update-config", config: { profiles: [] },
+    }));
     await vi.waitFor(() => expect(updateAppConfig).toHaveBeenCalledOnce());
-
     await vi.advanceTimersByTimeAsync(1000);
     await vi.waitFor(() => expect(updateAppConfig).toHaveBeenCalledTimes(2));
     await vi.advanceTimersByTimeAsync(1000);
@@ -385,8 +355,6 @@ describe("AppSurfaceFrame guards", () => {
   });
 });
 
-// Exercise the real message bridge and host confirmation together. Awaiting an
-// invoke response before answering the dialog deadlocks an approval-gated test.
 const forecastIntent: ActionIntent = {
   capability: { provider: "weather", capability: "get_forecast" },
   input: { city: "Berlin" },
@@ -405,21 +373,17 @@ async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-
   const onOutcome = vi.fn();
   const view = render(AppSurfaceFrame, props({ app: ownApp, onOutcome }));
   const fixture = within(view.container);
-  const iframe = (await fixture.findByTitle("Weather: Weather panel")) as HTMLIFrameElement;
-  // Finding the DOM node is not a readiness proof: flush bind:this and the
-  // host bridge first, then observe the ready handshake before invoking.
   await act();
-  const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
-  await act(() => { window.dispatchEvent(readyEventFrom(iframe.contentWindow)); });
+  const iframe = (await fixture.findByTitle("Weather: Weather panel")) as HTMLIFrameElement;
+  const source = iframe.contentWindow!;
+  const postMessage = vi.spyOn(source, "postMessage");
+  await act(() => { window.dispatchEvent(readyEventFrom(source)); });
   await waitFor(() => {
     expect(iframe.isConnected).toBe(true);
     expect(iframe.classList.contains("loading")).toBe(false);
   });
   await act(() => {
-    window.dispatchEvent(requestEventFrom(iframe.contentWindow, 11, {
-      kind: "invoke",
-      ...forecastIntent,
-    }));
+    window.dispatchEvent(requestEventFrom(source, 11, { kind: "invoke", ...forecastIntent }));
   });
   return { ...view, iframe, postMessage, onOutcome, fixture };
 }
@@ -436,27 +400,21 @@ describe("AppSurfaceFrame action confirmation", () => {
       expect(postMessage.mock.calls.some(([message]) =>
         message.type === "response" && message.requestId === 11,
       )).toBe(false);
-
       await fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
-      const outcome = {
-        run_id: "run-1",
-        result: { kind: "completed", result: {}, artifacts: [] },
-      };
+      const outcome = { run_id: "run-1", result: { kind: "completed", result: {}, artifacts: [] } };
       await waitFor(() => expect(postMessage).toHaveBeenCalledWith(okResponse(11, outcome), "*"));
       expect(api.submitAction).toHaveBeenCalledOnce();
       expect(api.submitAction).toHaveBeenCalledWith(
         { app_id: "weather", surface: "panel", instance_id: "i-1" },
-        forecastIntent,
-        expect.any(Function),
+        forecastIntent, expect.any(Function),
       );
       expect(onOutcome).toHaveBeenCalledOnce();
       expect(onOutcome).toHaveBeenCalledWith(outcome);
-      const responses = postMessage.mock.calls.filter(([message]) =>
+      expect(postMessage.mock.calls.filter(([message]) =>
         message.type === "response" && message.requestId === 11,
-      );
-      expect(responses).toHaveLength(1);
+      )).toHaveLength(1);
       expect(postMessage.mock.calls.some(([message]) => message.type === "event")).toBe(false);
-      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(fixture.queryByRole("alertdialog")).toBeNull();
     },
   );
 
@@ -469,23 +427,23 @@ describe("AppSurfaceFrame action confirmation", () => {
       await fireEvent.keyDown(dialog, { key: "Escape" });
     }
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
-      errorResponse(11, "Action cancelled before execution."),
-      "*",
+      errorResponse(11, "Action cancelled before execution."), "*",
     ));
     expect(api.submitAction).not.toHaveBeenCalled();
     expect(onOutcome).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(fixture.queryByRole("alertdialog")).toBeNull();
   });
 
   it("cancels a pending confirmation when the surface unmounts", async () => {
     const { unmount, onOutcome, fixture } = await requestOwnAction();
     await fixture.findByRole("alertdialog");
     await unmount();
+    await act();
     await waitFor(() => expect(closeSurface).toHaveBeenCalledWith({
       app_id: "weather", surface: "panel", instance_id: "i-1",
     }));
     expect(api.submitAction).not.toHaveBeenCalled();
     expect(onOutcome).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(fixture.queryByRole("alertdialog")).toBeNull();
   });
 });
