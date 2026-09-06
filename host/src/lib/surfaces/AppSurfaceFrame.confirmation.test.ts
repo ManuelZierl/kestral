@@ -12,7 +12,7 @@ import type {
 } from "$lib/api";
 import * as api from "$lib/api";
 import { loadSurfaceHostContext } from "$lib/surfaces/modelProfileEditorContext";
-import { errorResponse, okResponse, SURFACE_BRIDGE_PROTOCOL, SURFACE_BRIDGE_VERSION } from "./surfaceBridgeProtocol";
+import { errorResponse, SURFACE_BRIDGE_PROTOCOL, SURFACE_BRIDGE_VERSION } from "./surfaceBridgeProtocol";
 import AppSurfaceFrame from "./AppSurfaceFrame.svelte";
 
 // Confirmation uses its own module/DOM fixtures, separate from the startup
@@ -167,7 +167,17 @@ describe("AppSurfaceFrame action confirmation", () => {
       )).toBe(false);
 
       await fireEvent.click(fixture.getByRole("button", { name: "Continue" }));
-      await vi.waitFor(() => expect(postMessage.mock.calls).toContainEqual([okResponse(11, outcome), "*"]));
+      await vi.waitFor(() => expect(postMessage.mock.calls).toContainEqual([
+        expect.objectContaining({
+          protocol: SURFACE_BRIDGE_PROTOCOL,
+          v: SURFACE_BRIDGE_VERSION,
+          type: "response",
+          requestId: 11,
+          ok: true,
+          result: outcome,
+        }),
+        "*",
+      ]));
       expect(api.submitAction).toHaveBeenCalledOnce();
       expect(api.submitAction).toHaveBeenCalledWith(binding, intent, expect.any(Function));
       expect(onOutcome).toHaveBeenCalledOnce();
