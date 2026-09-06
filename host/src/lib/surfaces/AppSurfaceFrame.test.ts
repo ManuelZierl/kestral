@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ActionIntent, CapabilityDeclaration, InstalledApp, SurfaceDeclaration, SurfaceUiBundle } from "$lib/api";
@@ -145,7 +145,12 @@ function requestEventFrom(source: Window | null, requestId: number, op: Record<s
   }
 }
 
-afterEach(() => {
+afterEach(async () => {
+  // Finish component teardown while its mocks and timer environment still
+  // belong to this test. A late cleanup must not remove the next test's frame.
+  await cleanup();
+  await act();
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.clearAllMocks();
   resolvedAppearance.set({ theme: "light", colors: themes.light, appColors: {} });
@@ -399,22 +404,32 @@ async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-
   }];
   const onOutcome = vi.fn();
   const view = render(AppSurfaceFrame, props({ app: ownApp, onOutcome }));
-  const iframe = await frame();
+  const fixture = within(view.container);
+  const iframe = (await fixture.findByTitle("Weather: Weather panel")) as HTMLIFrameElement;
+  // Finding the DOM node is not a readiness proof: flush bind:this and the
+  // host bridge first, then observe the ready handshake before invoking.
+  await act();
   const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
-  window.dispatchEvent(readyEventFrom(iframe.contentWindow));
-  window.dispatchEvent(requestEventFrom(iframe.contentWindow, 11, {
-    kind: "invoke",
-    ...forecastIntent,
-  }));
-  return { ...view, iframe, postMessage, onOutcome };
+  await act(() => { window.dispatchEvent(readyEventFrom(iframe.contentWindow)); });
+  await waitFor(() => {
+    expect(iframe.isConnected).toBe(true);
+    expect(iframe.classList.contains("loading")).toBe(false);
+  });
+  await act(() => {
+    window.dispatchEvent(requestEventFrom(iframe.contentWindow, 11, {
+      kind: "invoke",
+      ...forecastIntent,
+    }));
+  });
+  return { ...view, iframe, postMessage, onOutcome, fixture };
 }
 
 describe("AppSurfaceFrame action confirmation", () => {
   it.each(["read-only", "local-write"] as const)(
     "forwards an approved %s outcome only through the invoke response, with no self-echo event",
     async (effect) => {
-      const { iframe, postMessage, onOutcome } = await requestOwnAction(effect);
-      const dialog = await screen.findByRole("alertdialog");
+      const { iframe, postMessage, onOutcome, fixture } = await requestOwnAction(effect);
+      const dialog = await fixture.findByRole("alertdialog");
       expect(iframe.contains(dialog)).toBe(false);
       expect(api.submitAction).not.toHaveBeenCalled();
       expect(onOutcome).not.toHaveBeenCalled();
@@ -446,8 +461,8 @@ describe("AppSurfaceFrame action confirmation", () => {
   );
 
   it.each(["Cancel", "Escape"])("does not execute after %s", async (decision) => {
-    const { postMessage, onOutcome } = await requestOwnAction();
-    const dialog = await screen.findByRole("alertdialog");
+    const { postMessage, onOutcome, fixture } = await requestOwnAction();
+    const dialog = await fixture.findByRole("alertdialog");
     if (decision === "Cancel") {
       await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     } else {
@@ -463,8 +478,8 @@ describe("AppSurfaceFrame action confirmation", () => {
   });
 
   it("cancels a pending confirmation when the surface unmounts", async () => {
-    const { unmount, onOutcome } = await requestOwnAction();
-    await screen.findByRole("alertdialog");
+    const { unmount, onOutcome, fixture } = await requestOwnAction();
+    await fixture.findByRole("alertdialog");
     await unmount();
     await waitFor(() => expect(closeSurface).toHaveBeenCalledWith({
       app_id: "weather", surface: "panel", instance_id: "i-1",
