@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 
@@ -137,12 +137,12 @@ async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-
   const postMessage = vi.spyOn(source, "postMessage");
   // Complete the same init/ready sequence as the real iframe before invoking.
   await fireEvent.load(iframe);
-  await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+  await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(
     expect.objectContaining({ type: "init", instanceId: binding.instance_id }), "*",
   ));
   window.dispatchEvent(frameMessage(source, { type: "ready" }));
   await tick();
-  await waitFor(() => {
+  await vi.waitFor(() => {
     expect(iframe.isConnected).toBe(true);
     expect(iframe.classList.contains("loading")).toBe(false);
   });
@@ -167,7 +167,7 @@ describe("AppSurfaceFrame action confirmation", () => {
       )).toBe(false);
 
       await fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
-      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(okResponse(11, outcome), "*"));
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(okResponse(11, outcome), "*"));
       expect(api.submitAction).toHaveBeenCalledOnce();
       expect(api.submitAction).toHaveBeenCalledWith(binding, intent, expect.any(Function));
       expect(onOutcome).toHaveBeenCalledOnce();
@@ -187,7 +187,7 @@ describe("AppSurfaceFrame action confirmation", () => {
     } else {
       await fireEvent.keyDown(dialog, { key: "Escape" });
     }
-    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       errorResponse(11, "Action cancelled before execution."), "*",
     ));
     expect(api.submitAction).not.toHaveBeenCalled();
@@ -199,7 +199,7 @@ describe("AppSurfaceFrame action confirmation", () => {
     const { unmount, fixture, onOutcome } = await requestOwnAction();
     await unmount();
     await tick();
-    await waitFor(() => expect(api.closeSurface).toHaveBeenCalledWith(binding));
+    await vi.waitFor(() => expect(api.closeSurface).toHaveBeenCalledWith(binding));
     expect(api.submitAction).not.toHaveBeenCalled();
     expect(onOutcome).not.toHaveBeenCalled();
     expect(fixture.queryByRole("alertdialog")).toBeNull();
