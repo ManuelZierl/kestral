@@ -24,10 +24,10 @@ function dataScopeCovered(granted: DataScope, requested: DataScope): boolean {
 }
 
 /**
- * Mirror the broker's deterministic grant selection for diagnostics and tests.
- * This helper is not used as a security decision: grant state can change
- * between a frontend read and kernel preparation, so a frontend snapshot must
- * never decide whether a custom surface needs physical user attestation.
+ * Mirror the broker's effective condition for diagnostics and tests. The
+ * broker prefers silent, then notify, then requires-approval among active
+ * covering grants. This helper is deliberately not used as a security gate:
+ * frontend grant state can change before kernel preparation.
  */
 export function effectiveGrantCondition(
   grants: GrantView[],
@@ -39,11 +39,7 @@ export function effectiveGrantCondition(
     .filter((grant) => grant.status === "active")
     .filter((grant) => grant.holder === holder)
     .filter((grant) => capabilityCovered(grant.scope, capability))
-    .filter((grant) => dataScopeCovered(grant.data_scope, requestedDataScope))
-    .sort((left, right) => {
-      const issued = left.issued_at.localeCompare(right.issued_at);
-      return issued !== 0 ? issued : left.grant_id.localeCompare(right.grant_id);
-    });
+    .filter((grant) => dataScopeCovered(grant.data_scope, requestedDataScope));
 
   if (covering.some((grant) => grant.condition === "silent")) return "silent";
   if (covering.some((grant) => grant.condition === "notify")) return "notify";
