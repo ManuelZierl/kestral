@@ -53,11 +53,11 @@ async function listFiles(directory) {
   return readdir(directory);
 }
 
-function matchingFile(files, budget) {
+function matchingFiles(files, budget) {
   if (budget.contains) {
-    return files.find((name) => name.includes(budget.suffix) && name.endsWith(budget.extension ?? ""));
+    return files.filter((name) => name.includes(budget.suffix) && name.endsWith(budget.extension ?? ""));
   }
-  return files.find((name) => name.endsWith(budget.suffix));
+  return files.filter((name) => name.endsWith(budget.suffix));
 }
 
 export async function checkProductBudgets(platform, directory) {
@@ -67,13 +67,24 @@ export async function checkProductBudgets(platform, directory) {
   const failures = [];
 
   for (const budget of PRODUCT_BUDGETS[platform]) {
-    const file = matchingFile(files, budget);
+    const matches = matchingFiles(files, budget);
     const label = budget.contains ? `*${budget.suffix}*${budget.extension ?? ""}` : `*${budget.suffix}`;
-    if (!file) {
+    if (matches.length === 0) {
       failures.push(`required ${platform} release artifact '${label}' is missing`);
       continue;
     }
+    if (matches.length !== 1) {
+      failures.push(
+        `required ${platform} release artifact '${label}' is ambiguous: ${matches.sort().join(", ")}`,
+      );
+      continue;
+    }
+    const file = matches[0];
     const info = await stat(resolve(root, file));
+    if (!info.isFile()) {
+      failures.push(`${file}: expected a regular release artifact file`);
+      continue;
+    }
     measurements.push({ file, bytes: info.size, maxBytes: budget.maxBytes });
     if (info.size > budget.maxBytes) {
       failures.push(`${file}: ${formatMiB(info.size)} exceeds ${formatMiB(budget.maxBytes)}`);
