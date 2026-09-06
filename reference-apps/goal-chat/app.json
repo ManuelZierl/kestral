@@ -179,7 +179,7 @@
   "integrity": {
     "algorithm": "sha256",
     "assets": {
-      "ui/index.html": "sha256-e71f11532e1bd02f8b1351831241a9071e236d87b44a2a6a642c647203db69fb"
+      "ui/index.html": "sha256-3a96024e3c403d2372c825491d0f0a8f8e301e176c792722abfcb9f1ddc8135b"
     }
   }
 }
