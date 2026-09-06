@@ -51,14 +51,18 @@ hidden fallback behavior.
   can activate. The opt-in is host-wide rather than scoped to one package.
 - Custom app UI is sandboxed in an opaque-origin iframe, but OS-level per-frame
   process isolation is not guaranteed.
-- Approval-required own-surface `read-only`/`local-write` actions now require a
-  host-owned physical confirmation before the sandboxed frame may forward the
-  request into the kernel shortcut. The frame cannot synthesize that host
-  confirmation. Capability effects remain provider-declared, however, so this
-  attests the human gesture rather than independently proving that an app's
-  declared effect accurately describes its implementation. Cross-app,
-  external-write, and destructive actions continue through normal kernel-owned
-  trusted chrome.
+- A sandboxed custom surface's own `read-only`/`local-write` actions require a
+  host-owned physical confirmation before the frame may forward the request,
+  regardless of the frontend's current grant snapshot. This is deliberately
+  stricter than `silent`/`notify` standing permissions: using frontend grant
+  state as the gate would create a race if authority changed before kernel
+  preparation. The frame cannot synthesize the host confirmation. Capability
+  effects remain provider-declared, so the confirmation attests a human gesture
+  rather than independently proving that the declared effect matches the app's
+  implementation. Cross-app, external-write, destructive, and unspecified
+  effects continue through normal kernel-owned trusted chrome. A future cleaner
+  design is to make the kernel consume a single-use host gesture attestation, or
+  remove the direct-surface approval shortcut entirely.
 - App backends have no general crash-loop or automatic restart policy. The Apps
   screen exposes failed startup state and a manual retry that tears down the
   failed lifecycle and reactivates the same inspected revision through the
