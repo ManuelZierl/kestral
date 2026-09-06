@@ -7,12 +7,14 @@
     getAppConfig,
     getSurfaceState,
     listAppArtifacts,
+    listGrants,
     openSurface,
     putSurfaceState,
     requestManagedData,
     submitAction,
     cancelSurfaceAction,
     updateAppConfig,
+    type ActionIntent,
     type CapabilityRef,
     type InstalledApp,
     type JsonObject,
@@ -34,6 +36,7 @@
     type HostToAppMessage,
     type SurfaceInitMessage,
   } from "$lib/surfaces/surfaceBridgeProtocol";
+  import { needsHostGestureAttestation } from "$lib/surfaces/surfaceActionAttestation";
   import { loadSurfaceHostContext } from "$lib/surfaces/modelProfileEditorContext";
   import { resolvedAppearance, surfaceThemeVariables } from "$lib/stores/theme";
   import LoadingIndicator from "$lib/shell/LoadingIndicator.svelte";
@@ -67,6 +70,9 @@
   let appNotice = $state<string | null>(null);
   let documentUrl = $state<string>("");
   let iframeEl = $state<HTMLIFrameElement | null>(null);
+  let pendingAttestation = $state<ActionIntent | null>(null);
+  let attestationCancelButton = $state<HTMLButtonElement | null>(null);
+  let pendingAttestationResolve: ((approved: boolean) => void) | null = null;
   // Content height the frame reports over the bridge, so the iframe fits its
   // content instead of stranding a small control in a large fixed box. Clamped
   // against an untrusted frame reporting an absurd value.
@@ -76,6 +82,11 @@
   const appId = $derived(app.manifest.app_id);
   const appThemeColors = $derived(app.theme_colors ?? []);
   const declaredIntents = $derived<CapabilityRef[]>(surface.intents);
+  const pendingDeclaration = $derived(
+    pendingAttestation
+      ? app.manifest.capabilities.find((capability) => capability.name === pendingAttestation?.capability.capability) ?? null
+      : null,
+  );
   // Host storage supports a single config section per app; expose its schema
   // for the frame to render a settings form.
   const configSchema = $derived<JsonObject | null>(
@@ -136,6 +147,46 @@
     // kernel binding without producing an unhandled rejection.
     void closeSurface(currentBinding).catch(() => {});
   }
+
+  function finishAttestation(approved: boolean): void {
+    const resolve = pendingAttestationResolve;
+    pendingAttestationResolve = null;
+    pendingAttestation = null;
+    resolve?.(approved);
+  }
+
+  async function attestOwnApprovalAction(intent: ActionIntent): Promise<boolean> {
+    const grants = await retryKernelBusy(() => listGrants());
+    if (!needsHostGestureAttestation(
+      appId,
+      app.manifest.capabilities,
+      grants,
+      intent.capability,
+      intent.data_scope,
+    )) {
+      return true;
+    }
+    if (pendingAttestation !== null || pendingAttestationResolve !== null) {
+      throw new Error("Another app action is already waiting for host confirmation.");
+    }
+    return await new Promise<boolean>((resolve) => {
+      pendingAttestationResolve = resolve;
+      pendingAttestation = intent;
+    });
+  }
+
+  function handleAttestationKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finishAttestation(false);
+    }
+  }
+
+  $effect(() => {
+    if (pendingAttestation && attestationCancelButton) {
+      queueMicrotask(() => attestationCancelButton?.focus());
+    }
+  });
 
   onMount(() => {
     void start();
@@ -224,6 +275,14 @@
       declaredIntents,
       actions: {
         invoke: async (intent, onProgress) => {
+          // The kernel historically lets a provider's own read/local-write
+          // surface action stand in for a per-use approval. A sandboxed frame
+          // cannot prove that a human actually clicked, so host chrome obtains
+          // that physical gesture before forwarding exactly those actions.
+          // The kernel still re-checks the grant and remains the authority.
+          if (!(await attestOwnApprovalAction(intent))) {
+            throw new Error("Action cancelled before execution.");
+          }
           const outcome = await submitAction(binding!, intent, onProgress);
           onOutcome?.(outcome);
           // The frame receives this action's result as the invoke return value
@@ -342,6 +401,7 @@
       window.removeEventListener("message", listener);
       listener = null;
     }
+    finishAttestation(false);
     clearHandshakeTimer();
     clearStartRetryTimer();
     bridge = null;
@@ -353,6 +413,48 @@
     teardown();
   });
 </script>
+
+{#if pendingAttestation}
+  <div class="attestation-backdrop">
+    <div
+      class="attestation-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="attestation-title"
+      aria-describedby="attestation-detail"
+      tabindex="-1"
+      onkeydown={handleAttestationKeydown}
+    >
+      <div class="attestation-badge">Kestral host confirmation</div>
+      <h2 id="attestation-title">Confirm app action</h2>
+      <p id="attestation-detail">
+        <strong>{app.manifest.display_name}</strong> wants to use
+        <code>{pendingAttestation.capability.provider}/{pendingAttestation.capability.capability}</code>.
+        This confirmation is outside the app frame so scripted app UI cannot count as your approval.
+      </p>
+      {#if pendingDeclaration}
+        <p class="attestation-description">{pendingDeclaration.description}</p>
+      {/if}
+      {#if pendingAttestation.goal}
+        <div class="attestation-goal">
+          <span>Purpose</span>
+          <strong>{pendingAttestation.goal}</strong>
+        </div>
+      {/if}
+      <div class="attestation-actions">
+        <button
+          type="button"
+          class="attestation-deny"
+          bind:this={attestationCancelButton}
+          onclick={() => finishAttestation(false)}
+        >Cancel</button>
+        <button type="button" class="attestation-approve" onclick={() => finishAttestation(true)}>
+          Continue
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if status === "error"}
   <div class="surface-error" role="alert">
@@ -407,6 +509,89 @@
 {/if}
 
 <style>
+  .attestation-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 1rem;
+    background: var(--color-scrim);
+  }
+  .attestation-dialog {
+    box-sizing: border-box;
+    width: min(100%, 30rem);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 1.25rem 1.5rem;
+    border: 3px solid var(--color-chrome-accent);
+    border-radius: 14px;
+    background: var(--color-chrome-bg);
+    color: var(--color-chrome-text);
+    box-shadow: 0 12px 48px var(--color-shadow-strong);
+  }
+  .attestation-badge {
+    display: inline-block;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 6px;
+    background: var(--color-chrome-accent);
+    color: var(--color-chrome-accent-contrast);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .attestation-dialog h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
+  }
+  .attestation-dialog p {
+    margin: 0 0 0.65rem;
+    line-height: 1.45;
+  }
+  .attestation-dialog code {
+    color: var(--color-chrome-text-muted);
+  }
+  .attestation-description {
+    color: var(--color-chrome-text-muted);
+  }
+  .attestation-goal {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0.8rem 0;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--color-chrome-panel-border);
+    border-radius: 8px;
+    background: var(--color-chrome-panel-bg);
+  }
+  .attestation-goal span {
+    color: var(--color-chrome-text-muted);
+    font-size: 0.75rem;
+  }
+  .attestation-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  .attestation-actions button {
+    min-height: 2rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .attestation-deny {
+    border: 1px solid var(--color-chrome-panel-border);
+    background: var(--color-chrome-panel-bg);
+    color: var(--color-chrome-text);
+  }
+  .attestation-approve {
+    border: 1px solid var(--color-chrome-accent);
+    background: var(--color-chrome-accent);
+    color: var(--color-chrome-accent-contrast);
+    font-weight: 700;
+  }
   .surface-frame {
     margin-top: 0.9rem;
     display: grid;

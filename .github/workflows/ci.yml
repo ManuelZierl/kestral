@@ -4,13 +4,16 @@ name: CI
 #   main — integration and release branch. Pull requests and pushes run the
 #          full matrix including Windows, native credential integration, and
 #          Windows package builds.
+#   fix/trustworthy-alpha-foundation — release-candidate hardening branch.
+#          PRs targeting it run the same matrix so alpha-foundation changes are
+#          validated before they are promoted to main.
 # Releases are produced by release.yml when a v* tag lands on main.
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, fix/trustworthy-alpha-foundation]
 
 permissions:
   contents: read
@@ -42,6 +45,8 @@ jobs:
           working-directory: docs
       - name: Verify product versions
         run: node scripts/check-release-version.mjs
+      - name: Test product budget checker
+        run: node --test scripts/check-product-budgets.test.mjs
       - name: Test promoted app contract verifier
         run: node --test scripts/check-promoted-app-contracts.test.mjs
       - name: Verify promoted app contracts
@@ -73,7 +78,14 @@ jobs:
         run: npm run check
       - name: Frontend tests
         working-directory: host
-        run: npm test
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-junit.xml
+      - name: Preserve frontend test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-linux
+          path: host/vitest-junit.xml
+          if-no-files-found: ignore
       - name: Split development launcher and gateway
         working-directory: host
         run: npm run test:split-dev
@@ -113,7 +125,9 @@ jobs:
           bash scripts/package-linux-release.sh "$version"
           cp THIRD-PARTY-NOTICES.txt host/build/THIRD-PARTY-NOTICES.txt
           (cd host/build && zip -qr "../../target/release/public/kestral-browser-client-${version}.zip" .)
-           cp THIRD-PARTY-NOTICES.txt target/release/public/
+          cp THIRD-PARTY-NOTICES.txt target/release/public/
+      - name: Enforce Linux product size budgets
+        run: node scripts/check-product-budgets.mjs --platform linux
       - name: Require reproducible tracked outputs
         run: git diff --exit-code
       - uses: actions/upload-artifact@v6
@@ -122,14 +136,14 @@ jobs:
           path: target/release/public/*
           if-no-files-found: error
 
-  # The Windows leg is the release gate: it only runs for main (PRs targeting
-  # main and pushes to main), covering the native credential store and the
-  # native package matrix on the shipping platform.
+  # The Windows leg is the release gate. Alpha-foundation PRs run it too: the
+  # branch specifically changes trust/distribution behavior and should not wait
+  # until promotion to main to discover native-only failures.
   test-windows:
     name: Core tests + packages (Windows)
     runs-on: windows-latest
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'fix/trustworthy-alpha-foundation')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - uses: actions/checkout@v6
@@ -142,6 +156,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify product versions
         run: node scripts/check-release-version.mjs
+      - name: Test product budget checker
+        run: node --test scripts/check-product-budgets.test.mjs
       - name: Test promoted app contract verifier
         run: node --test scripts/check-promoted-app-contracts.test.mjs
       - name: Verify promoted app contracts
@@ -169,7 +185,14 @@ jobs:
         run: npm run check
       - name: Frontend tests
         working-directory: host
-        run: npm test
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-junit.xml
+      - name: Preserve frontend test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-windows
+          path: host/vitest-junit.xml
+          if-no-files-found: ignore
       - name: Frontend dependency audit
         working-directory: host
         run: npm audit --audit-level=high
@@ -190,6 +213,8 @@ jobs:
       - name: Package portable Windows build
         shell: pwsh
         run: scripts/package-windows-release.ps1
+      - name: Enforce Windows product size budgets
+        run: node scripts/check-product-budgets.mjs --platform windows
       - name: Stage Windows third-party notices
         shell: pwsh
         run: Copy-Item "THIRD-PARTY-NOTICES.txt" "target/release/public/THIRD-PARTY-NOTICES.txt"
