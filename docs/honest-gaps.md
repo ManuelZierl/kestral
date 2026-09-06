@@ -51,18 +51,18 @@ hidden fallback behavior.
   can activate. The opt-in is host-wide rather than scoped to one package.
 - Custom app UI is sandboxed in an opaque-origin iframe, but OS-level per-frame
   process isolation is not guaranteed.
-- A sandboxed custom surface's own `read-only`/`local-write` actions require a
-  host-owned physical confirmation before the frame may forward the request,
-  regardless of the frontend's current grant snapshot. This is deliberately
-  stricter than `silent`/`notify` standing permissions: using frontend grant
-  state as the gate would create a race if authority changed before kernel
-  preparation. The frame cannot synthesize the host confirmation. Capability
-  effects remain provider-declared, so the confirmation attests a human gesture
-  rather than independently proving that the declared effect matches the app's
-  implementation. Cross-app, external-write, destructive, and unspecified
-  effects continue through normal kernel-owned trusted chrome. A future cleaner
-  design is to make the kernel consume a single-use host gesture attestation, or
-  remove the direct-surface approval shortcut entirely.
+- As a conservative alpha guard, every sandboxed custom surface own-provider
+  `read-only`/`local-write` invoke requires a host-owned physical confirmation
+  before the frame may forward the request. This intentionally applies even
+  when the current standing grant is `silent` or `notify`: using a frontend
+  grant snapshot to decide whether confirmation is needed creates a race if
+  authority changes before kernel preparation. The frame cannot synthesize the
+  host confirmation. Capability effects remain provider-declared, so the guard
+  attests a human gesture rather than independently proving that the declared
+  effect matches the app's implementation. Cross-app, external-write,
+  destructive, and unspecified effects continue through normal kernel-owned
+  trusted chrome. The cleaner long-term fix is a single-use kernel-consumed
+  gesture attestation, or removal of the direct-surface approval shortcut.
 - App backends have no general crash-loop or automatic restart policy. The Apps
   screen exposes failed startup state and a manual retry that tears down the
   failed lifecycle and reactivates the same inspected revision through the
