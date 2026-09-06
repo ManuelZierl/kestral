@@ -24,11 +24,10 @@ function dataScopeCovered(granted: DataScope, requested: DataScope): boolean {
 }
 
 /**
- * Mirror the broker's deterministic grant selection closely enough to decide
- * whether the kernel's own-surface shortcut would otherwise consume a
- * requires-approval grant without trusted chrome. The kernel remains the
- * authority: this helper never grants access and stale data can only result in
- * an extra confirmation or a later kernel refusal.
+ * Mirror the broker's deterministic grant selection for diagnostics and tests.
+ * This helper is not used as a security decision: grant state can change
+ * between a frontend read and kernel preparation, so a frontend snapshot must
+ * never decide whether a custom surface needs physical user attestation.
  */
 export function effectiveGrantCondition(
   grants: GrantView[],
@@ -51,19 +50,27 @@ export function effectiveGrantCondition(
   return covering.length > 0 ? "requires-approval" : null;
 }
 
+/**
+ * A sandboxed custom surface cannot attest that an invoke request came from a
+ * human gesture. Until the kernel owns an attestation token (or removes its
+ * direct-provider surface exemption), require host-owned confirmation for
+ * every own-provider read/local-write invoke. This is intentionally stricter
+ * than the standing grant condition: consulting grants here creates a TOCTOU
+ * gap where authority can change after the frontend check but before kernel
+ * preparation.
+ *
+ * Cross-app, external-write, destructive and unspecified effects are already
+ * routed through the kernel's normal trusted-chrome policy and must not gain a
+ * parallel frontend approval path.
+ */
 export function needsHostGestureAttestation(
   appId: string,
   capabilities: CapabilityDeclaration[],
-  grants: GrantView[],
+  _grants: GrantView[],
   capability: CapabilityRef,
-  dataScope: DataScope,
+  _dataScope: DataScope,
 ): boolean {
-  // Cross-app work, destructive work, and external effects are already driven
-  // through normal trusted chrome by the kernel. The historical shortcut only
-  // applies to an app invoking its own read/local-write capability.
   if (capability.provider !== appId) return false;
   const declaration = capabilities.find((candidate) => candidate.name === capability.capability);
-  if (!declaration || !["read-only", "local-write"].includes(declaration.effect)) return false;
-
-  return effectiveGrantCondition(grants, appId, capability, dataScope) === "requires-approval";
+  return declaration !== undefined && ["read-only", "local-write"].includes(declaration.effect);
 }
