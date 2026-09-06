@@ -112,18 +112,19 @@ function app(effect: CapabilityDeclaration["effect"]): InstalledApp {
 }
 
 function frameMessage(source: Window, payload: Record<string, unknown>): MessageEvent {
-  const event = new MessageEvent("message", {
-    origin: "null",
-    data: {
-      protocol: SURFACE_BRIDGE_PROTOCOL,
-      v: SURFACE_BRIDGE_VERSION,
-      instanceId: binding.instance_id,
-      ...payload,
-    },
-  });
-  // jsdom versions disagree on accepting an iframe Window in the constructor.
-  Object.defineProperty(event, "source", { value: source });
-  return event;
+  const data = {
+    protocol: SURFACE_BRIDGE_PROTOCOL,
+    v: SURFACE_BRIDGE_VERSION,
+    instanceId: binding.instance_id,
+    ...payload,
+  };
+  try {
+    return new MessageEvent("message", { origin: "null", data, source });
+  } catch {
+    const event = new MessageEvent("message", { origin: "null", data });
+    Object.defineProperty(event, "source", { value: source });
+    return event;
+  }
 }
 
 async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-only") {
