@@ -1,0 +1,185 @@
+{
+  "format_version": 1,
+  "id": "dev.kestral.goal-chat",
+  "version": "0.1.0",
+  "display_name": "Goal Chat",
+  "description": "A goal-oriented conversation that maintains an explicit goal, working solution, decisions, constraints, questions, and assumptions.",
+  "icon": {
+    "kind": "kestral",
+    "name": "check-square"
+  },
+  "min_host_version": "0.1.0-alpha.1",
+  "manifest": {
+    "surfaces": [
+      {
+        "name": "workspace",
+        "kind": "dashboard",
+        "title": "Goal Chat",
+        "description": "Work toward a goal while keeping the model's interpretation and best current solution explicit.",
+        "intents": [
+          {
+            "provider": "llm-provider",
+            "capability": "llm.generate"
+          }
+        ],
+        "ui": {
+          "entry": "ui/index.html",
+          "connect_src": []
+        }
+      }
+    ],
+    "grant_requests": [
+      {
+        "scope": {
+          "kind": "exact-capability",
+          "provider": "llm-provider",
+          "capability": "llm.generate"
+        },
+        "data_scope": {
+          "kind": "none"
+        },
+        "condition": "requires-approval",
+        "reason": "Send the current Goal Chat working state, recent conversation context, and latest user message to the configured model when you send a message.",
+        "duration": {
+          "kind": "non-expiring"
+        }
+      }
+    ]
+  },
+  "backend": {
+    "kind": "none"
+  },
+  "data": {
+    "kind": "host-managed",
+    "contract_version": 1,
+    "collections": {
+      "state": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "user_goal",
+            "goal_interpretation",
+            "working_solution",
+            "open_questions",
+            "decisions",
+            "constraints",
+            "assumptions"
+          ],
+          "properties": {
+            "user_goal": {
+              "type": "string",
+              "maxLength": 12000
+            },
+            "goal_interpretation": {
+              "type": "string",
+              "maxLength": 12000
+            },
+            "working_solution": {
+              "type": "string",
+              "maxLength": 60000
+            },
+            "open_questions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "maxItems": 40
+            },
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "maxItems": 80
+            },
+            "constraints": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "maxItems": 80
+            },
+            "assumptions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "maxItems": 80
+            }
+          }
+        },
+        "indexes": [],
+        "operations": [
+          "get",
+          "list",
+          "create",
+          "replace",
+          "delete"
+        ],
+        "limits": {
+          "records": 1,
+          "record_bytes": 262144,
+          "query_results": 10
+        }
+      },
+      "messages": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "content",
+            "created_at"
+          ],
+          "properties": {
+            "role": {
+              "enum": [
+                "user",
+                "assistant"
+              ]
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 30000
+            },
+            "created_at": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        },
+        "indexes": [],
+        "operations": [
+          "get",
+          "list",
+          "create",
+          "replace",
+          "delete"
+        ],
+        "limits": {
+          "records": 10000,
+          "record_bytes": 65536,
+          "query_results": 100
+        }
+      }
+    },
+    "limits": {
+      "total_bytes": 16777216,
+      "transaction_operations": 32
+    },
+    "exports": []
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "assets": {
+      "ui/index.html": "sha256-e71f11532e1bd02f8b1351831241a9071e236d87b44a2a6a642c647203db69fb"
+    }
+  }
+}
