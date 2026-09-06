@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CapabilityDeclaration, GrantView } from "$lib/api";
+import type { CapabilityDeclaration, DataScope, GrantView } from "$lib/api";
 import {
   effectiveGrantCondition,
   needsHostGestureAttestation,
@@ -8,7 +8,7 @@ import {
 
 const appId = "com.example.notes";
 const capability = { provider: appId, capability: "save" };
-const none = { kind: "none" } as const;
+const none: DataScope = { kind: "none" };
 
 function declaration(effect: CapabilityDeclaration["effect"]): CapabilityDeclaration {
   return {
@@ -39,27 +39,33 @@ function grant(
 }
 
 describe("surface action attestation", () => {
-  it("requires a host gesture for the own read/local-write approval shortcut", () => {
+  it("requires a host gesture for own read/local-write actions regardless of the grant snapshot", () => {
+    for (const condition of ["silent", "notify", "requires-approval"] as const) {
+      expect(
+        needsHostGestureAttestation(
+          appId,
+          [declaration("local-write")],
+          [grant(condition)],
+          capability,
+          none,
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("does not trust an empty or stale grant snapshot to skip host attestation", () => {
+    expect(
+      needsHostGestureAttestation(appId, [declaration("read-only")], [], capability, none),
+    ).toBe(true);
     expect(
       needsHostGestureAttestation(
         appId,
-        [declaration("local-write")],
-        [grant("requires-approval")],
+        [declaration("read-only")],
+        [grant("silent", { status: "revoked" })],
         capability,
         none,
       ),
     ).toBe(true);
-  });
-
-  it("does not add a second prompt when a less-interactive covering grant wins", () => {
-    const grants = [
-      grant("requires-approval", { grant_id: "grant-a" }),
-      grant("silent", { grant_id: "grant-b", issued_at: "2026-09-05T11:00:00Z" }),
-    ];
-    expect(effectiveGrantCondition(grants, appId, capability, none)).toBe("silent");
-    expect(
-      needsHostGestureAttestation(appId, [declaration("read-only")], grants, capability, none),
-    ).toBe(false);
   });
 
   it("leaves cross-app and high-risk effects to normal kernel trusted chrome", () => {
@@ -83,8 +89,8 @@ describe("surface action attestation", () => {
     ).toBe(false);
   });
 
-  it("matches resource-scope coverage and ignores inactive grants", () => {
-    const requested = { kind: "resources", resource_ids: ["a"] } as const;
+  it("mirrors grant selection for diagnostics without using it as the attestation gate", () => {
+    const requested: DataScope = { kind: "resources", resource_ids: ["a"] };
     const grants: GrantView[] = [
       grant("silent", {
         grant_id: "revoked",
