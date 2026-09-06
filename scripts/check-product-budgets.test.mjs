@@ -33,6 +33,12 @@ test("accepts Linux release artifacts within the configured ceilings", async () 
   });
 });
 
+test("rejects an unsupported platform even when called as a library", async () => {
+  await withTempDirectory(async (directory) => {
+    await assert.rejects(() => checkProductBudgets("macos", directory), /unsupported product budget platform/);
+  });
+});
+
 test("fails closed when a required release artifact is absent", async () => {
   await withTempDirectory(async (directory) => {
     const result = await checkProductBudgets("windows", directory);
