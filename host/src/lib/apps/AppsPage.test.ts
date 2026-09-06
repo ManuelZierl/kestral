@@ -46,6 +46,7 @@ const applyManagedAppTransition = vi.mocked(api.applyManagedAppTransition);
 const setAppEnabled = vi.mocked(api.setAppEnabled);
 const uninstallApp = vi.mocked(api.uninstallApp);
 const openDirectory = vi.mocked(dialog.open);
+const firstAppHeading = "Make Kestral useful for one real job";
 
 function status(overrides: Partial<AppStatusView> = {}): AppStatusView {
   return {
@@ -146,6 +147,12 @@ function installedApp(id = "com.example.thing"): InstalledApp {
   };
 }
 
+async function openInstaller(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await screen.findByText(firstAppHeading);
+  await user.click(screen.getByRole("button", { name: "Install an app" }));
+  await screen.findByLabelText("Package directory path");
+}
+
 beforeEach(() => {
   apps.set([]);
   activeAppId.set(null);
@@ -198,11 +205,11 @@ describe("Apps manager", () => {
     render(AppsPage);
 
     expect(screen.getByRole("status").textContent).toContain("Loading apps");
-    expect(screen.queryByText("No apps yet")).toBeNull();
+    expect(screen.queryByText(firstAppHeading)).toBeNull();
     expect(listApps).not.toHaveBeenCalled();
 
     finishStatuses([]);
-    expect(await screen.findByText("No apps yet")).toBeTruthy();
+    expect(await screen.findByText(firstAppHeading)).toBeTruthy();
     expect(listApps).toHaveBeenCalledOnce();
   });
 
@@ -347,12 +354,12 @@ describe("Apps manager", () => {
     const user = userEvent.setup();
     render(AppsPage);
 
-    expect(await screen.findByText(/Could not load apps: Error: backend unavailable/)).toBeTruthy();
+    expect(await screen.findByText("Error: backend unavailable")).toBeTruthy();
     expect(screen.queryByText("Back to app management")).toBeNull();
 
     const beforeRetry = listApps.mock.calls.length;
-    await user.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("No apps yet")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Refresh state" }));
+    expect(await screen.findByText(firstAppHeading)).toBeTruthy();
     expect(listApps.mock.calls.length).toBeGreaterThan(beforeRetry);
   });
 
@@ -396,7 +403,7 @@ describe("Apps manager", () => {
     const user = userEvent.setup();
     render(AppsPage);
 
-    await screen.findByText("No apps yet");
+    await openInstaller(user);
     await user.type(screen.getByLabelText("Package directory path"), "/pkgs/new-app");
     await user.click(screen.getByRole("button", { name: "Review app" }));
 
@@ -418,6 +425,7 @@ describe("Apps manager", () => {
     const user = userEvent.setup();
     render(AppsPage);
 
+    await openInstaller(user);
     await user.click(screen.getByRole("button", { name: "Browse…" }));
 
     expect(openDirectory).toHaveBeenCalledWith({
@@ -434,7 +442,7 @@ describe("Apps manager", () => {
     inspectGitPackage.mockResolvedValue(inspection());
     const user = userEvent.setup();
     render(AppsPage);
-    await screen.findByText("No apps yet");
+    await openInstaller(user);
 
     await user.click(screen.getByRole("button", { name: "Public Git URL" }));
     await user.type(screen.getByLabelText("Public Git URL"), "https://github.com/example/app.git");
@@ -452,7 +460,7 @@ describe("Apps manager", () => {
     );
     const user = userEvent.setup();
     render(AppsPage);
-    await screen.findByText("No apps yet");
+    await openInstaller(user);
 
     await user.type(screen.getByLabelText("Package directory path"), "/pkgs/bad");
     await user.click(screen.getByRole("button", { name: "Review app" }));
