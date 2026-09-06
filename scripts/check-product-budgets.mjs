@@ -61,7 +61,14 @@ function matchingFiles(files, budget) {
 }
 
 export async function checkProductBudgets(platform, directory) {
+  if (!Object.hasOwn(PRODUCT_BUDGETS, platform)) {
+    throw new Error(`unsupported product budget platform '${platform}'`);
+  }
   const root = resolve(directory);
+  const rootInfo = await stat(root);
+  if (!rootInfo.isDirectory()) {
+    throw new Error(`product budget path is not a directory: ${root}`);
+  }
   const files = await listFiles(root);
   const measurements = [];
   const failures = [];
