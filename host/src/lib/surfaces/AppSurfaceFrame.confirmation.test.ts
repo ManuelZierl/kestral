@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 
@@ -129,7 +129,7 @@ function frameMessage(source: Window, payload: Record<string, unknown>): Message
 async function requestOwnAction(effect: CapabilityDeclaration["effect"] = "read-only") {
   const onOutcome = vi.fn();
   const view = render(AppSurfaceFrame, { props: { app: app(effect), surface, bundle, onOutcome } });
-  const fixture = within(view.container);
+  const fixture = view;
   await tick();
   const iframe = await fixture.findByTitle("Weather: Weather panel") as HTMLIFrameElement;
   await tick();
@@ -166,7 +166,7 @@ describe("AppSurfaceFrame action confirmation", () => {
         message.type === "response" && message.requestId === 11,
       )).toBe(false);
 
-      await fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+      await fireEvent.click(fixture.getByRole("button", { name: "Continue" }));
       await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith(okResponse(11, outcome), "*"));
       expect(api.submitAction).toHaveBeenCalledOnce();
       expect(api.submitAction).toHaveBeenCalledWith(binding, intent, expect.any(Function));
@@ -183,7 +183,7 @@ describe("AppSurfaceFrame action confirmation", () => {
   it.each(["Cancel", "Escape"])("does not execute after %s", async (decision) => {
     const { dialog, fixture, postMessage, onOutcome } = await requestOwnAction();
     if (decision === "Cancel") {
-      await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      await fireEvent.click(fixture.getByRole("button", { name: "Cancel" }));
     } else {
       await fireEvent.keyDown(dialog, { key: "Escape" });
     }
