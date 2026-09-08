@@ -1,0 +1,103 @@
+{
+  "format_version": 1,
+  "id": "com.example.focus-app",
+  "version": "0.1.0",
+  "display_name": "Focus App",
+  "description": "A focused workspace for a recurring personal workflow.",
+  "icon": {
+    "kind": "kestral",
+    "name": "check-square"
+  },
+  "min_host_version": "0.1.0-alpha.1",
+  "manifest": {
+    "surfaces": [
+      {
+        "name": "workspace",
+        "kind": "dashboard",
+        "title": "Focus App",
+        "description": "A focused workspace for a recurring personal workflow.",
+        "intents": [
+          {
+            "provider": "llm-provider",
+            "capability": "llm.generate"
+          }
+        ],
+        "ui": {
+          "entry": "ui/index.html",
+          "connect_src": []
+        }
+      }
+    ],
+    "grant_requests": [
+      {
+        "scope": {
+          "kind": "exact-capability",
+          "provider": "llm-provider",
+          "capability": "llm.generate"
+        },
+        "data_scope": {
+          "kind": "none"
+        },
+        "condition": "requires-approval",
+        "reason": "Send only the visible item titles and completion status when you explicitly ask for a suggested next step.",
+        "duration": {
+          "kind": "non-expiring"
+        }
+      }
+    ]
+  },
+  "backend": {
+    "kind": "none"
+  },
+  "data": {
+    "kind": "host-managed",
+    "contract_version": 1,
+    "collections": {
+      "items": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title",
+            "done"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "^[^\\r\\n]*$"
+            },
+            "done": {
+              "type": "boolean"
+            }
+          }
+        },
+        "indexes": [],
+        "operations": [
+          "get",
+          "list",
+          "create",
+          "replace",
+          "delete"
+        ],
+        "limits": {
+          "records": 10000,
+          "record_bytes": 4096,
+          "query_results": 100
+        }
+      }
+    },
+    "limits": {
+      "total_bytes": 16777216,
+      "transaction_operations": 32
+    },
+    "exports": []
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "assets": {
+      "ui/index.html": "sha256-f46ef6c6c6c92390647601f3382a3f0216bfecb74ca0ca796d28ddbc7470eaaf"
+    }
+  }
+}

@@ -64,15 +64,26 @@
   >
     {#if $currentTab === "chat"}
       <ChatSurface />
-    {:else if $currentTab === "apps"}
-      <AppsPage />
     {:else if $currentTab === "stuff"}
       <StuffPage />
     {:else if $currentTab === "settings"}
       <SettingsPage />
-    {:else}
+    {:else if $currentTab === "system"}
       <SystemPage />
     {/if}
+
+    <!--
+      Keep AppsPage mounted after first host render. A custom app screen can
+      legitimately contain unsaved local UI state (for example a Daily Review
+      note draft). Switching to Chat or Settings is navigation, not an explicit
+      discard action, so it must not destroy the iframe and its draft state.
+      `hidden` removes the inactive workspace from layout/accessibility while
+      preserving the surface binding and DOM state. App-owned durable data is
+      still saved only through the normal host-managed data APIs.
+    -->
+    <div class:active-app-workspace={$currentTab === "apps"} class="app-workspace" aria-hidden={$currentTab === "apps" ? undefined : "true"}>
+      <AppsPage />
+    </div>
   </HostShell>
 {:else}
   <RemoteConnection onConnected={remoteConnected} />
@@ -83,5 +94,15 @@
     min-height: 100vh;
     min-height: 100dvh;
     background: var(--color-bg-gradient-b);
+  }
+
+  .app-workspace {
+    display: none;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .app-workspace.active-app-workspace {
+    display: contents;
   }
 </style>
