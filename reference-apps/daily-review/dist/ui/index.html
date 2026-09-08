@@ -20,7 +20,7 @@ details{margin-top:.75rem}@media(max-width:44rem){.grid{grid-template-columns:1f
 <details><summary>Saved note preview</summary><p id="preview" class="muted">No note saved yet.</p></details></section>
 </div><p id="status" role="status" aria-live="polite"></p>
 <script>
-const day=new Date().toISOString().slice(0,10),tasksEl=document.querySelector("#tasks"),archiveEl=document.querySelector("#archive"),input=document.querySelector("#task-input"),note=document.querySelector("#note"),status=document.querySelector("#status"),draft=document.querySelector("#draft"),draftText=document.querySelector("#draft-text");
+const now=new Date(),day=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`,tasksEl=document.querySelector("#tasks"),archiveEl=document.querySelector("#archive"),input=document.querySelector("#task-input"),note=document.querySelector("#note"),status=document.querySelector("#status"),draft=document.querySelector("#draft"),draftText=document.querySelector("#draft-text");
 document.querySelector("#date").textContent=day;let tasks=[],notes=[],selected=null,pending=false;
 const msg=e=>e instanceof Error?e.message:String(e);function report(e,p){status.textContent=p+": "+msg(e);window.appHost.reportError(status.textContent)}
 function taskValue(title,parentId=null,done=false){return{title:title.trim().replace(/^-\s*\[[ xX]\]\s*/,"").slice(0,240),parentId,done,day}}
