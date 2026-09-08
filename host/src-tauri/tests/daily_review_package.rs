@@ -16,6 +16,7 @@ fn daily_review_reference_package_passes_host_inspection() {
     let result = host_lib::package::stage_and_inspect(&package, &staging);
     let _ = fs::remove_dir_all(&staging);
 
-    let inspection = result.expect("Daily Review must satisfy Kestral's authoritative package contract");
+    let inspection =
+        result.expect("Daily Review must satisfy Kestral's authoritative package contract");
     assert_eq!(inspection.id, "com.ma-zierl.daily-review");
 }
