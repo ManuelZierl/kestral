@@ -32,6 +32,19 @@ test("tracked dist is reproducible from source on Node 22+", async () => {
   }
 });
 
+test("authoring path has no checkout-local package dependency", async () => {
+  const project = await json(resolve(root, "package.json"));
+  assert.deepEqual(project.dependencies ?? {}, {});
+  assert.deepEqual(project.devDependencies ?? {}, {});
+
+  const build = await readFile(resolve(root, "scripts/build.mjs"), "utf8");
+  const manifest = await readFile(resolve(root, "src/app.json"), "utf8");
+  const ui = await readFile(resolve(root, "src/ui/index.html"), "utf8");
+  for (const source of [build, manifest, ui]) {
+    assert.doesNotMatch(source, /(?:\.\.\/)+(?:host|crates|scripts|templates)\//);
+  }
+});
+
 test("workflow stays backend-free and model assistance is optional and review-before-apply", async () => {
   const manifest = await json(resolve(root, "dist/app.json"));
   const ui = await readFile(resolve(root, "dist/ui/index.html"), "utf8");
