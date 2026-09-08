@@ -23,6 +23,8 @@ jobs:
           cache: npm
           cache-dependency-path: host/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
 
       - name: Install Tauri system dependencies
@@ -38,6 +40,15 @@ jobs:
         working-directory: host
         run: npm ci
 
+      # Cargo invokes Tauri's build script directly, not beforeBuildCommand.
+      # Prepare the same bundled resources as the main CI before compiling Rust.
+      - name: Generate third-party notices
+        run: node scripts/generate-third-party-notices.mjs
+
+      - name: Package provider worker
+        working-directory: host
+        run: npm run provider-worker:package
+
       - name: Frontend type-check
         working-directory: host
         run: npm run check
@@ -50,4 +61,4 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Rust tests
-        run: cargo test --all-features
+        run: cargo test --locked --all-features
