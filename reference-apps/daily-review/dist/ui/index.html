@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Review</title><style>
+*{box-sizing:border-box}body{margin:0;padding:1rem;color:var(--color-text);background:var(--color-surface);font:15px/1.45 system-ui,sans-serif}
+main{max-width:64rem;margin:auto}header,.row,.panel{border:1px solid var(--color-border);border-radius:.75rem;background:var(--color-surface-raised)}
+header,.panel{padding:1rem}.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(16rem,1fr);gap:1rem}.row{padding:.55rem;margin:.4rem 0}
+h1,h2,p{margin-top:0}.muted,#status{color:var(--color-text-muted)}input,textarea,button{font:inherit}input[type=text],textarea{width:100%;padding:.55rem;border:1px solid var(--color-border);border-radius:.45rem;color:var(--color-text);background:var(--color-surface)}
+textarea{min-height:8rem;resize:vertical}button{padding:.5rem .7rem;border:0;border-radius:.45rem;background:var(--color-accent);color:var(--color-accent-contrast);cursor:pointer}
+button.secondary{background:var(--color-surface-hover);color:var(--color-text)}.task{display:flex;gap:.5rem;align-items:center}.task .title{flex:1}.done .title{text-decoration:line-through;color:var(--color-text-muted)}
+.actions{display:flex;gap:.5rem;flex-wrap:wrap}.draft{border-left:.25rem solid var(--color-accent);padding:.75rem;margin-top:.75rem;background:var(--color-surface)}
+details{margin-top:.75rem}@media(max-width:44rem){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<header><h1>Daily Review</h1><p class="muted" id="date"></p><p>Capture today, keep unfinished work visible, and ask AI for a reviewable suggestion only when useful.</p></header>
+<div class="grid">
+<section class="panel"><h2>Tasks</h2><form id="task-form"><input id="task-input" type="text" maxlength="240" placeholder="- [ ] Add a task" autocomplete="off"></form>
+<p class="muted">Enter creates a task. Select a task, then press Tab in the task box to create a sub-task beneath it.</p>
+<div id="tasks"></div><details><summary>Archive</summary><div id="archive"></div></details></section>
+<section class="panel"><h2>Notes</h2><textarea id="note" maxlength="12000" placeholder="Notes for today…"></textarea><div class="actions"><button id="save-note" type="button">Save note</button><button id="suggest" class="secondary" type="button">Ask AI to review</button></div>
+<div id="draft" class="draft" hidden><strong>Proposed next task</strong><p id="draft-text"></p><div class="actions"><button id="accept" type="button">Add task</button><button id="reject" class="secondary" type="button">Dismiss</button></div></div>
+<details><summary>Saved note preview</summary><p id="preview" class="muted">No note saved yet.</p></details></section>
+</div><p id="status" role="status" aria-live="polite"></p>
+<script>
+const day=new Date().toISOString().slice(0,10),tasksEl=document.querySelector("#tasks"),archiveEl=document.querySelector("#archive"),input=document.querySelector("#task-input"),note=document.querySelector("#note"),status=document.querySelector("#status"),draft=document.querySelector("#draft"),draftText=document.querySelector("#draft-text");
+document.querySelector("#date").textContent=day;let tasks=[],notes=[],selected=null,pending=false;
+const msg=e=>e instanceof Error?e.message:String(e);function report(e,p){status.textContent=p+": "+msg(e);window.appHost.reportError(status.textContent)}
+function taskValue(title,parentId=null,done=false){return{title:title.trim().replace(/^-\s*\[[ xX]\]\s*/,"").slice(0,240),parentId,done,day}}
+function valid(r){return r&&typeof r.id==="string"&&Number.isInteger(r.revision)&&r.value}
+async function listAll(c){let out=[],after;do{const p=await window.appHost.data.v1.list(c,{...(after?{after}:{}),limit:100});if(!p||!Array.isArray(p.records))throw Error("Invalid data response");out.push(...p.records.filter(valid));after=typeof p.next_after==="string"?p.next_after:undefined}while(after);return out}
+function renderTask(r){const row=document.createElement("div");row.className="row task"+(r.value.done?" done":"");row.style.marginLeft=(r.value.parentId?".9rem":"0");const cb=document.createElement("input");cb.type="checkbox";cb.checked=r.value.done;cb.addEventListener("change",()=>toggle(r,cb.checked));const title=document.createElement("button");title.type="button";title.className="secondary title";title.textContent=r.value.title;title.setAttribute("aria-pressed",String(selected===r.id));title.addEventListener("click",()=>{selected=r.id;render()});row.append(cb,title);return row}
+function roots(){return tasks.filter(t=>!t.value.parentId)}function descendants(root){const ids=new Set([root.id]);let changed=true;while(changed){changed=false;for(const t of tasks)if(t.value.parentId&&ids.has(t.value.parentId)&&!ids.has(t.id)){ids.add(t.id);changed=true}}return tasks.filter(t=>ids.has(t.id))}
+function render(){tasksEl.replaceChildren();archiveEl.replaceChildren();for(const root of roots()){const target=root.value.done?archiveEl:tasksEl;for(const t of descendants(root))target.append(renderTask(t))}}
+async function load(){try{[tasks,notes]=await Promise.all([listAll("tasks"),listAll("notes")]);render();const today=notes.find(n=>n.value.day===day);note.value=today?.value.body||"";document.querySelector("#preview").textContent=today?.value.body||"No note saved yet.";status.textContent="Ready"}catch(e){report(e,"Could not load daily review")}}
+async function add(title,parentId=null){const value=taskValue(title,parentId);if(!value.title||pending)return;pending=true;try{await window.appHost.data.v1.create("tasks",value);input.value="";await load()}catch(e){report(e,"Could not add task")}finally{pending=false}}
+async function toggle(r,done){try{await window.appHost.data.v1.replace("tasks",r.id,r.revision,{...r.value,done});await load()}catch(e){report(e,"Task changed; reloading");await load()}}
+document.querySelector("#task-form").addEventListener("submit",e=>{e.preventDefault();void add(input.value)});input.addEventListener("keydown",e=>{if(e.key==="Tab"&&selected){e.preventDefault();void add(input.value,selected)}});
+document.querySelector("#save-note").addEventListener("click",async()=>{try{const today=notes.find(n=>n.value.day===day),value={day,body:note.value};if(today)await window.appHost.data.v1.replace("notes",today.id,today.revision,value);else await window.appHost.data.v1.create("notes",value);await load();status.textContent="Note saved"}catch(e){report(e,"Could not save note")}});
+document.querySelector("#suggest").addEventListener("click",async()=>{try{status.textContent="Waiting for permission and model…";const open=roots().filter(t=>!t.value.done).map(t=>"- [ ] "+t.value.title).join("\n");const res=await window.appHost.invoke({provider:"llm-provider",capability:"llm.generate"},{messages:[{role:"system",content:"Suggest exactly one concrete next task from this daily review. Return only the task title."},{role:"user",content:"Tasks:\n"+(open||"(none)")+"\n\nToday's notes:\n"+note.value.slice(0,4000)}],max_output_tokens:80},"Review today's visible tasks and notes");const o=res&&res.result;if(!o||o.kind!=="completed")throw Error(o?.reason||o?.error||"Model action did not complete");const c=o.result?.message?.content?.trim().replace(/^[-*\d.)\s]+/,"").replace(/[\r\n]+/g," ").slice(0,240);if(!c)throw Error("Model returned no suggestion");draftText.textContent=c;draft.hidden=false;status.textContent="Review the proposal before applying it."}catch(e){report(e,"AI review unavailable; nothing changed")}});
+document.querySelector("#accept").addEventListener("click",async()=>{await add(draftText.textContent||"");draft.hidden=true});document.querySelector("#reject").addEventListener("click",()=>{draft.hidden=true;draftText.textContent="";status.textContent="Proposal dismissed"});window.appHost.onInit(load);window.appHost.ready();
+</script></main></body></html>
