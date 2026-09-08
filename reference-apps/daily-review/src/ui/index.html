@@ -190,8 +190,15 @@ function renderTasks() {
 }
 
 async function loadData(acknowledgedNote = null) {
-  const readDay = noteDirty ? day : localDay();
-  const snapshot = await readData(readDay);
+  let readDay = noteDirty ? day : localDay();
+  let snapshot = await readData(readDay);
+  // A midnight refresh may be in flight while the user starts typing into
+  // the still-visible previous day's note. Keep that draft on its original
+  // date, and re-read that date before publishing any part of the snapshot.
+  if (noteDirty && readDay !== day) {
+    readDay = day;
+    snapshot = await readData(readDay);
+  }
   generation = snapshot.generation;
   tasks = snapshot.tasks;
   if (selected && !tasks.some(task => task.id === selected)) selected = null;

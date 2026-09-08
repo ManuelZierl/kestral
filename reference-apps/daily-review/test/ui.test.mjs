@@ -402,3 +402,25 @@ test("an archived or removed selected parent cannot hide a newly entered child",
   await h.submit();
   assert.equal(h.state.tasks.at(-1).value.parentId, null);
 });
+
+
+test("typing during a midnight refresh keeps the visible note's original date", async () => {
+  const h = await launch(), gate = deferred();
+  h.hooks.read = async request => {
+    if (request.reads.some(read => read.collection === "notes" && read.query.equals === "2026-09-09")) {
+      await gate.promise;
+    }
+  };
+  await h.tick("2026-09-09T00:01:00");
+  await h.type("#note", "Edits started before the new date appeared");
+  gate.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(h.select("#date").textContent, /2026-09-08.*unsaved/);
+  assert.equal(h.select("#note").value, "Edits started before the new date appeared");
+  assert.equal(h.calls.reads.at(-1).reads[1].query.equals, "2026-09-08");
+  delete h.hooks.read;
+  await h.click("#save-note");
+  assert.equal(h.calls.writes.at(-1).value.day, "2026-09-08");
+  assert.equal(h.state.notes[0].value.day, "2026-09-08");
+  assert.equal(h.state.notes[0].value.body, "Edits started before the new date appeared");
+});
