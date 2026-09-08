@@ -51,6 +51,7 @@ test("workflow stays backend-free and model assistance is optional and review-be
 
   assert.deepEqual(manifest.backend, { kind: "none" });
   assert.equal(manifest.data.kind, "host-managed");
+  assert.equal(manifest.data.contract_version, 2);
   assert.equal(manifest.manifest.grant_requests.length, 1);
   assert.deepEqual(manifest.manifest.grant_requests[0].scope, {
     kind: "exact-capability",
@@ -64,6 +65,44 @@ test("workflow stays backend-free and model assistance is optional and review-be
   assert.match(ui, /root\.value\.done\?archiveEl:tasksEl/);
   assert.match(ui, /Review the proposal before applying it\./);
   assert.match(ui, /AI review unavailable; nothing changed/);
+  assert.match(ui, /data\.v2\.readSnapshot/);
+  assert.match(ui, /expectedGeneration:generation/);
   assert.match(ui, /getFullYear\(\)/);
   assert.doesNotMatch(ui, /toISOString\(\)\.slice\(0,10\)/);
+});
+
+test("Chat composition is grant-mediated and proposals cannot overwrite stale tasks", async () => {
+  const manifest = await json(resolve(root, "dist/app.json"));
+  const ui = await readFile(resolve(root, "dist/ui/index.html"), "utf8");
+
+  assert.deepEqual(manifest.data.exports, [
+    { capability: "list_tasks", operation: "list", collection: "tasks" },
+  ]);
+  assert.equal(manifest.data.proposals[0].capability, "propose_task_title");
+  assert.equal(manifest.data.proposals[0].target.kind, "record");
+  assert.equal(manifest.data.proposals[0].target.collection, "tasks");
+
+  const readGrant = manifest.consumer_grant_requests.find(
+    (grant) => grant.holder === "chat" && grant.request.scope.capability === "list_tasks",
+  );
+  assert.ok(readGrant);
+  assert.deepEqual(readGrant.request.data_scope, {
+    kind: "resources",
+    resource_ids: ["app-data:com.ma-zierl.daily-review:tasks"],
+  });
+
+  const proposalGrant = manifest.consumer_grant_requests.find(
+    (grant) => grant.holder === "chat" && grant.request.scope.capability === "propose_task_title",
+  );
+  assert.ok(proposalGrant);
+  assert.equal(proposalGrant.request.condition, "requires-approval");
+  assert.deepEqual(proposalGrant.request.data_scope, { kind: "all-resources" });
+
+  assert.match(ui, /window\.appHost\.listArtifacts\(\)/);
+  assert.match(ui, /artifact_type==="task-title-proposal"/);
+  assert.match(ui, /task\.revision!==c\.targetRevision\|\|generation!==c\.targetGeneration/);
+  assert.match(ui, /apply\.disabled=stale/);
+  assert.match(ui, /expectedGeneration:c\.targetGeneration/);
+  assert.match(ui, /expectedRevision:c\.targetRevision/);
+  assert.match(ui, /Proposal became stale; nothing was overwritten/);
 });
