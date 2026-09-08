@@ -44,5 +44,5 @@
     },
     "limits": { "total_bytes": 16777216, "transaction_operations": 32 }, "exports": []
   },
-  "integrity": { "algorithm": "sha256", "assets": { "ui/index.html": "sha256-9c39c4148d6bd0fb5f466429918c59fe45380372ccae316ec7aafa97c3cb8a8f" } }
+  "integrity": { "algorithm": "sha256", "assets": { "ui/index.html": "sha256-d804db333340708c51b25231da3d51312a84da9b50ff79665c68aec809f9286b" } }
 }
