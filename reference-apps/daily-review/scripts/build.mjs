@@ -16,11 +16,10 @@ export async function buildPackage(root = projectRoot) {
   const distUiPath = resolve(distRoot, "ui/index.html");
 
   const manifest = JSON.parse(await readFile(sourceManifestPath, "utf8"));
-  // Package text assets with a canonical final-newline policy so editors can
-  // keep source files POSIX-friendly without making tracked dist platform- or
-  // editor-dependent.
+  // Canonical LF text with exactly one final newline keeps source and tracked
+  // packages reproducible across editors and operating systems.
   const sourceUi = await readFile(sourceUiPath, "utf8");
-  const ui = Buffer.from(sourceUi.replace(/\r\n/g, "\n").replace(/\n$/, ""), "utf8");
+  const ui = Buffer.from(sourceUi.replace(/\r\n/g, "\n").replace(/\n*$/, "\n"), "utf8");
   manifest.integrity = {
     algorithm: "sha256",
     assets: { "ui/index.html": sha256(ui) },

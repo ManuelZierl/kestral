@@ -55,6 +55,9 @@ jobs:
         run: node scripts/check-reference-app-isolation.mjs
       - name: Verify focused app scaffold
         run: node --test scripts/create-app.test.mjs
+      - name: Qualify Daily Review package and behavior
+        working-directory: reference-apps/daily-review
+        run: npm test
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -166,6 +169,9 @@ jobs:
         run: node scripts/check-reference-app-isolation.mjs
       - name: Verify focused app scaffold
         run: node --test scripts/create-app.test.mjs
+      - name: Qualify Daily Review package and behavior
+        working-directory: reference-apps/daily-review
+        run: npm test
       - name: Install frontend toolchain
         working-directory: host
         run: npm ci

@@ -27,6 +27,15 @@ function app(overrides: Partial<AppStatusView> = {}): AppStatusView {
   };
 }
 
+const extension: AppStatusView["extension_contributions"][number] = {
+  target_app: "chat",
+  extension_point: "sidebar",
+  contract_version: 1,
+  surface: "workspace",
+  compatibility: "exact",
+  target_contract_version: 1,
+};
+
 describe("focused app readiness", () => {
   it("does not mistake bundled startup apps for a completed app-first journey", () => {
     const bundled = app({
@@ -36,13 +45,29 @@ describe("focused app readiness", () => {
       removable: false,
     });
     expect(hasUsableFocusedApp([bundled])).toBe(false);
+    expect(hasUsableFocusedApp([])).toBe(false);
   });
 
   it("requires an enabled active independently installed custom screen", () => {
     expect(hasUsableFocusedApp([app()])).toBe(true);
     expect(hasUsableFocusedApp([app({ enabled: false, status: "disabled" })])).toBe(false);
     expect(hasUsableFocusedApp([app({ status: "needs-permissions" })])).toBe(false);
+    expect(hasUsableFocusedApp([app({ status: "failed" })])).toBe(false);
     expect(hasUsableFocusedApp([app({ surfaces: [] })])).toBe(false);
     expect(hasUsableFocusedApp([app({ surfaces: [{ name: "form", kind: "form", title: "Form", has_custom_ui: false }] })])).toBe(false);
+  });
+
+  it("does not treat extension-only UI as an independently usable focused app", () => {
+    expect(hasUsableFocusedApp([app({
+      surfaces: [{ name: "workspace", kind: "panel", title: "Extension", has_custom_ui: true }],
+      extension_contributions: [extension],
+    })])).toBe(false);
+  });
+
+  it("keeps standalone panels and contributed dashboards eligible", () => {
+    expect(hasUsableFocusedApp([app({
+      surfaces: [{ name: "workspace", kind: "panel", title: "Panel", has_custom_ui: true }],
+    })])).toBe(true);
+    expect(hasUsableFocusedApp([app({ extension_contributions: [extension] })])).toBe(true);
   });
 });

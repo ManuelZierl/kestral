@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "display_name": "Daily Review",
   "description": "A local daily notes and hierarchical task review workflow with optional review-before-apply AI assistance.",
-  "icon": { "kind": "kestral", "name": "check-square" },
+  "icon": {
+    "kind": "kestral",
+    "name": "check-square"
+  },
   "min_host_version": "0.1.0-alpha.1",
   "manifest": {
     "capabilities": [
@@ -17,14 +20,27 @@
           "additionalProperties": false,
           "required": [],
           "properties": {
-            "after": { "type": ["string", "null"], "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
-            "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
           }
         },
         "output_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["records", "next_after"],
+          "required": [
+            "records",
+            "next_after"
+          ],
           "properties": {
             "records": {
               "type": "array",
@@ -32,27 +48,70 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "revision", "created_at", "updated_at", "value"],
+                "required": [
+                  "id",
+                  "revision",
+                  "created_at",
+                  "updated_at",
+                  "value"
+                ],
                 "properties": {
-                  "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
-                  "revision": { "type": "integer", "minimum": 1 },
-                  "created_at": { "type": "string", "format": "date-time" },
-                  "updated_at": { "type": "string", "format": "date-time" },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
                   "value": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["title", "parentId", "done", "day"],
+                    "required": [
+                      "title",
+                      "parentId",
+                      "done",
+                      "day"
+                    ],
                     "properties": {
-                      "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^[^\\r\\n]*$" },
-                      "parentId": { "type": ["string", "null"] },
-                      "done": { "type": "boolean" },
-                      "day": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240,
+                        "pattern": "^[^\\r\\n]*$"
+                      },
+                      "parentId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "done": {
+                        "type": "boolean"
+                      },
+                      "day": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      }
                     }
                   }
                 }
               }
             },
-            "next_after": { "type": ["string", "null"] }
+            "next_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         }
       },
@@ -63,20 +122,37 @@
         "input_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["targetId", "targetRevision", "payload"],
+          "required": [
+            "targetId",
+            "targetRevision",
+            "payload"
+          ],
           "properties": {
             "targetId": {
               "type": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-              "x-kestral-managed-data-scope": { "kind": "record", "collection": "tasks" }
+              "x-kestral-managed-data-scope": {
+                "kind": "record",
+                "collection": "tasks"
+              }
             },
-            "targetRevision": { "type": "integer", "minimum": 1 },
+            "targetRevision": {
+              "type": "integer",
+              "minimum": 1
+            },
             "payload": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["title"],
+              "required": [
+                "title"
+              ],
               "properties": {
-                "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^[^\\r\\n]*$" }
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^[^\\r\\n]*$"
+                }
               }
             }
           },
@@ -85,126 +161,340 @@
         "output_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["targetAppId", "targetKind", "collection", "resourceId", "targetGeneration", "targetRevision", "payload"],
+          "required": [
+            "targetAppId",
+            "targetKind",
+            "collection",
+            "resourceId",
+            "targetGeneration",
+            "targetRevision",
+            "payload"
+          ],
           "properties": {
-            "targetAppId": { "const": "com.ma-zierl.daily-review" },
-            "targetKind": { "const": "record" },
-            "collection": { "const": "tasks" },
-            "resourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
-            "targetGeneration": { "type": "integer", "minimum": 0 },
-            "targetRevision": { "type": ["integer", "null"], "minimum": 1 },
+            "targetAppId": {
+              "const": "com.ma-zierl.daily-review"
+            },
+            "targetKind": {
+              "const": "record"
+            },
+            "collection": {
+              "const": "tasks"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "targetGeneration": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "targetRevision": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
             "payload": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["title"],
+              "required": [
+                "title"
+              ],
               "properties": {
-                "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^[^\\r\\n]*$" }
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^[^\\r\\n]*$"
+                }
               }
             }
           }
         }
       }
     ],
-    "surfaces": [{
-      "name": "workspace", "kind": "dashboard", "title": "Daily Review",
-      "description": "Capture today, keep unfinished work visible, and review optional AI suggestions.",
-      "intents": [{ "provider": "llm-provider", "capability": "llm.generate" }],
-      "ui": { "entry": "ui/index.html", "connect_src": [] }
-    }],
-    "artifact_types": [{
-      "name": "task-title-proposal",
-      "description": "A revision-bound proposed title change for one Daily Review task.",
-      "json_schema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["targetAppId", "targetKind", "collection", "resourceId", "targetGeneration", "targetRevision", "payload"],
-        "properties": {
-          "targetAppId": { "const": "com.ma-zierl.daily-review" },
-          "targetKind": { "const": "record" },
-          "collection": { "const": "tasks" },
-          "resourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
-          "targetGeneration": { "type": "integer", "minimum": 0 },
-          "targetRevision": { "type": ["integer", "null"], "minimum": 1 },
-          "payload": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["title"],
-            "properties": {
-              "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^[^\\r\\n]*$" }
+    "surfaces": [
+      {
+        "name": "workspace",
+        "kind": "dashboard",
+        "title": "Daily Review",
+        "description": "Capture today, keep unfinished work visible, and review optional AI suggestions.",
+        "intents": [
+          {
+            "provider": "llm-provider",
+            "capability": "llm.generate"
+          }
+        ],
+        "ui": {
+          "entry": "ui/index.html",
+          "connect_src": []
+        }
+      }
+    ],
+    "artifact_types": [
+      {
+        "name": "task-title-proposal",
+        "description": "A revision-bound proposed title change for one Daily Review task.",
+        "json_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "targetAppId",
+            "targetKind",
+            "collection",
+            "resourceId",
+            "targetGeneration",
+            "targetRevision",
+            "payload"
+          ],
+          "properties": {
+            "targetAppId": {
+              "const": "com.ma-zierl.daily-review"
+            },
+            "targetKind": {
+              "const": "record"
+            },
+            "collection": {
+              "const": "tasks"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "targetGeneration": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "targetRevision": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "title"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^[^\\r\\n]*$"
+                }
+              }
             }
           }
         }
       }
-    }],
-    "grant_requests": [{
-      "scope": { "kind": "exact-capability", "provider": "llm-provider", "capability": "llm.generate" },
-      "data_scope": { "kind": "none" }, "condition": "requires-approval",
-      "reason": "Send only the tasks and today's note that are visible in Daily Review when you explicitly ask for an AI review.",
-      "duration": { "kind": "non-expiring" }
-    }]
+    ],
+    "grant_requests": [
+      {
+        "scope": {
+          "kind": "exact-capability",
+          "provider": "llm-provider",
+          "capability": "llm.generate"
+        },
+        "data_scope": {
+          "kind": "none"
+        },
+        "condition": "requires-approval",
+        "reason": "Send only the tasks and today's note that are visible in Daily Review when you explicitly ask for an AI review.",
+        "duration": {
+          "kind": "non-expiring"
+        }
+      }
+    ]
   },
   "consumer_grant_requests": [
     {
       "holder": "chat",
       "request": {
-        "scope": { "kind": "exact-capability", "provider": "com.ma-zierl.daily-review", "capability": "list_tasks" },
-        "data_scope": { "kind": "resources", "resource_ids": ["app-data:com.ma-zierl.daily-review:tasks"] },
+        "scope": {
+          "kind": "exact-capability",
+          "provider": "com.ma-zierl.daily-review",
+          "capability": "list_tasks"
+        },
+        "data_scope": {
+          "kind": "resources",
+          "resource_ids": [
+            "app-data:com.ma-zierl.daily-review:tasks"
+          ]
+        },
         "condition": "silent",
         "reason": "Let Chat read Daily Review tasks and revisions when you ask it to help review them.",
-        "duration": { "kind": "non-expiring" }
+        "duration": {
+          "kind": "non-expiring"
+        }
       }
     },
     {
       "holder": "chat",
       "request": {
-        "scope": { "kind": "exact-capability", "provider": "com.ma-zierl.daily-review", "capability": "propose_task_title" },
-        "data_scope": { "kind": "all-resources" },
+        "scope": {
+          "kind": "exact-capability",
+          "provider": "com.ma-zierl.daily-review",
+          "capability": "propose_task_title"
+        },
+        "data_scope": {
+          "kind": "all-resources"
+        },
         "condition": "requires-approval",
         "reason": "Let Chat create a revision-bound title proposal for a Daily Review task; the proposal never edits the task directly.",
-        "duration": { "kind": "non-expiring" }
+        "duration": {
+          "kind": "non-expiring"
+        }
       }
     }
   ],
-  "backend": { "kind": "none" },
+  "backend": {
+    "kind": "none"
+  },
   "data": {
-    "kind": "host-managed", "contract_version": 2,
+    "kind": "host-managed",
+    "contract_version": 2,
     "collections": {
       "tasks": {
-        "schema": { "type": "object", "additionalProperties": false, "required": ["title", "parentId", "done", "day"], "properties": {
-          "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^[^\\r\\n]*$" },
-          "parentId": { "type": ["string", "null"] }, "done": { "type": "boolean" },
-          "day": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
-        }},
-        "indexes": [], "operations": ["get", "list", "create", "replace", "delete"],
-        "limits": { "records": 10000, "record_bytes": 4096, "query_results": 100 }
-      },
-      "notes": {
-        "schema": { "type": "object", "additionalProperties": false, "required": ["day", "body"], "properties": {
-          "day": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }, "body": { "type": "string", "maxLength": 12000 }
-        }},
-        "indexes": [{ "name": "day", "field": "day", "value_schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }, "unique": true }],
-        "operations": ["get", "list", "create", "replace", "delete"],
-        "limits": { "records": 5000, "record_bytes": 16384, "query_results": 100 }
-      }
-    },
-    "limits": { "total_bytes": 16777216, "transaction_operations": 32, "batch_operations": 64 },
-    "exports": [{ "capability": "list_tasks", "operation": "list", "collection": "tasks" }],
-    "proposals": [{
-      "capability": "propose_task_title",
-      "artifact_type": "task-title-proposal",
-      "title": "Propose task title",
-      "description": "Create a reviewable, revision-bound title change for one Daily Review task.",
-      "target": { "kind": "record", "collection": "tasks" },
-      "payload_schema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["title"],
-        "properties": {
-          "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^[^\\r\\n]*$" }
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title",
+            "parentId",
+            "done",
+            "day"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "^[^\\r\\n]*$"
+            },
+            "parentId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "done": {
+              "type": "boolean"
+            },
+            "day": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        },
+        "indexes": [],
+        "operations": [
+          "get",
+          "list",
+          "create",
+          "replace",
+          "delete"
+        ],
+        "limits": {
+          "records": 10000,
+          "record_bytes": 4096,
+          "query_results": 100
         }
       },
-      "max_payload_bytes": 1024
-    }]
+      "notes": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "day",
+            "body"
+          ],
+          "properties": {
+            "day": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 12000
+            }
+          }
+        },
+        "indexes": [
+          {
+            "name": "day",
+            "field": "day",
+            "value_schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "unique": true
+          }
+        ],
+        "operations": [
+          "get",
+          "list",
+          "create",
+          "replace",
+          "delete"
+        ],
+        "limits": {
+          "records": 5000,
+          "record_bytes": 16384,
+          "query_results": 100
+        }
+      }
+    },
+    "limits": {
+      "total_bytes": 16777216,
+      "transaction_operations": 32,
+      "batch_operations": 64
+    },
+    "exports": [
+      {
+        "capability": "list_tasks",
+        "operation": "list",
+        "collection": "tasks"
+      }
+    ],
+    "proposals": [
+      {
+        "capability": "propose_task_title",
+        "artifact_type": "task-title-proposal",
+        "title": "Propose task title",
+        "description": "Create a reviewable, revision-bound title change for one Daily Review task.",
+        "target": {
+          "kind": "record",
+          "collection": "tasks"
+        },
+        "payload_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "^[^\\r\\n]*$"
+            }
+          }
+        },
+        "max_payload_bytes": 1024
+      }
+    ]
   },
-  "integrity": { "algorithm": "sha256", "assets": { "ui/index.html": "sha256-3f48fb4b57d44d106a8f30e5a22dc27c5bce8f5df40803420638237a10211ed4" } }
+  "integrity": {
+    "algorithm": "sha256",
+    "assets": {
+      "ui/index.html": "sha256-eb7a0d748b99434d3adcdf8c6218d97d3bf66b2ddcb6478069a18da1291d4201"
+    }
+  }
 }

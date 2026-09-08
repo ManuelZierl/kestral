@@ -23,11 +23,19 @@ npm run build
 npm test
 ```
 
-`npm run build` reads only this app's `src/` directory and produces `dist/` with a deterministic asset digest. The tests rebuild in a temporary directory and compare the result with the tracked distribution, so stale committed package output fails qualification. The host integration suite also inspects the tracked package with Kestral's authoritative package validator.
+`npm run build` reads only this app's `src/` directory and produces `dist/` with a deterministic asset digest. Text assets use LF and exactly one final newline. The tests rebuild in a temporary directory and compare the result with the tracked distribution, so stale committed package output fails qualification. The host integration suite also inspects the tracked package with Kestral's authoritative package validator.
+
+The app tests execute the actual surface script using a small DOM adapter and a host-data fake. They cover draft preservation, concurrent saves, generation-pinned pagination, hierarchy/archive behavior, proposal races, optional AI, and local-date rollover. These tests are not a substitute for a packaged-host browser or native-webview exercise.
 
 ## Install
 
 Install the `dist/` directory through **Apps → Install an app**. The package has no native backend and no runtime dependency after installation. The install flow separately asks whether Chat may read the task collection and whether it may create revision-bound task-title proposals; denying either integration leaves the Daily Review surface usable.
+
+## Drafts, refresh, and conflicts
+
+Task changes and **Refresh data** preserve unsaved notes. A failed save keeps both the draft and the revision it was edited from, so refreshing cannot silently authorize overwriting another window's changes. The saved-note preview shows the current stored version; **Discard draft and load saved note** is the explicit way to abandon a local draft. After an unconfirmed write, inspect refreshed data before retrying.
+
+Tasks are read across all pages at one store generation, and the daily note is looked up through its unique day index. At midnight, a clean editor advances to the new local date. An unsaved note stays attached to its original date until saved or explicitly discarded. Shift+Tab and Tab with an empty task input retain normal keyboard focus navigation.
 
 ## Limits of this reference app
 
