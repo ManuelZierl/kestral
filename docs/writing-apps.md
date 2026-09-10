@@ -67,8 +67,15 @@ cd ../my-focus-app
 npm test
 ```
 
-This is a repository helper, not a separately published CLI. The generated
-project needs Node.js 22 or newer but has no package dependencies. It builds a
+The helper delegates to the dependency-free `create-kestral-app` package in
+`packages/create-kestral-app`. Its bundled template also works outside a core
+checkout: from that package directory, run `npm pack` and install the resulting
+`create-kestral-app-0.1.0-alpha.1.tgz` with `npm install --global <tarball-path>`.
+Then use `create-kestral-app <directory> --id <id> --name <name>`. Registry
+publication is still a release step; these instructions do not assume an npm
+registry release exists.
+
+The generated project needs Node.js 22 or newer but has no package dependencies. It builds a
 ready-to-install `dist/` directory, and its own `npm run build` command updates
 the SHA-256 asset declarations after UI changes. Install `dist/` through
 **Apps → Install an app**.
@@ -421,8 +428,6 @@ state envelope; a failed commit leaves the previous state authoritative.
 Contract v2 can structurally read retained v1 record stores without publisher
 code. A v1 package cannot reactivate after v2 state has been published.
 
-An optional `exports` entry binds one manifest capability to a fixed host read:
-
 ### Managed-data proposals
 
 Contract v2 proposals are fixed host operations for backend-free packages. A
@@ -458,6 +463,10 @@ replaying a proposal is frontend responsibility: the surface must perform the
 managed-data CAS mutation itself after comparing the artifact's target version.
 Delegated managed-data writes remain unsupported.
 
+### Managed-data read exports
+
+An optional `exports` entry binds one manifest capability to a fixed host read:
+
 ```json
 "exports": [{
   "capability": "list_read_marks",
@@ -477,6 +486,7 @@ The matching capability for that example is:
   "effect": "read-only",
   "input_schema": {
     "type": "object",
+    "x-kestral-managed-data-export": { "collection": "read-marks" },
     "additionalProperties": false,
     "required": ["equals"],
     "properties": {
@@ -540,6 +550,13 @@ and `limit`. Results are either one record or
 `id`, `revision`, `created_at`, `updated_at`, and the declared `value`. This
 exact-schema check prevents a package from describing behavior different from
 the host operation it receives.
+
+Every export input schema also includes `x-kestral-managed-data-export` with
+exactly its declared collection. Chat and agent dispatch use that host-defined
+annotation to request the exact collection resource, independently of model
+arguments. It does not grant access. Packages missing or changing the annotation
+fail inspection; pre-publication development packages must be rebuilt against
+this contract.
 
 An indexed `list` export may set `equals_host_input` to
 `current-chat-thread-id`. The generated capability then requires the matching
@@ -662,8 +679,12 @@ The `manifest` can declare:
 
 A bundle-free `form` surface uses Kestral's generic capability editor. Object
 schemas made entirely of declared string, number, integer, and boolean
-properties receive individual controls. Arrays, nested objects, unions, schema
-composition, and other structured inputs instead receive a labelled JSON-object
+properties with supported constraints receive individual controls. Numeric
+minimum/maximum and string minimum/maximum length are checked before submission.
+Required strings may be empty unless their schema sets a positive minimum length.
+Enums, patterns, formats, exclusive bounds, multiples, arrays,
+nested objects, unions, schema composition, and other unsupported constraints
+instead receive a labelled JSON-object
 editor with the declared schema visible for reference. The editor preserves the
 JSON structure and keeps the submitted input available after completion or
 failure. The latest Run ID, returned result, and produced artifact identities
@@ -1128,16 +1149,18 @@ provide an in-surface confirmation for an irreversible direct action when
 recovery is not available.
 
 Declare effects truthfully. The kernel does not infer behavior from handler
-code, and the custom-surface bridge cannot attest that an intent came from a
-physical user gesture. The low-risk own-surface shortcut is therefore a UX
-policy for cooperative apps, not permission to relabel external or destructive
-work as `local-write`.
+code. For custom surfaces, the host frame requires its own physical confirmation
+before forwarding every own-provider `read-only`/`local-write` invocation,
+including under `silent` or `notify` grants. This conservative alpha guard is
+independent of frontend grant snapshots and is not a kernel-consumed gesture
+token. It does not prove actual effects or permit relabeling external or
+destructive work as `local-write`.
 
 ## Backend kinds
 
 | Kind | Behavior |
 |---|---|
-| `none` | No process. The app cannot declare capabilities of its own. |
+| `none` | No process. Capabilities may only bind fixed host-managed data exports or proposals. |
 | `mcp-stdio` | Starts a command already available on the host and speaks MCP over stdio. |
 | `mcp-streamable-http` | Connects to an MCP Streamable HTTP endpoint. |
 | `executable` | Selects a checksummed packaged executable for the host platform; it speaks MCP over stdio. Supported keys are `windows-x86_64`, `windows-aarch64`, `macos-x86_64`, `macos-aarch64`, `linux-x86_64`, and `linux-aarch64`. |

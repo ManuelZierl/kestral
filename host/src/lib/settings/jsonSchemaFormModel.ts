@@ -7,6 +7,7 @@ export interface JsonSchemaField {
   input: "single-line" | "multiline";
   description: string;
   required: boolean;
+  minLength?: number;
   maxLength?: number;
   minimum?: number;
   maximum?: number;
@@ -16,6 +17,7 @@ interface PropertySchema {
   type?: string;
   title?: string;
   description?: string;
+  minLength?: number;
   maxLength?: number;
   minimum?: number;
   maximum?: number;
@@ -44,6 +46,15 @@ const unsupportedObjectFormKeywords = [
   "dependentSchemas",
   "unevaluatedProperties",
 ];
+const unsupportedPropertyFormKeywords = [
+  "const",
+  "enum",
+  "pattern",
+  "format",
+  "multipleOf",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+];
 
 function usesSchemaComposition(schema: Record<string, unknown>): boolean {
   return schemaCompositionKeywords.some((keyword) => keyword in schema);
@@ -51,6 +62,10 @@ function usesSchemaComposition(schema: Record<string, unknown>): boolean {
 
 function usesUnsupportedObjectFormKeyword(schema: Record<string, unknown>): boolean {
   return unsupportedObjectFormKeywords.some((keyword) => keyword in schema);
+}
+
+function usesUnsupportedPropertyFormKeyword(schema: Record<string, unknown>): boolean {
+  return unsupportedPropertyFormKeywords.some((keyword) => keyword in schema);
 }
 
 export function supportsJsonSchemaForm(schema: JsonObject): boolean {
@@ -75,6 +90,7 @@ export function supportsJsonSchemaForm(schema: JsonObject): boolean {
     if (typeof property !== "object" || property === null || Array.isArray(property)) return false;
     const propertySchema = property as PropertySchema & Record<string, unknown>;
     return !usesSchemaComposition(propertySchema)
+      && !usesUnsupportedPropertyFormKeyword(propertySchema)
       && typeof propertySchema.type === "string"
       && supportedFieldTypes.has(propertySchema.type);
   });
@@ -126,6 +142,7 @@ export function schemaFields(schema: JsonObject): JsonSchemaField[] {
     input: property["x-kestral-input"] === "multiline" ? "multiline" : "single-line",
     description: property.description ?? "",
     required: required.has(name),
+    minLength: property.minLength,
     maxLength: property.maxLength,
     minimum: property.minimum,
     maximum: property.maximum,
@@ -170,15 +187,37 @@ export function collectJsonObject(
 ): JsonObject {
   const collected: JsonObject = {};
   for (const field of schemaFields(schema)) {
+    const present = Object.prototype.hasOwnProperty.call(values, field.name);
     const raw = values[field.name] ?? "";
-    if (raw.trim() === "") {
-      if (field.required) {
-        throw new Error(`${field.name} is required`);
-      }
+    const blank = raw.trim() === "";
+    if (!present) {
+      if (field.required) throw new Error(`${field.name} is required`);
       continue;
     }
+    if (blank && !field.required) continue;
+    if (blank && field.type !== "string") {
+      throw new Error(`${field.name} is required`);
+    }
     try {
-      collected[field.name] = coerceFieldValue(field.type, raw);
+      const coerced = coerceFieldValue(field.type, raw);
+      if (typeof coerced === "string") {
+        const length = Array.from(coerced).length;
+        if (field.minLength !== undefined && length < field.minLength) {
+          throw new Error(`must be at least ${field.minLength} characters`);
+        }
+        if (field.maxLength !== undefined && length > field.maxLength) {
+          throw new Error(`must be at most ${field.maxLength} characters`);
+        }
+      }
+      if (typeof coerced === "number") {
+        if (field.minimum !== undefined && coerced < field.minimum) {
+          throw new Error(`must be at least ${field.minimum}`);
+        }
+        if (field.maximum !== undefined && coerced > field.maximum) {
+          throw new Error(`must be at most ${field.maximum}`);
+        }
+      }
+      collected[field.name] = coerced;
     } catch (error) {
       throw new Error(`${field.name} ${String((error as Error).message)}`);
     }

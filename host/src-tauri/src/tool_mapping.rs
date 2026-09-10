@@ -24,6 +24,7 @@ use crate::llm_client::{ToolDefinition, ToolFunction};
 pub const MAX_TOOL_NAME_LEN: usize = 64;
 pub const HOST_INPUT_ANNOTATION: &str = "x-kestral-host-input";
 pub const CURRENT_CHAT_THREAD_ID: &str = "current-chat-thread-id";
+pub const MANAGED_DATA_EXPORT_ANNOTATION: &str = "x-kestral-managed-data-export";
 pub const MANAGED_DATA_PROPOSAL_ANNOTATION: &str = "x-kestral-managed-data-proposal";
 pub const MANAGED_DATA_SCOPE_ANNOTATION: &str = "x-kestral-managed-data-scope";
 
@@ -49,6 +50,22 @@ fn managed_data_invocation_data_scope(
         .capabilities
         .iter()
         .find(|declaration| declaration.name == capability.capability)?;
+    if let Some(annotation) = declaration.input_schema.get(MANAGED_DATA_EXPORT_ANNOTATION) {
+        let Some(collection) = annotation
+            .as_object()
+            .and_then(|annotation| annotation.get("collection"))
+            .and_then(Value::as_str)
+        else {
+            return Some(DataScope::None);
+        };
+        return Some(
+            DataScope::resources(vec![ResourceId::new(crate::managed_data::resource_id(
+                &capability.provider,
+                collection,
+            ))])
+            .expect("managed-data export annotation must produce a resource scope"),
+        );
+    }
     if declaration
         .input_schema
         .get(MANAGED_DATA_PROPOSAL_ANNOTATION)

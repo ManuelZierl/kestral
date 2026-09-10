@@ -1,6 +1,9 @@
 # Daily Review
 
-A focused Kestral reference app for a recurring personal workflow.
+A focused Kestral authoring example for a recurring personal workflow. This
+in-tree example is qualified by core CI but is never bundled or installed at
+startup. Independently released apps keep their own repositories and release
+qualification.
 
 ## What it proves
 

@@ -485,6 +485,14 @@ limited to the fixed create/replace/delete union. Generated indexed reads may
 bind their equality value from trusted current-Chat context rather than model
 input. The package declaration supplies lower quotas under host ceilings.
 
+The fixed export input schema includes a host-defined
+`x-kestral-managed-data-export` annotation naming its collection. Package
+inspection requires an exact match to the export declaration, and Chat/agent
+dispatch derives the exact collection scope from it. This does not change the
+managed-data file format or widen grants. Pre-publication packages without the
+annotation must be rebuilt; they are refused rather than silently activated
+with a broken delegated-read path.
+
 The persisted document binds a digest of the contract version, collections,
 schemas, indexes, limits, and exports. A package update or downgrade may use a
 changed declaration only when all retained records and quotas remain valid.

@@ -1,24 +1,25 @@
 ---
 title: Product completion gates
 layout: default
-parent: Development
+parent: Contributing
+nav_order: 5
 ---
 
 # Product completion gates
 
 The next product milestone is not another kernel subsystem. It is proving that an ordinary Kestral app can be obtained, used repeatedly, recovered, and independently authored without privileged host behavior.
 
-## Implemented in this branch
+## Implemented foundation
 
 ### Navigation does not discard app drafts
 
-The Apps workspace remains mounted while the owner visits Chat, Settings, Stuff, or System. Inactive app UI is removed from layout and the accessibility tree, but the sandboxed surface is not destroyed merely because the owner navigated elsewhere. This protects unsaved in-frame work such as a Daily Review note draft. It does not silently make drafts durable: app-owned persistence still uses the ordinary host data/state contracts.
+The Apps workspace remains mounted while the owner visits Chat, Settings, Artifacts, or System. Inactive app UI is removed from layout and the accessibility tree, but the sandboxed surface is not destroyed merely because the owner navigated elsewhere. This protects unsaved in-frame work such as a Daily Review note draft. It does not silently make drafts durable: app-owned persistence still uses the ordinary host data/state contracts.
 
 ### Creator tooling is independently packageable
 
-`packages/create-kestral-app` is a dependency-free npm package containing the focused-app template it needs at runtime. It no longer depends on a Kestral source checkout to scaffold an app. Its tests create a project outside the repository, rebuild it, and execute the generated app's tests.
+`packages/create-kestral-app` is a dependency-free npm package containing the focused-app template it needs at runtime. It no longer depends on a Kestral source checkout to scaffold an app. Its tests pack and install the actual tarball outside the repository, invoke its public npm binary, rebuild the generated project, and execute that project's tests. Registry publication remains a release step.
 
-The repository helper under `scripts/create-app.mjs` remains for contributor convenience; the package is the distributable authoring path.
+The repository helper under `scripts/create-app.mjs` delegates to that same package and template for contributor convenience; the package is the distributable authoring path.
 
 ## Remaining product gates
 

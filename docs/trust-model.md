@@ -46,7 +46,10 @@ sandboxed app surface does not sandbox its backend.
   metadata is untrusted descriptive data. Listing a capability neither grants
   it nor makes it callable.
 - **One action path:** input, grant, deadline, and lifecycle state are checked
-  before execution and again before a result commits.
+  before execution and again before a result commits. The shared execution
+  boundary skips provider code if cancellation or its deadline is observed
+  immediately before dispatch. After dispatch, cancellation is cooperative and
+  cannot undo external side effects already performed.
 - **Direct human control:** a declared same-app action from the provider's live
   surface is an explicit human command. It remains grant-checked and audited,
   and does not add a `notify` notice. Under a `requires-approval` grant, only a
@@ -61,13 +64,13 @@ sandboxed app surface does not sandbox its backend.
   carried only by the pending approval and is not copied into the ledger. In
   remote mode the replay feed stores only a wake-up ID; the full prompt comes
   from the authoritative current-pending endpoint.
-- **No surface-gesture attestation:** the own-surface exception above is an
-  interaction policy for cooperative apps, not malicious-app containment.
-  Effect metadata is provider-declared, and the custom iframe bridge validates
-  the live binding, schema, and declared intent but cannot prove that a person
-  clicked. A dishonest surface can mislabel an effect or script a nominally
-  low-risk submission. Grants and audit still apply; host-attested activation or
-  a narrower exception is required to close this residual.
+- **Conservative custom-surface confirmation:** an iframe message alone cannot
+  prove a human gesture. The host frame requires a physical confirmation in
+  host-owned UI before forwarding every own-provider `read-only`/`local-write`
+  invocation, including under `silent` and `notify` grants. The app cannot
+  synthesize that confirmation. It is a frontend guard rather than a single-use
+  attestation consumed by the kernel, and it does not verify provider-declared
+  effects. A single authoritative kernel policy remains the intended cleanup.
 - **Scoped audit:** invocation and approval records identify the exact requested
   data scope, not only the broader grant that covered it.
 - **Broad resource grants stay explicit:** an `all-resources` grant covers every
@@ -395,7 +398,10 @@ cannot supply an app identity or path. This private owning-app access is not
 delegated authority and creates no grant or Run. Generated cross-app reads are
 ordinary capabilities: they require
 a grant, an exact `app-data:<provider>:<collection>` invocation resource, and a
-Run through the full action path. Contract v2 proposal capabilities are also
+Run through the full action path. Chat and agent dispatch derive that resource
+from the exact export schema's `x-kestral-managed-data-export` collection
+annotation, which package inspection checks against the declared export.
+This metadata confers no grant. Contract v2 proposal capabilities are also
 ordinary grants and Runs. They require an exact collection, record, or document
 resource scope derived from the host-generated schema, even when a standing
 grant says all resources. The handler revalidates package/contract bytes and

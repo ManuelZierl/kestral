@@ -228,10 +228,10 @@ fn validate_initialize_result(result: &Value) -> Result<(String, String), McpErr
         .filter(|name| !name.trim().is_empty())
         .ok_or_else(|| McpError::Protocol("serverInfo carries no name".into()))?
         .to_string();
-    if !server_info
+    if server_info
         .get("version")
         .and_then(Value::as_str)
-        .is_some_and(|version| !version.trim().is_empty())
+        .is_none_or(|version| version.trim().is_empty())
     {
         return Err(McpError::Protocol("serverInfo carries no version".into()));
     }

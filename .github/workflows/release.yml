@@ -66,6 +66,14 @@ jobs:
         run: node scripts/check-reference-app-isolation.mjs
       - name: Verify focused app scaffold
         run: node --test scripts/create-app.test.mjs
+      - name: Verify packed app creator
+        working-directory: packages/create-kestral-app
+        run: npm test
+      - name: Qualify Daily Review package and behavior
+        working-directory: examples/daily-review
+        run: npm test
+      - name: Test product budget checker
+        run: node --test scripts/check-product-budgets.test.mjs
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -247,6 +255,10 @@ jobs:
     needs: [validate, windows, linux]
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v7
         with:
           pattern: "*-release"
@@ -273,6 +285,10 @@ jobs:
           require_one "promoted app record" "PROMOTED-APPS.json"
           require_one "release evidence" "RELEASE-EVIDENCE.md"
           require_one "release notes" "RELEASE-NOTES.md"
+      - name: Enforce complete release product size budgets
+        run: |
+          node scripts/check-product-budgets.mjs --platform linux --dir release-assets
+          node scripts/check-product-budgets.mjs --platform windows --dir release-assets
       - name: Write CI provenance record
         run: |
           version="${{ inputs.version }}"

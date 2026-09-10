@@ -85,6 +85,9 @@ Before a release-bound change, also run workspace formatting, Clippy with
 warnings denied, all features, frontend build, dependency audits, and the core
 isolation gate used by `.github/workflows/ci.yml`. External app repositories
 run their own package builds, tests, audits, and reproducibility checks.
+Core-owned authoring examples under `examples/` and the template bundled in
+`packages/create-kestral-app` are separate qualification inputs. They are tested
+and inspected by CI but never become production runtime or bundle dependencies.
 
 Architecture-boundary changes must preserve focused evidence for these failure
 and recovery cases:
@@ -101,9 +104,11 @@ and recovery cases:
 
 ## Branch and release model
 
-`main` is the integration and release branch. Pull requests to `main` and pushes
-to it run Linux and Windows tests, native Windows credential integration, and
-package builds. A `v*` tag contained in `main` runs the release workflow,
+`main` is the integration and release branch. The combined `v-main` candidate
+uses the same CI matrix. Pull requests to either branch and pushes to them run
+Linux and Windows tests, packed creator/example qualification, native Windows
+credential integration, and package builds with artifact-size budgets.
+A `v*` tag contained in `main` runs the release workflow,
 verifies the tag against every product version, reruns the release gates on
 Linux and Windows, builds both platform artifact sets, requires the complete
 matrix, writes and verifies checksums, and marks versions with `-alpha.N` or

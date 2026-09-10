@@ -24,10 +24,9 @@ hidden fallback behavior.
   package-source warnings can still apply.
 - No MSI is published for the alpha because the current Tauri/WiX bundler
   rejects a non-numeric SemVer prerelease identifier.
-- The frontend dependency audit reports moderate instances of
-  `GHSA-frvp-7c67-39w9` through the MCP SDK's Hono dependency. No compatible
-  fix is available; Kestral does not use the affected inbound static-file
-  server path. High-severity npm audit findings remain a release failure.
+- The frontend dependency audit can still report moderate advisories in
+  development tooling, including Vitest's mocker and the MCP SDK's Hono
+  dependency. High-severity npm audit findings remain a release failure.
 - App packages install from directories or public HTTPS Git repositories.
   `.ahpkg` archive ingestion and private Git authentication are not supported.
 - External source-built apps can require their own runtimes; normal product
@@ -57,9 +56,10 @@ hidden fallback behavior.
   when the current standing grant is `silent` or `notify`: using a frontend
   grant snapshot to decide whether confirmation is needed creates a race if
   authority changes before kernel preparation. The frame cannot synthesize the
-  host confirmation. Capability effects remain provider-declared, so the guard
-  attests a human gesture rather than independently proving that the declared
-  effect matches the app's implementation. Cross-app, external-write,
+  host confirmation. This is a frontend guard, not a single-use attestation
+  consumed by the kernel. Capability effects remain provider-declared, so the
+  guard does not independently prove that the declared effect matches the
+  app's implementation. Cross-app, external-write,
   destructive, and unspecified effects continue through normal kernel-owned
   trusted chrome. The cleaner long-term fix is a single-use kernel-consumed
   gesture attestation, or removal of the direct-surface approval shortcut.

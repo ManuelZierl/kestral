@@ -17,6 +17,9 @@
         "effect": "read-only",
         "input_schema": {
           "type": "object",
+          "x-kestral-managed-data-export": {
+            "collection": "tasks"
+          },
           "additionalProperties": false,
           "required": [],
           "properties": {

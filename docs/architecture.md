@@ -271,9 +271,15 @@ prepare -> authorize -> execute -> finalize
 1. **Prepare** validates input schema, app identity, capability declaration,
    grant scope, data scope, expiry, cancellation, and deadline.
 2. **Authorize** obtains trusted-chrome approval when the grant requires it.
-3. **Execute** calls the handler outside the host's kernel mutex.
+3. **Execute** checks cooperative cancellation and the deadline immediately
+   before dispatch, then calls the handler outside the host's kernel mutex.
 4. **Finalize** revalidates authority and lifecycle state, validates all output
    and artifact schemas, stamps provenance, and commits ledger records.
+
+A cancellation observed after authorization but before dispatch skips provider
+code and finalizes as cancelled. Once provider code has started, cancellation is
+cooperative; rejecting a late result cannot undo an external effect already
+performed by that handler.
 
 Ending a Run or removing/replacing either side of an invocation records pending
 work as cancelled in the same durable transition. Opaque phase tokens are unique
@@ -292,10 +298,14 @@ programmatic invocations retain their configured grant condition.
 This exception is convenience for an honestly declared, user-driven surface;
 it is not an isolation boundary against a malicious app. Effect metadata comes
 from the provider, and a custom iframe's bridge message proves the live surface
-binding and declared intent but not a physical user gesture. A dishonest surface
-can therefore mislabel an effect or submit a nominally low-risk intent without a
-click. Grants and audit still apply, but closing that gap requires host-attested
-user activation or removing the exception for untrusted custom surfaces.
+binding and declared intent but not a physical user gesture. The host frame adds
+a conservative confirmation before forwarding every custom own-provider
+`read-only`/`local-write` invocation, including those with `silent` or `notify`
+grants. The app cannot synthesize that host-owned physical interaction. This
+avoids relying on a frontend grant snapshot that may change before preparation.
+The guard is not a single-use attestation consumed by the kernel and does not
+prove an honestly declared effect. Consolidating it into one authoritative
+kernel policy remains an alpha limitation.
 
 The ledger records the requested data scope on invocation and approval events.
 Invocation input and result bodies are not duplicated into audit history; the
@@ -346,6 +356,13 @@ and processing flow through explicit app contracts; it cannot inherit device
 authority from Chat or bypass the sandbox and capability boundaries.
 
 ## Package and protocol boundary
+
+External apps own their builds, tests, dependencies, and releases; core CI
+consumes their release evidence rather than their source or package bytes.
+The in-tree Daily Review authoring example under `examples/` and the creator's
+template are core-owned qualification inputs. They exercise public package
+contracts without being bundled, auto-installed, or special-cased by runtime
+app identity. The example's qualification is not an external-app release claim.
 
 ```text
 app.json -- host package reader --> generic manifest -- seal --> kernel
@@ -519,7 +536,10 @@ CAS revisions, transactions, quotas, and lifecycle checks. An owning live sandbo
 the authenticated surface bridge without a grant or Run. Fixed generated
 `get`/`list` capabilities bind delegated reads to the provider app identity and
 enter the normal grant-checked action path with exact
-`app-data:<app-id>:<collection>` resource scope. Indexed reads may bind their
+`app-data:<app-id>:<collection>` resource scope. Their exact input schemas include
+the host-defined `x-kestral-managed-data-export` collection annotation; Chat and
+agent dispatch derive the invocation scope from it, never from model input.
+Indexed reads may bind their
 equality value from trusted current-Chat context so it is not model-controlled.
 Delegated mutations remain unsupported until the action path can stage a side
 effect and commit it only after finalization revalidates authority. Contract v2

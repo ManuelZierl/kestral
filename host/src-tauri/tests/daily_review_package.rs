@@ -5,7 +5,7 @@ use std::path::PathBuf;
 fn daily_review_reference_package_passes_host_inspection() {
     let package = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
-        .join("reference-apps/daily-review/dist");
+        .join("examples/daily-review/dist");
     let staging = std::env::temp_dir().join(format!(
         "kestral-daily-review-inspection-{}",
         std::process::id()

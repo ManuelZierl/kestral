@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppStatusView, InstalledApp, PackageInspection } from "$lib/api";
 import { apps } from "$lib/stores/apps";
-import { activeAppId } from "$lib/stores/hostState";
+import { activeAppId, hostInitialized } from "$lib/stores/hostState";
 import AppsPage from "./AppsPage.svelte";
 
 vi.mock("$lib/api", async (importOriginal) => {
@@ -156,6 +156,7 @@ async function openInstaller(user: ReturnType<typeof userEvent.setup>): Promise<
 beforeEach(() => {
   apps.set([]);
   activeAppId.set(null);
+  hostInitialized.set(true);
   listApps.mockResolvedValue([]);
   planManagedAppTransition.mockResolvedValue({
     transition_id: "transition-1",
@@ -199,6 +200,18 @@ afterEach(() => {
 });
 
 describe("Apps manager", () => {
+  it("waits for successful host bootstrap before taking its manager snapshot", async () => {
+    hostInitialized.set(false);
+    listInstalledApps.mockResolvedValue([]);
+    render(AppsPage);
+
+    expect(listInstalledApps).not.toHaveBeenCalled();
+
+    hostInitialized.set(true);
+    expect(await screen.findByText(firstAppHeading)).toBeTruthy();
+    expect(listInstalledApps).toHaveBeenCalledOnce();
+  });
+
   it("shows an explicit loading state until both app views are ready", async () => {
     let finishStatuses!: (value: AppStatusView[]) => void;
     listInstalledApps.mockReturnValue(new Promise((resolve) => { finishStatuses = resolve; }));

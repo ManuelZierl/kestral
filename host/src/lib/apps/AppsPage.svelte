@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import {
     listInstalledApps,
     setAppEnabled,
@@ -17,7 +17,7 @@
   import { hasUsableFocusedApp } from "$lib/apps/appReadiness";
   import { standaloneSurfaces } from "$lib/apps/standaloneSurfaces";
   import { grants } from "$lib/stores/grants";
-  import { activeAppId } from "$lib/stores/hostState";
+  import { activeAppId, hostInitialized } from "$lib/stores/hostState";
   import { openAppPermissions } from "$lib/stores/navigation";
 
   const developerGuideUrl = "https://manuelzierl.github.io/kestral/writing-apps.html";
@@ -134,11 +134,18 @@
 
   onMount(() => {
     mounted = true;
-    void load();
     return () => {
       mounted = false;
       if (retryTimer !== null) clearTimeout(retryTimer);
     };
+  });
+
+  // AppsPage stays mounted to preserve custom-surface drafts, but its manager
+  // snapshot must not race startup activation. A failed bootstrap leaves this
+  // false; a successful retry flips it back and starts a fresh load.
+  $effect(() => {
+    if (!$hostInitialized) return;
+    untrack(() => void load());
   });
 
   const activeApp = $derived(

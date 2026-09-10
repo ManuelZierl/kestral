@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -19,7 +19,7 @@ Usage:
   create-kestral-app <directory> --id <reverse-dns-id> --name <display-name> [--description <text>]
 
 Example:
-  npx create-kestral-app ../my-focus-app --id com.example.my-focus-app --name "My Focus App"
+  create-kestral-app ../my-focus-app --id com.example.my-focus-app --name "My Focus App"
 
 The target directory must not already exist. The generated project has no npm
 dependencies and contains a ready-to-install dist/ package.`;
@@ -139,7 +139,7 @@ export async function createAppProject(options) {
   }
 }
 
-async function main() {
+export async function main() {
   try {
     const options = parseArguments(process.argv.slice(2));
     if (options.help) {
@@ -156,6 +156,6 @@ async function main() {
   }
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) {
   await main();
 }

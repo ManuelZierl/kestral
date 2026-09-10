@@ -345,6 +345,67 @@ fn cancelled_run_never_dispatches_or_commits_handler_output() {
 }
 
 #[test]
+fn cancellation_after_authorization_skips_handler_dispatch_and_finalizes_once() {
+    let (mut kernel, _chrome, _clock) = test_kernel();
+    let calls = Arc::new(Mutex::new(0));
+    install_notes_with(&mut kernel, counting_note_handler(calls.clone()));
+    install_chat(&mut kernel);
+    let run_id = chat_message_run(&mut kernel, "cancel after authorization");
+    let prepared = match kernel
+        .prepare_invocation(
+            &run_id,
+            &create_note_ref(),
+            InvocationRequest {
+                input: obj(json!({"text": "cancel before dispatch"})),
+                data_scope: DataScope::None,
+            },
+        )
+        .unwrap()
+    {
+        app_host_kernel::PrepareInvocation::Prepared(prepared) => prepared,
+        app_host_kernel::PrepareInvocation::Refused(_) => panic!("grant should be live"),
+    };
+    let authorized = match kernel
+        .authorize_invocation(prepared.await_approval())
+        .unwrap()
+    {
+        app_host_kernel::AuthorizeInvocation::Authorized(authorized) => authorized,
+        app_host_kernel::AuthorizeInvocation::Refused(_) => panic!("grant should be live"),
+    };
+
+    kernel.cancel_pending_invocations_for_run(&run_id);
+    let result = kernel.finalize_invocation(authorized.execute()).unwrap();
+    assert_eq!(
+        result,
+        InvocationResult::Refused {
+            reason: RefusalReason::Cancelled,
+        }
+    );
+    assert_eq!(*calls.lock().unwrap(), 0);
+    assert_eq!(
+        kernel
+            .records_for_run(&run_id)
+            .filter(|record| matches!(record.event, LedgerEvent::InvocationCancelled { .. }))
+            .count(),
+        1
+    );
+    assert!(!kernel
+        .records_for_run(&run_id)
+        .any(|record| matches!(record.event, LedgerEvent::CapabilityCompleted { .. })));
+
+    kernel
+        .end_run(&run_id, RunTerminalState::Cancelled)
+        .unwrap();
+    assert_eq!(
+        kernel
+            .records_for_run(&run_id)
+            .filter(|record| matches!(record.event, LedgerEvent::RunEnded { .. }))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn approval_is_revalidated_before_phased_finalization() {
     let (mut kernel, _chrome, _clock) = test_kernel();
     install_notes(&mut kernel, GrantCondition::RequiresApproval);

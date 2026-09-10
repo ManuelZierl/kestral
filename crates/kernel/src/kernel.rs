@@ -344,6 +344,7 @@ pub struct ExecutedInvocation {
     id: u64,
     outcome: Option<Result<CapabilityOutcome, HandlerFailure>>,
     panic: Option<String>,
+    cancelled_before_dispatch: bool,
     cancelled: Arc<AtomicBool>,
     cancel_on_drop: bool,
 }
@@ -411,23 +412,39 @@ impl AuthorizedInvocation {
 
     pub fn execute_with_progress(mut self, progress: ProgressReporter) -> ExecutedInvocation {
         self.context.progress = progress.with_cancellation(self.context.cancellation.clone());
-        let executed = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            (self.handler)(&self.input, &self.context)
-        })) {
-            Ok(outcome) => ExecutedInvocation {
-                id: self.id,
-                outcome: Some(outcome),
-                panic: None,
-                cancelled: self.cancelled.clone(),
-                cancel_on_drop: true,
-            },
-            Err(panic) => ExecutedInvocation {
+        let executed = if self.context.cancellation.is_cancelled() {
+            // Cancellation can arrive after authorization but before the host
+            // schedules this token. Do not enter provider code in that gap;
+            // finalization will record the cancellation against this phase.
+            ExecutedInvocation {
                 id: self.id,
                 outcome: None,
-                panic: Some(format!("handler panicked: {}", panic_message(&*panic))),
+                panic: None,
+                cancelled_before_dispatch: true,
                 cancelled: self.cancelled.clone(),
                 cancel_on_drop: true,
-            },
+            }
+        } else {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                (self.handler)(&self.input, &self.context)
+            })) {
+                Ok(outcome) => ExecutedInvocation {
+                    id: self.id,
+                    outcome: Some(outcome),
+                    panic: None,
+                    cancelled_before_dispatch: false,
+                    cancelled: self.cancelled.clone(),
+                    cancel_on_drop: true,
+                },
+                Err(panic) => ExecutedInvocation {
+                    id: self.id,
+                    outcome: None,
+                    panic: Some(format!("handler panicked: {}", panic_message(&*panic))),
+                    cancelled_before_dispatch: false,
+                    cancelled: self.cancelled.clone(),
+                    cancel_on_drop: true,
+                },
+            }
         };
         self.cancel_on_drop = false;
         executed
@@ -1493,6 +1510,19 @@ impl Kernel {
                 pending.output_schema.clone(),
             )
         };
+        if executed.cancelled_before_dispatch {
+            let result = self.finalize_cancelled(
+                run_id,
+                capability,
+                data_scope,
+                KernelError::PreparedInvocationCancelled,
+            );
+            if result.is_err() {
+                self.require_recovery_after_consumed_transition();
+            }
+            self.pending_invocations.remove(&executed.id);
+            return result;
+        }
         let result = if let Some(error) = executed.panic.take() {
             self.fail_invocation(&run_id, &capability, &grant, &data_scope, error)
         } else {

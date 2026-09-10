@@ -1,14 +1,15 @@
 ---
 title: Recurring workflow proof
 layout: default
-parent: Development
+parent: Contributing
+nav_order: 4
 ---
 
 # Recurring workflow proof
 
 This milestone tests two claims together: Kestral can become useful for a recurring job, and that job can remain an ordinary independently authored app rather than host product logic.
 
-The reference workflow is **Daily Review** under `reference-apps/daily-review`. It deliberately uses only public package, surface, host-managed-data, capability, grant, artifact, and model paths. Task hierarchy, daily-note behavior, archive semantics, and proposal presentation stay app-owned. No Daily Review concept belongs in the kernel.
+The reference workflow is **Daily Review** under `examples/daily-review`. This in-tree authoring example deliberately uses only public package, surface, host-managed-data, capability, grant, artifact, and model paths. Task hierarchy, daily-note behavior, archive semantics, and proposal presentation stay app-owned. It is never bundled or auto-installed and is not an independently released app. No Daily Review concept belongs in the kernel.
 
 ## Acceptance gates
 
@@ -16,7 +17,7 @@ The reference workflow is **Daily Review** under `reference-apps/daily-review`. 
 2. **Independent everyday workflow — implemented and under CI qualification.** Daily Review installs as an ordinary backend-free package and remains useful with model access absent or denied. It has its own dependency-free Node 22 source/build/test path; the tracked installable package must reproduce from that source.
 3. **Controlled assistance and cross-app composition — implemented, with recovery still incomplete.** Direct model assistance is visibly staged before application. Separately, Chat can receive an approved read-only task capability and an approval-gated proposal capability. A Chat proposal is a host-generated artifact bound to the target store generation and record revision; Daily Review reads only its own proposal artifacts and applies them through its private CAS mutation path. A changed generation or task revision disables the proposal, and a racing mutation is surfaced instead of silently overwriting newer state. Permission denial leaves the core workflow usable. Still required here: selective per-app restore and a useful portable owner-facing domain export.
 4. **Authoring parity — partially implemented.** Daily Review can be rebuilt from its own directory without host or kernel source and targets the versioned public package contract. Still required before calling the broader authoring story complete: independently distributed authoring/validation tooling rather than requiring a Kestral source checkout for scaffolding or authoritative inspection.
-5. **Qualification — automated portion added.** A PR-specific Linux workflow uses Node 22 for the Daily Review package tests and frontend checks/tests, then runs Rust formatting and the workspace test matrix. The host integration suite now also passes the tracked Daily Review package through Kestral's authoritative package inspection path. Still required: a real clean-profile packaged-host install/restart exercise.
+5. **Qualification — automated portion added.** The main Linux/Windows CI matrix uses Node 22 for the Daily Review package tests, packed creator qualification, and frontend checks/tests, then runs Rust formatting and the workspace test matrix. The host integration suite also passes the tracked Daily Review package through Kestral's authoritative package inspection path. Still required: a real clean-profile packaged-host install/restart exercise.
 
 ## Product boundary
 

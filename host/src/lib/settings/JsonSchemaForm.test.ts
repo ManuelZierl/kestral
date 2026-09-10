@@ -63,4 +63,44 @@ describe("JsonSchemaForm", () => {
     await fireEvent.input(iterations, { target: { value: "13" } });
     expect(screen.queryByRole("status")).toBeNull();
   });
+
+  it("submits false for a required boolean with no existing value", async () => {
+    const onSubmit = vi.fn();
+    render(JsonSchemaForm, {
+      schema: {
+        type: "object",
+        properties: { enabled: { type: "boolean" } },
+        required: ["enabled"],
+      },
+      initialValue: {},
+      onSubmit,
+    });
+
+    const checkbox = screen.getByRole("checkbox", { name: "enabled" }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    await fireEvent.submit(screen.getByRole("button", { name: "Save" }).closest("form")!);
+
+    expect(onSubmit).toHaveBeenCalledWith({ enabled: false });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("allows an explicit empty required string but still requires the property", async () => {
+    const onSubmit = vi.fn();
+    const { container } = render(JsonSchemaForm, {
+      schema: {
+        type: "object",
+        properties: { label: { type: "string" } },
+        required: ["label"],
+      },
+      initialValue: {},
+      onSubmit,
+    });
+
+    const label = screen.getByLabelText("label") as HTMLInputElement;
+    expect(label.required).toBe(false);
+    await fireEvent.submit(container.querySelector("form")!);
+
+    expect(onSubmit).toHaveBeenCalledWith({ label: "" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });

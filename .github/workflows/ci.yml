@@ -4,16 +4,14 @@ name: CI
 #   main — integration and release branch. Pull requests and pushes run the
 #          full matrix including Windows, native credential integration, and
 #          Windows package builds.
-#   fix/trustworthy-alpha-foundation — release-candidate hardening branch.
-#          PRs targeting it run the same matrix so alpha-foundation changes are
-#          validated before they are promoted to main.
+#   v-main — combined integration candidate, checked on pushes and PRs.
 # Releases are produced by release.yml when a v* tag lands on main.
 
 on:
   push:
-    branches: [main]
+    branches: [main, v-main]
   pull_request:
-    branches: [main, fix/trustworthy-alpha-foundation]
+    branches: [main, v-main]
 
 permissions:
   contents: read
@@ -55,8 +53,11 @@ jobs:
         run: node scripts/check-reference-app-isolation.mjs
       - name: Verify focused app scaffold
         run: node --test scripts/create-app.test.mjs
+      - name: Verify packed app creator
+        working-directory: packages/create-kestral-app
+        run: npm test
       - name: Qualify Daily Review package and behavior
-        working-directory: reference-apps/daily-review
+        working-directory: examples/daily-review
         run: npm test
       - name: Install Tauri system dependencies
         run: |
@@ -139,15 +140,10 @@ jobs:
           path: target/release/public/*
           if-no-files-found: error
 
-  # The Windows leg is the release gate. Alpha-foundation PRs run it too: the
-  # branch specifically changes trust/distribution behavior and should not wait
-  # until promotion to main to discover native-only failures.
+  # Both integration branches exercise native Windows behavior before release.
   test-windows:
     name: Core tests + packages (Windows)
     runs-on: windows-latest
-    if: >-
-      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'fix/trustworthy-alpha-foundation')) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -169,8 +165,11 @@ jobs:
         run: node scripts/check-reference-app-isolation.mjs
       - name: Verify focused app scaffold
         run: node --test scripts/create-app.test.mjs
+      - name: Verify packed app creator
+        working-directory: packages/create-kestral-app
+        run: npm test
       - name: Qualify Daily Review package and behavior
-        working-directory: reference-apps/daily-review
+        working-directory: examples/daily-review
         run: npm test
       - name: Install frontend toolchain
         working-directory: host

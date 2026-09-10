@@ -72,6 +72,10 @@ Before adding host behavior, ask:
   releases. Core source, tests, CI, and release tooling never resolve app source
   paths or package artifacts. Apps may consume versioned Kestral crates,
   schemas, or SDK packages through normal external dependency mechanisms.
+- In-tree authoring examples under `examples/` and the creator's template are
+  core-owned qualification inputs, not external app releases. CI may build and
+  inspect them; production runtime and bundles must never depend on them or
+  special-case their app identities.
 - MCP servers are bridged into userland apps.
 - MCP is an adapter protocol, not the internal ontology: the kernel is
   protocol-agnostic and receives only generic manifests, schemas, handlers,
@@ -100,8 +104,11 @@ Before adding host behavior, ask:
   programmatic calls remain fully grant-conditioned.
 - The direct-surface exception is interaction policy, not malicious-app
   containment. Capability effects are provider-declared, and the custom-surface
-  bridge validates a live binding and intent but does not attest a physical user
-  gesture. Keep this residual explicit in trust-facing claims.
+  bridge validates a live binding and intent. The host frame conservatively
+  requires a physical host-owned confirmation for every custom own-provider
+  `read-only`/`local-write` invoke, even under `silent`/`notify` grants. This
+  frontend guard is not a kernel-consumed attestation and does not verify actual
+  backend effects. Keep this residual explicit in trust-facing claims.
 - Event subscriptions are a limited host event feed, not cross-app RPC.
 - Raw ledger records are trusted audit data, not general plugin feed data.
 - Trusted chrome is host-owned and cannot be rendered by apps.

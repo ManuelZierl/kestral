@@ -6,7 +6,7 @@ use host_lib::package;
 fn focused_app_scaffold_template_passes_host_package_inspection() {
     let package_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
-        .join("templates/focused-app/src");
+        .join("packages/create-kestral-app/template/src");
 
     let inspection = package::inspect(&package_root).expect("scaffold template must inspect");
 
