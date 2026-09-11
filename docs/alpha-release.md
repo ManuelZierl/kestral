@@ -42,17 +42,19 @@ The release candidate contains exactly these end-user artifacts:
 matrix. External apps remain independently built and distributed; they are not
 Kestral release artifacts.
 
-The alpha compatibility-evidence set contains Daily Notes, Chat Export,
-Whiteboard, Model Profiles, Kestral Pi, and Reading Insights. The promoted-app
-record pins each independent repository commit, package digest, exact tested
-host version, and extension contracts. Publication is blocked until every entry
-also pins an immutable evidence document covering package inspection, permission
-denial, activation, one representative action, restart, update with data
-preservation, disable/enable, and both keep-data and purge-data uninstall.
+The alpha curation and compatibility-evidence roster contains Chat Export,
+Kestral Pi (installed as **Agent Engine (pi)**), Excalidraw (installed as
+**Whiteboard**), Model Profiles, and Goal Chat. The promoted-app record pins each
+independent repository commit, package digest, exact tested host version, and
+extension contracts. Publication is blocked until every entry also pins an
+immutable evidence document covering package inspection, permission denial,
+activation, one representative action, restart, update with data preservation,
+disable/enable, and both keep-data and purge-data uninstall.
 
-Promotion is narrower than curation: it records a tested compatibility claim
-for exact bytes. It does not bundle the app, grant special authority, or endorse
-the app for general use. There are no curated apps in this alpha.
+Promotion and curation remain separate claims. Promotion records tested
+compatibility for exact bytes, while curation provides an optional discovery
+aid. Neither bundles the app, grants special authority, or removes the need to
+review the publisher, package, permissions, and native-backend authority.
 
 This alpha makes no claim of:
 

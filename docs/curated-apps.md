@@ -26,15 +26,20 @@ the full authority of your operating-system account outside Kestral's grants.
 
 ## App list
 
-No app is curated for `v0.1.0-alpha.1`. Notes was removed from the candidate
-list because its repository does not yet provide the repository license, exact
-runtime declaration, current package contract, and immutable lifecycle evidence
-required by the criteria below. It can be reconsidered after those publication
-requirements are met.
+The `v0.1.0-alpha.1` curated list contains five optional apps:
 
-Apps named as release compatibility evidence are not automatically curated.
-Compatibility evidence proves only the recorded package and lifecycle checks;
-it is not a security endorsement or a general recommendation.
+| App | Focus | Repository |
+|---|---|---|
+| Chat Export | Download the current Chat conversation as Markdown, text, JSON, or safe HTML. | [ManuelZierl/kestral-chat-export](https://github.com/ManuelZierl/kestral-chat-export) |
+| Kestral Pi (installed as **Agent Engine (pi)**) | Add an optional agent engine that routes model and tool calls through Kestral. Its native backend requires explicit unsafe-backend opt-in. | [ManuelZierl/kestral-pi](https://github.com/ManuelZierl/kestral-pi) |
+| Excalidraw (installed as **Whiteboard**) | Keep multiple local canvases in Kestral-managed app data and review proposed canvas operations. | [ManuelZierl/kestral-excalidraw](https://github.com/ManuelZierl/kestral-excalidraw) |
+| Model Profiles | Save reusable model, prompt, generation, and tool configurations for Chat. | [ManuelZierl/kestral-model-profiles](https://github.com/ManuelZierl/kestral-model-profiles) |
+| Goal Chat | Work toward a goal while keeping the current solution, decisions, constraints, questions, and assumptions explicit. | [ManuelZierl/kestral-goal-chat](https://github.com/ManuelZierl/kestral-goal-chat) |
+
+The alpha compatibility record applies only to the exact source commits and
+package digests retained with the release. Compatibility evidence proves the
+recorded package and lifecycle checks; it is not a security endorsement or a
+promise about later repository contents.
 
 ## Install a curated app
 

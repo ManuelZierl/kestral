@@ -189,14 +189,13 @@ For the first alpha evidence pass, use these clean predecessor packages for the
 update step. They are external package inputs to the app-owned evidence run, not
 dependencies fetched by Kestral core CI.
 
-| App | Predecessor version | Source commit | Package digest |
+| App | Predecessor tag | Source commit | Package digest |
 |---|---|---|---|
-| Daily Notes | `0.1.0` | `543332db5162ee63e8686cb4ad08c60e76791b6a` | `sha256-8fc172678cb11c51907bb3bb15d97a0ee4e0acf9ef27b16e143e2c07c84f7c08` |
-| Chat Export | `0.1.1` | `d83a64b336ebc4ee8f6c75d710ed7689c6571a19` | `sha256-9fa54047ed2046d7d4efd3248762893a5270e826d96444c46ee20990076d37e4` |
-| Whiteboard | `0.1.1` | `fcb5c6d453f7de4db8c3b0a0f19746a3b1a36891` | `sha256-e03b8097f932e13fdc542b7526881a0d812b1d90777c00988e9fa7cc5bef3c94` |
-| Model Profiles | `0.1.0` | `f31fd0da4c07eb1ffff746d2b8861b20ed679dd7` | `sha256-6e870e024a62b562a49b7a3a52f1b9d954647fa55f5be94bb5ef2d3d4889c82e` |
-| Kestral Pi | `0.1.1` | `d1d63bfaee1730fa8361810d70aae8e83b99323e` | `sha256-6b1dbe0fb9d5a22c90e7602a653d8bfc063af0fb1f7ded2fe18a9ff1ff72532f` |
-| Reading Insights | `0.3.1` | `e92051b2f91350a0684d6de4d24b639178714d96` | `sha256-ac6c85f561ac8ee60a05d0af99ab801ed15c6a14e3b1cd42235c3873f16cc255` |
+| Chat Export | `v0.1.2` | `eefa30453d49b56854721b6f9862a1237f28ede7` | `sha256-f3db008300e50ff0f13c3c52422da64db6e8c1812d25d181896d6b887674d31d` |
+| Kestral Pi | `v0.1.2` | `5de81454cfdc678c47abc1287214e8bf6428b197` | `sha256-dc6ff954ce2d916d90ea58e63ea07647420de1d1252904b806e345f085d60c67` |
+| Excalidraw | `v0.1.3` | `22a2257dcd83a477c8bfaf2c99f07c6c33fe1aec` | `sha256-063c66203da45230c69a30435616e0b391a894eaede6e2fa37f4d44e864a1b0b` |
+| Model Profiles | `v0.1.1` | `ea1f3e98c1d9507d365eb9efe362f384cf613e16` | `sha256-a97fc2c1a8215c0f7ba5baa35bcdf39097b254a507f9b37c10e2010a8e6caf5a` |
+| Goal Chat | `v0.1.0` | `eac8bec91cb45bf3a6277d33dfd2e76aac8ac571` | `sha256-5bf5933dbda341aeef3942f4104a5d9789c6a697144e26749b78926231f3dff2` |
 
 The evidence document must identify the exact host commit, workflow URL,
 timestamp, and tested platforms. `source.clean` must be `true`; every lifecycle
@@ -255,8 +254,9 @@ window opened:
 - Chat without Kestral Pi, then optional Kestral Pi installation and one agent
   interaction;
 - profile, Chat, app, and artifact persistence after restart;
-- third-party app inspection, installation, disable/enable, removal, and data
-  purge choice;
+- package inspection, installation, one representative action, restart, update,
+  disable/enable, keep-data removal, and purge-data removal for Chat Export,
+  Kestral Pi, Excalidraw, Model Profiles, and Goal Chat;
 - permission prompts, denials, revocations, and resulting capability behavior;
 - Ubuntu backend/static browser-client connection, exact origin, HTTPS or
   encrypted tunnel, disconnect/session clearing, server-side file access, and
