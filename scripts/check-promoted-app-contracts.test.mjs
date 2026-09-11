@@ -50,8 +50,14 @@ test("a different tested host release fails closed", () => {
 });
 
 test("release mode refuses missing lifecycle evidence", () => {
+  const pendingPromotion = clone(promotion);
+  pendingPromotion.tested_core_commit = null;
+  for (const app of pendingPromotion.apps) {
+    app.evidence_url = null;
+    app.evidence_sha256 = null;
+  }
   assert.throws(
-    () => validatePromotionDocument(promotion, contracts, hostVersion, { requireEvidence: true }),
+    () => validatePromotionDocument(pendingPromotion, contracts, hostVersion, { requireEvidence: true }),
     /has no pinned lifecycle evidence/,
   );
 });
