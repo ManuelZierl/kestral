@@ -17,17 +17,17 @@ function completeReport() {
   return contractsReport
     .replaceAll("PENDING", "recorded")
     .replaceAll("- [ ] ", "- [x] ")
-    .replace("- Tested core commit: `recorded`", `- Tested core commit: \`${coreCommit}\``)
-    .replace("- Candidate source tree: `recorded`", "- Candidate source tree: `clean`")
-    .replace("- Executable/build source freeze: `recorded`", "- Executable/build source freeze: `frozen`")
-    .replace("- Decision (`APPROVE` or `HOLD`): `recorded`", "- Decision (`APPROVE` or `HOLD`): `APPROVE`");
+    .replace(/^- Tested core commit: `[^`]+`$/m, `- Tested core commit: \`${coreCommit}\``)
+    .replace(/^- Candidate source tree: `[^`]+`$/m, "- Candidate source tree: `clean`")
+    .replace(/^- Executable\/build source freeze: `[^`]+`$/m, "- Executable/build source freeze: `frozen`")
+    .replace(/^- Decision \(`APPROVE` or `HOLD`\): `[^`]+`$/m, "- Decision (`APPROVE` or `HOLD`): `APPROVE`")
+    .replace(/^- Remaining blockers or accepted limitations: .*$/m, "- Remaining blockers or accepted limitations: recorded");
 }
 
-test("the pending report has the exact required structure", () => {
-  assert.deepEqual(
-    validateEvidenceReport(contractsReport, promotion, hostVersion),
-    { testedCoreCommit: "PENDING", decision: "PENDING" },
-  );
+test("the current report has the exact required structure", () => {
+  const { testedCoreCommit, decision } = validateEvidenceReport(contractsReport, promotion, hostVersion);
+  assert.match(testedCoreCommit, /^(?:PENDING|[0-9a-f]{40})$/);
+  assert.ok(["PENDING", "HOLD", "APPROVE"].includes(decision));
 });
 
 test("structure drift fails closed", () => {
@@ -45,10 +45,35 @@ test("structure drift fails closed", () => {
   );
 });
 
-test("complete mode refuses pending markers and unchecked boxes", () => {
+test("complete mode refuses pending markers", () => {
+  const pendingReport = completeReport().replace(
+    "- Remaining blockers or accepted limitations: recorded",
+    "- Remaining blockers or accepted limitations: PENDING",
+  );
   assert.throws(
-    () => validateEvidenceReport(contractsReport, promotion, hostVersion, { requireComplete: true, releaseCommit }),
+    () => validateEvidenceReport(pendingReport, promotion, hostVersion, { requireComplete: true, releaseCommit }),
     /PENDING markers/,
+  );
+});
+
+test("complete mode refuses unchecked boxes", () => {
+  const uncheckedReport = completeReport().replace("- [x] Core Rust", "- [ ] Core Rust");
+  assert.throws(
+    () => validateEvidenceReport(uncheckedReport, promotion, hostVersion, { requireComplete: true, releaseCommit }),
+    /unchecked boxes/,
+  );
+});
+
+test("complete mode refuses a hold decision", () => {
+  const completePromotion = structuredClone(promotion);
+  completePromotion.tested_core_commit = coreCommit;
+  const heldReport = completeReport().replace(
+    "- Decision (`APPROVE` or `HOLD`): `APPROVE`",
+    "- Decision (`APPROVE` or `HOLD`): `HOLD`",
+  );
+  assert.throws(
+    () => validateEvidenceReport(heldReport, completePromotion, hostVersion, { requireComplete: true, releaseCommit }),
+    /requires final decision APPROVE/,
   );
 });
 
