@@ -34,6 +34,7 @@ function stubActions(overrides: Partial<SurfaceBridgeActions> = {}): SurfaceBrid
     cancelRun: vi.fn(async () => undefined),
     getConfig: vi.fn(async () => ({ theme: "dark" }) as JsonObject),
     updateConfig: vi.fn(async (config: JsonObject) => config),
+    compareUpdateConfig: vi.fn(async (_expected: JsonObject, config: JsonObject) => ({ kind: "updated" as const, config })),
     getState: vi.fn(async () => ({ revision: 0, value: null })),
     putState: vi.fn(async (_key, expectedRevision, value) => ({
       revision: expectedRevision + 1,
@@ -218,6 +219,7 @@ describe("surface bridge ops", () => {
     h.send(request({ kind: "list-artifacts" }, 3));
     h.send(request({ kind: "list-events" }, 4));
     h.send(request({ kind: "update-config", config: { theme: "light" } }, 5));
+    h.send(request({ kind: "compare-update-config", expected: { theme: "dark" }, config: { theme: "light" } }, 10));
     h.send(request({ kind: "get-state", key: "message-1" }, 6));
     h.send(request({
       kind: "put-state",
@@ -242,6 +244,7 @@ describe("surface bridge ops", () => {
     expect(h.actions.listArtifacts).toHaveBeenCalledOnce();
     expect(h.actions.listEvents).toHaveBeenCalledOnce();
     expect(h.actions.updateConfig).toHaveBeenCalledWith({ theme: "light" });
+    expect(h.actions.compareUpdateConfig).toHaveBeenCalledWith({ theme: "dark" }, { theme: "light" });
     expect(h.actions.getState).toHaveBeenCalledWith("message-1");
     expect(h.actions.putState).toHaveBeenCalledWith("message-1", 0, { read: true });
     expect(h.actions.managedData).toHaveBeenCalledWith({

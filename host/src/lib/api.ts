@@ -19,6 +19,10 @@ export type JsonValue =
   | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
+export type CompareAppConfigResult =
+  | { kind: "updated"; config: JsonObject }
+  | { kind: "conflict"; current: JsonObject };
+
 export interface CapabilityRef {
   provider: string;
   capability: string;
@@ -1645,6 +1649,11 @@ export const getAppConfig = (appId: string) =>
   invoke<JsonObject>("get_app_config", { appId });
 export const updateAppConfig = (appId: string, config: JsonObject) =>
   invoke<JsonObject>("update_app_config", { appId, config });
+export const compareAndUpdateAppConfig = (
+  appId: string,
+  expectedConfig: JsonObject,
+  config: JsonObject,
+) => invoke<CompareAppConfigResult>("compare_and_update_app_config", { appId, expectedConfig, config });
 export const listConnectorConfigs = () =>
   invoke<ConnectorConfigView[]>("list_connector_configs");
 export const upsertConnectorConfig = (

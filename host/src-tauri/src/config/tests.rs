@@ -1663,6 +1663,36 @@ fn update_app_config_validates_against_manifest_schema() {
     assert!(error.contains("invalid config declaration 'chat' for app 'chat'"));
 }
 
+#[test]
+fn compare_and_update_app_config_refuses_a_stale_baseline_without_losing_data() {
+    let mut service = HostConfigService::default();
+    let manifest = test_manifest();
+    let baseline = service.get_app_config("chat");
+    let first: JsonObject = serde_json::from_value(json!({"max_iterations": 7})).unwrap();
+    let second: JsonObject = serde_json::from_value(json!({"max_iterations": 8})).unwrap();
+
+    let applied = service
+        .compare_and_update_app_config("chat", &manifest, baseline.clone(), first.clone())
+        .unwrap();
+    assert_eq!(
+        applied,
+        CompareAppConfigResult::Updated {
+            config: first.clone()
+        }
+    );
+
+    let conflict = service
+        .compare_and_update_app_config("chat", &manifest, baseline, second)
+        .unwrap();
+    assert_eq!(
+        conflict,
+        CompareAppConfigResult::Conflict {
+            current: first.clone()
+        }
+    );
+    assert_eq!(service.get_app_config("chat"), first);
+}
+
 fn assert_update_app_config_failure_keeps_state(operation: FailingFileOperation) {
     let path = temp_config_path();
     HostConfigService::new(path.clone()).unwrap();

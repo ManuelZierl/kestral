@@ -132,6 +132,7 @@
     cancelRun: function (runId) { return requestOp({ kind: "cancel-run", runId: String(runId) }); },
     getConfig: function () { return requestOp({ kind: "get-config" }); },
     updateConfig: function (config) { return requestOp({ kind: "update-config", config: config || {} }); },
+    compareUpdateConfig: function (expected, config) { return requestOp({ kind: "compare-update-config", expected: expected || {}, config: config || {} }); },
     getState: function (key) { return requestOp({ kind: "get-state", key: String(key) }); },
     putState: function (key, expectedRevision, value) { return requestOp({ kind: "put-state", key: String(key), expectedRevision: expectedRevision, value: value === null ? null : value || {} }); },
     data: {

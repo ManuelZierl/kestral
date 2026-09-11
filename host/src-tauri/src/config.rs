@@ -422,6 +422,13 @@ pub struct AppConfigEntry {
     pub settings: JsonObject,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum CompareAppConfigResult {
+    Updated { config: JsonObject },
+    Conflict { current: JsonObject },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ConnectorKind {
@@ -969,6 +976,30 @@ impl HostConfigService {
         config: JsonObject,
     ) -> Result<JsonObject, String> {
         validate_app_config(manifest, app_id, &config)?;
+        self.persist_app_config(app_id, config)
+    }
+
+    pub fn compare_and_update_app_config(
+        &mut self,
+        app_id: &str,
+        manifest: &AppManifest,
+        expected: JsonObject,
+        config: JsonObject,
+    ) -> Result<CompareAppConfigResult, String> {
+        validate_app_config(manifest, app_id, &config)?;
+        let current = self.get_app_config(app_id);
+        if current != expected {
+            return Ok(CompareAppConfigResult::Conflict { current });
+        }
+        let config = self.persist_app_config(app_id, config)?;
+        Ok(CompareAppConfigResult::Updated { config })
+    }
+
+    fn persist_app_config(
+        &mut self,
+        app_id: &str,
+        config: JsonObject,
+    ) -> Result<JsonObject, String> {
         let mut candidate = self.document.clone();
         let entry = candidate
             .apps

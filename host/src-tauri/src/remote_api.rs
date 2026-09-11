@@ -563,6 +563,15 @@ async fn dispatch(
             )
             .await
         ),
+        "compare_and_update_app_config" => done!(
+            crate::compare_and_update_app_config(
+                state!(),
+                argument(&arguments, "appId")?,
+                argument(&arguments, "expectedConfig")?,
+                argument(&arguments, "config")?
+            )
+            .await
+        ),
         "list_connector_configs" => done!(crate::list_connector_configs(state!())),
         "upsert_connector_config" => done!(
             crate::upsert_connector_config(
@@ -886,6 +895,7 @@ fn state_change_scopes(command: &str) -> Option<&'static [&'static str]> {
         "send_chat_message" | "cancel_chat_message" => Some(&["artifacts", "chat", "records"]),
         "update_host_config"
         | "update_app_config"
+        | "compare_and_update_app_config"
         | "upsert_connector_config"
         | "delete_connector_config"
         | "put_secret"

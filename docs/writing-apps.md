@@ -1261,6 +1261,16 @@ resource scope has the shape
 limited to the surface's declared intents and run through the complete kernel
 grant and action path. Supplying a resource ID never creates or widens a grant.
 
+Surface configuration uses `window.appHost.getConfig()` and
+`window.appHost.updateConfig(config)`. Editors that can be open in more than one
+window or client must avoid read-then-write data loss by calling
+`window.appHost.compareUpdateConfig(expected, config)` instead. It returns
+`{ kind: "updated", config }` only when the complete current configuration still
+equals `expected`; otherwise it returns `{ kind: "conflict", current }` without
+writing. Merge against `current` and retry with that exact object as the next
+expected value. The host validates every proposed configuration against the
+app's declared schema before comparing or persisting it.
+
 ### Colors and Appearance
 
 The bridge injects Kestral's resolved workspace and status palette into the frame

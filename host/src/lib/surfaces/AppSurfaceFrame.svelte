@@ -3,6 +3,7 @@
 
   import {
     appSurfaceEvents,
+    compareAndUpdateAppConfig,
     closeSurface,
     getAppConfig,
     getSurfaceState,
@@ -297,6 +298,8 @@
         cancelRun: (runId) => cancelSurfaceAction(binding!, runId),
         getConfig: () => getAppConfig(appId),
         updateConfig: (next) => retryKernelBusy(() => updateAppConfig(appId, next)),
+        compareUpdateConfig: (expected, next) =>
+          retryKernelBusy(() => compareAndUpdateAppConfig(appId, expected, next)),
         getState: (key) => getSurfaceState(binding!, key),
         putState: (key, expectedRevision, value) =>
           putSurfaceState(binding!, key, expectedRevision, value),

@@ -61,8 +61,8 @@ use std::sync::{Arc, Mutex};
 
 use chat_store::{ChatStore, ChatThread, ChatThreadSummary};
 use config::{
-    ConnectionTestResult, ConnectorConfigView, ConnectorProbe, HostConfig, HostConfigService,
-    McpExportProfileView, McpServerConfigView, ModelListResult,
+    CompareAppConfigResult, ConnectionTestResult, ConnectorConfigView, ConnectorProbe, HostConfig,
+    HostConfigService, McpExportProfileView, McpServerConfigView, ModelListResult,
 };
 use file_resources::{
     file_broker_handlers, file_broker_manifest, file_resource_grant_request,
@@ -1561,6 +1561,29 @@ async fn update_app_config(
         .lock()
         .map_err(|_| "config lock poisoned".to_string())?
         .update_app_config(app_id.as_str(), &manifest, config)
+}
+
+#[tauri::command]
+async fn compare_and_update_app_config(
+    host: HostState<'_>,
+    app_id: AppId,
+    expected_config: app_host_kernel::JsonObject,
+    config: app_host_kernel::JsonObject,
+) -> Result<CompareAppConfigResult, String> {
+    let _transition_guard = host.managed_app_transition.lock().await;
+    let app_id_for_lookup = app_id.clone();
+    let manifest = with_kernel_blocking(host.inner().clone(), move |kernel| {
+        kernel
+            .installed_apps()
+            .find(|app| app.manifest.app_id == app_id_for_lookup)
+            .map(|app| app.manifest.clone())
+            .ok_or_else(|| format!("unknown app: {app_id_for_lookup}"))
+    })
+    .await?;
+    host.config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?
+        .compare_and_update_app_config(app_id.as_str(), &manifest, expected_config, config)
 }
 
 async fn require_secret_owner(host: &Arc<Host>, owner: &AppId) -> Result<(), String> {
@@ -4341,6 +4364,7 @@ pub fn run() {
             cancel_chat_message,
             cancel_llm_oauth,
             cancel_surface_action,
+            compare_and_update_app_config,
             delete_chat_thread,
             delete_connector_config,
             delete_kestral_profile,

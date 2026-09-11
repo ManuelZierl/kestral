@@ -129,6 +129,79 @@ fn remote_create_chat_thread_does_not_nest_async_runtimes() {
 }
 
 #[test]
+fn remote_compare_and_update_app_config_refuses_a_stale_write() {
+    let path = std::env::temp_dir().join(format!("remote-config-cas-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&path).unwrap();
+    let events = Arc::new(RemoteEventHub::default());
+    let pending = Arc::new(PendingApprovals::default());
+    let notices = Arc::new(Mutex::new(
+        TrustedNoticeStore::new(path.join("trusted-notices.json")).unwrap(),
+    ));
+    let chrome = Arc::new(RemoteChrome {
+        pending: pending.clone(),
+        notices: notices.clone(),
+        events: events.clone(),
+        next_request_id: AtomicU64::new(0),
+    });
+    let paths =
+        HostPaths::resolve_startup_from(path.clone(), std::iter::empty::<OsString>(), |_| None)
+            .unwrap();
+    let host = build_host(paths, chrome, pending, notices).unwrap();
+    {
+        let mut kernel = host.kernel.lock().unwrap();
+        let manifest = crate::chat_app::chat_manifest_for_kernel(&kernel);
+        let prepared = kernel
+            .prepare_install_with_grant_origin(
+                manifest,
+                crate::chat_app::chat_handlers(host.chat_store.clone()),
+                GrantOrigin::SystemBundled,
+            )
+            .unwrap();
+        kernel.commit_install(prepared.await_approval()).unwrap();
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    runtime
+        .block_on(async {
+            let initial = json!({ "max_iterations": 4 });
+            let mut arguments = Map::new();
+            arguments.insert("appId".into(), json!("chat"));
+            arguments.insert("config".into(), initial.clone());
+            assert_eq!(
+                dispatch(&host, &events, "update_app_config", arguments).await?,
+                initial
+            );
+
+            let changed = json!({ "max_iterations": 5 });
+            let mut arguments = Map::new();
+            arguments.insert("appId".into(), json!("chat"));
+            arguments.insert("expectedConfig".into(), initial.clone());
+            arguments.insert("config".into(), changed.clone());
+            assert_eq!(
+                dispatch(&host, &events, "compare_and_update_app_config", arguments).await?,
+                json!({ "kind": "updated", "config": changed })
+            );
+
+            let mut arguments = Map::new();
+            arguments.insert("appId".into(), json!("chat"));
+            arguments.insert("expectedConfig".into(), initial);
+            arguments.insert("config".into(), json!({ "max_iterations": 6 }));
+            assert_eq!(
+                dispatch(&host, &events, "compare_and_update_app_config", arguments).await?,
+                json!({ "kind": "conflict", "current": changed })
+            );
+            Ok::<_, String>(())
+        })
+        .unwrap();
+
+    drop(host);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn remote_mcp_server_save_does_not_nest_async_runtimes_or_poison_config() {
     let path = std::env::temp_dir().join(format!("remote-mcp-save-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&path).unwrap();

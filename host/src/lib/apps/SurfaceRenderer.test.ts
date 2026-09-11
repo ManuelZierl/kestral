@@ -184,6 +184,65 @@ describe("SurfaceRenderer routing", () => {
     }));
   });
 
+  it("requests the exact collection scope for a managed-data export form", async () => {
+    const inputSchema = {
+      type: "object",
+      "x-kestral-managed-data-export": { collection: "tasks" },
+      additionalProperties: false,
+      properties: {},
+    } satisfies JsonObject;
+    availableCapabilitiesFor.mockResolvedValueOnce([{
+      provider_app_id: "weather",
+      provider_display_name: "Weather",
+      capability: "get_forecast",
+      description: "",
+      input_schema: inputSchema,
+      authorizations: [{
+        data_scope: { kind: "resources", resource_ids: ["app-data:weather:tasks"] },
+        condition: "silent",
+      }],
+    }]);
+    render(SurfaceRenderer, { app: app(form, inputSchema), surface: form, onOutcome: () => {} });
+
+    const submit = await screen.findByRole("button", { name: /get_forecast/ });
+    await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
+    await fireEvent.click(submit);
+
+    await waitFor(() => expect(submitAction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        data_scope: {
+          kind: "resources",
+          resource_ids: ["app-data:weather:tasks"],
+        },
+      }),
+    ));
+  });
+
+  it("disables a managed-data export form without a covering data authorization", async () => {
+    const inputSchema = {
+      type: "object",
+      "x-kestral-managed-data-export": { collection: "tasks" },
+      additionalProperties: false,
+      properties: {},
+    } satisfies JsonObject;
+    availableCapabilitiesFor.mockResolvedValueOnce([{
+      provider_app_id: "weather",
+      provider_display_name: "Weather",
+      capability: "get_forecast",
+      description: "",
+      input_schema: inputSchema,
+      authorizations: [{ data_scope: { kind: "none" }, condition: "silent" }],
+    }]);
+    render(SurfaceRenderer, { app: app(form, inputSchema), surface: form, onOutcome: () => {} });
+
+    const submit = await screen.findByRole("button", { name: /get_forecast/ });
+    await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(true));
+    await fireEvent.click(submit);
+
+    expect(submitAction).not.toHaveBeenCalled();
+  });
+
   it("does not mix a stale opened binding with a newly selected form", async () => {
     const capabilities: CapabilityDeclaration[] = [
       { name: "first", description: "", input_schema: {

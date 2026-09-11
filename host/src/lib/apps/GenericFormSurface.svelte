@@ -6,6 +6,7 @@
     submitAction,
     type CapabilityDeclaration,
     type CapabilityUseView,
+    type DataScope,
     type JsonObject,
     type SurfaceActionOutcome,
   } from "$lib/api";
@@ -49,7 +50,30 @@
   let capabilityRequestId = 0;
   let submissionRequestId = 0;
 
-  const access = $derived(capabilityAccessState(availableCapabilities, appId, capability.name));
+  function invocationDataScope(provider: string, inputSchema: JsonObject): DataScope {
+    const annotation = inputSchema["x-kestral-managed-data-export"];
+    if (
+      annotation !== null &&
+      typeof annotation === "object" &&
+      !Array.isArray(annotation) &&
+      typeof annotation.collection === "string" &&
+      annotation.collection.length > 0
+    ) {
+      return {
+        kind: "resources",
+        resource_ids: [`app-data:${provider}:${annotation.collection}`],
+      };
+    }
+    return { kind: "none" };
+  }
+
+  const requiredDataScope = $derived(invocationDataScope(appId, capability.input_schema));
+  const access = $derived(capabilityAccessState(
+    availableCapabilities,
+    appId,
+    capability.name,
+    requiredDataScope,
+  ));
   const accessBadge = $derived(capabilityAccessBadge(access.grantCondition));
   const missingWarning = $derived(missingCapabilityWarning(appId, capability.name));
 
@@ -104,6 +128,7 @@
     const submittedSurface = surface;
     const submittedCapabilityName = capability.name;
     const submittedSchema = JSON.parse(inputSchemaFingerprint) as JsonObject;
+    const submittedDataScope = invocationDataScope(submittedAppId, submittedSchema);
     const submittedScalarFormSupported = scalarFormSupported;
     const submittedValues = { ...values };
     const submittedRawInput = rawInput;
@@ -130,7 +155,7 @@
       const outcome = await submitAction(binding, {
         capability: { provider: submittedAppId, capability: submittedCapabilityName },
         input,
-        data_scope: { kind: "none" },
+        data_scope: submittedDataScope,
         goal: `${submittedCapabilityName} via ${submittedSurface} form`,
       });
       if (!isCurrent()) return;
