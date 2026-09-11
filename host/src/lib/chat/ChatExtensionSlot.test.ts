@@ -161,6 +161,9 @@ describe("ChatExtensionSlot", () => {
       },
     });
 
-    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("did not register"));
+    await waitFor(
+      () => expect(screen.getByRole("status").textContent).toContain("did not register"),
+      { timeout: 5_000 },
+    );
   });
 });

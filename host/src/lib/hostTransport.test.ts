@@ -140,6 +140,7 @@ describe("remote owner session", () => {
     await invokeHost("list_apps");
 
     expect(isRemoteConnectionReady()).toBe(true);
+    expect(needsRemoteConnection()).toBe(true);
     expect(fetch).toHaveBeenNthCalledWith(1, "https://kestral.example/api/auth/login/start", {
       method: "POST",
       body: "{}",
