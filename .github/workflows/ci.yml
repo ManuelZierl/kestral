@@ -1,17 +1,17 @@
 name: CI
 
 # Branch model:
-#   develop — default branch; PRs against develop run Linux tests and package builds.
-#   main    — release branch; PRs against main (and pushes to main) run the
-#             full matrix including Windows, native credential integration,
-#             and Windows package builds.
+#   main — integration and release branch. Pull requests and pushes run the
+#          full matrix including Windows, native credential integration, and
+#          Windows package builds.
+#   v-main — combined integration candidate, checked on pushes and PRs.
 # Releases are produced by release.yml when a v* tag lands on main.
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, v-main]
   pull_request:
-    branches: [main, develop]
+    branches: [main, v-main]
 
 permissions:
   contents: read
@@ -43,12 +43,22 @@ jobs:
           working-directory: docs
       - name: Verify product versions
         run: node scripts/check-release-version.mjs
+      - name: Test product budget checker
+        run: node --test scripts/check-product-budgets.test.mjs
+      - name: Test promoted app contract verifier
+        run: node --test scripts/check-promoted-app-contracts.test.mjs
       - name: Verify promoted app contracts
-        run: |
-          node --test scripts/check-promoted-app-contracts.test.mjs
-          node scripts/check-promoted-app-contracts.mjs
+        run: node scripts/check-promoted-app-contracts.mjs
       - name: Verify external app isolation
         run: node scripts/check-reference-app-isolation.mjs
+      - name: Verify focused app scaffold
+        run: node --test scripts/create-app.test.mjs
+      - name: Verify packed app creator
+        working-directory: packages/create-kestral-app
+        run: npm test
+      - name: Qualify Daily Review package and behavior
+        working-directory: examples/daily-review
+        run: npm test
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -58,11 +68,12 @@ jobs:
         run: npm ci
       - name: Generate third-party notices
         run: node scripts/generate-third-party-notices.mjs
-      - name: Provider worker checks and tests
+      - name: Check provider worker
         working-directory: host
-        run: |
-          npm run provider-worker:check
-          npm run provider-worker:test
+        run: npm run provider-worker:check
+      - name: Test provider worker
+        working-directory: host
+        run: npm run provider-worker:test
       - name: Package provider worker
         working-directory: host
         run: npm run provider-worker:package
@@ -71,7 +82,14 @@ jobs:
         run: npm run check
       - name: Frontend tests
         working-directory: host
-        run: npm test
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-junit.xml
+      - name: Preserve frontend test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-linux
+          path: host/vitest-junit.xml
+          if-no-files-found: ignore
       - name: Split development launcher and gateway
         working-directory: host
         run: npm run test:split-dev
@@ -111,7 +129,9 @@ jobs:
           bash scripts/package-linux-release.sh "$version"
           cp THIRD-PARTY-NOTICES.txt host/build/THIRD-PARTY-NOTICES.txt
           (cd host/build && zip -qr "../../target/release/public/kestral-browser-client-${version}.zip" .)
-           cp THIRD-PARTY-NOTICES.txt target/release/public/
+          cp THIRD-PARTY-NOTICES.txt target/release/public/
+      - name: Enforce Linux product size budgets
+        run: node scripts/check-product-budgets.mjs --platform linux
       - name: Require reproducible tracked outputs
         run: git diff --exit-code
       - uses: actions/upload-artifact@v6
@@ -120,15 +140,10 @@ jobs:
           path: target/release/public/*
           if-no-files-found: error
 
-  # The Windows leg is the release gate: it only runs for main (PRs targeting
-  # main and pushes to main), covering the native credential store and the
-  # native package matrix on the shipping platform.
+  # Both integration branches exercise native Windows behavior before release.
   test-windows:
     name: Core tests + packages (Windows)
     runs-on: windows-latest
-    if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -140,22 +155,33 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify product versions
         run: node scripts/check-release-version.mjs
+      - name: Test product budget checker
+        run: node --test scripts/check-product-budgets.test.mjs
+      - name: Test promoted app contract verifier
+        run: node --test scripts/check-promoted-app-contracts.test.mjs
       - name: Verify promoted app contracts
-        run: |
-          node --test scripts/check-promoted-app-contracts.test.mjs
-          node scripts/check-promoted-app-contracts.mjs
+        run: node scripts/check-promoted-app-contracts.mjs
       - name: Verify external app isolation
         run: node scripts/check-reference-app-isolation.mjs
+      - name: Verify focused app scaffold
+        run: node --test scripts/create-app.test.mjs
+      - name: Verify packed app creator
+        working-directory: packages/create-kestral-app
+        run: npm test
+      - name: Qualify Daily Review package and behavior
+        working-directory: examples/daily-review
+        run: npm test
       - name: Install frontend toolchain
         working-directory: host
         run: npm ci
       - name: Generate third-party notices
         run: node scripts/generate-third-party-notices.mjs
-      - name: Provider worker checks and tests
+      - name: Check provider worker
         working-directory: host
-        run: |
-          npm run provider-worker:check
-          npm run provider-worker:test
+        run: npm run provider-worker:check
+      - name: Test provider worker
+        working-directory: host
+        run: npm run provider-worker:test
       - name: Package provider worker
         working-directory: host
         run: npm run provider-worker:package
@@ -164,7 +190,14 @@ jobs:
         run: npm run check
       - name: Frontend tests
         working-directory: host
-        run: npm test
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-junit.xml
+      - name: Preserve frontend test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-windows
+          path: host/vitest-junit.xml
+          if-no-files-found: ignore
       - name: Frontend dependency audit
         working-directory: host
         run: npm audit --audit-level=high
@@ -176,16 +209,20 @@ jobs:
         run: cargo test --all-features
       - name: Native Windows credential integration
         run: cargo test -p host --test os_credentials -- --ignored --exact native_credential_round_trip_keeps_json_status_only
-      - name: Build Windows desktop packages and backend
+      - name: Build Windows backend
         working-directory: host
-        run: |
-          cargo build -p host --release --bin host-server
-          npm run tauri build -- --bundles nsis
+        run: cargo build -p host --release --bin host-server
+      - name: Build Windows desktop package
+        working-directory: host
+        run: npm run tauri build -- --bundles nsis
       - name: Package portable Windows build
         shell: pwsh
-        run: |
-          scripts/package-windows-release.ps1
-          Copy-Item "THIRD-PARTY-NOTICES.txt" "target/release/public/THIRD-PARTY-NOTICES.txt"
+        run: scripts/package-windows-release.ps1
+      - name: Enforce Windows product size budgets
+        run: node scripts/check-product-budgets.mjs --platform windows
+      - name: Stage Windows third-party notices
+        shell: pwsh
+        run: Copy-Item "THIRD-PARTY-NOTICES.txt" "target/release/public/THIRD-PARTY-NOTICES.txt"
       - name: Require reproducible tracked outputs
         run: git diff --exit-code
       - uses: actions/upload-artifact@v6

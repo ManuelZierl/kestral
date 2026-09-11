@@ -108,6 +108,18 @@ describe("surface client runtime", () => {
     });
   });
 
+  it("sends compare-and-update config requests through the bridge", async () => {
+    const host = initialize("i-config");
+    const request = nextFrameRequest();
+    void host.compareUpdateConfig({ profiles: [] }, { profiles: [{ id: "work" }] });
+
+    expect((await request).op).toEqual({
+      kind: "compare-update-config",
+      expected: { profiles: [] },
+      config: { profiles: [{ id: "work" }] },
+    });
+  });
+
   it("keeps managed data on the closed versioned request union", async () => {
     const host = initialize("i-data");
     const request = nextFrameRequest();

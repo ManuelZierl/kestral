@@ -46,12 +46,31 @@ sandboxed app surface does not sandbox its backend.
   metadata is untrusted descriptive data. Listing a capability neither grants
   it nor makes it callable.
 - **One action path:** input, grant, deadline, and lifecycle state are checked
-  before execution and again before a result commits.
+  before execution and again before a result commits. The shared execution
+  boundary skips provider code if cancellation or its deadline is observed
+  immediately before dispatch. After dispatch, cancellation is cooperative and
+  cannot undo external side effects already performed.
 - **Direct human control:** a declared same-app action from the provider's live
-  surface is already an explicit human command. It remains grant-checked and
-  audited, but grant interaction conditions cannot add a notice or per-use
-  approval. Delegated cross-app, LLM, agent, automation, and programmatic calls
+  surface is an explicit human command. It remains grant-checked and audited,
+  and does not add a `notify` notice. Under a `requires-approval` grant, only a
+  `read-only` or `local-write` action may treat that click as the approval;
+  `unspecified`, `external-write`, and `destructive` actions still enter trusted
+  chrome. Delegated cross-app, LLM, agent, automation, and programmatic calls
   remain condition-gated.
+- **Informed per-use approval:** trusted chrome receives a preparation-time
+  snapshot of the provider's capability description and declared effect, the
+  exact requested data scope, and up to the first 4 KB of the validated JSON
+  input. A larger input is visibly marked as truncated. The input preview is
+  carried only by the pending approval and is not copied into the ledger. In
+  remote mode the replay feed stores only a wake-up ID; the full prompt comes
+  from the authoritative current-pending endpoint.
+- **Conservative custom-surface confirmation:** an iframe message alone cannot
+  prove a human gesture. The host frame requires a physical confirmation in
+  host-owned UI before forwarding every own-provider `read-only`/`local-write`
+  invocation, including under `silent` and `notify` grants. The app cannot
+  synthesize that confirmation. It is a frontend guard rather than a single-use
+  attestation consumed by the kernel, and it does not verify provider-declared
+  effects. A single authoritative kernel policy remains the intended cleanup.
 - **Scoped audit:** invocation and approval records identify the exact requested
   data scope, not only the broader grant that covered it.
 - **Broad resource grants stay explicit:** an `all-resources` grant covers every
@@ -271,14 +290,13 @@ only when the pinned adapter advertises and enforces the control for the selecte
 model. Unsupported combinations fail rather than being silently ignored.
 
 A newly created profile contains an unauthenticated remote MCP configuration for
-the public Kestral GitMCP documentation endpoint and attempts one connection on
-that first startup. This is a disclosed network request to `gitmcp.io`; it sends
-the normal MCP handshake and tool requests but no Kestral credential. The remote
-service and its tool metadata remain untrusted. Trusted chrome separately
-controls installation grants and exact Chat grants, and Chat grants default to
-per-use approval. Rejection grants no authority, endpoint failure does not block
-startup, and the owner can disconnect or delete the server like any other MCP
-configuration.
+the public Kestral GitMCP documentation endpoint. The saved shortcut is inert:
+startup does not contact `gitmcp.io`, perform an MCP handshake, install its
+tools, or request grants. If the owner explicitly chooses **Connect**, the
+remote service and its tool metadata remain untrusted, and trusted chrome
+controls installation through the normal MCP flow. Chat receives no automatic
+access; the owner must separately propose and approve each exact grant. The
+owner can edit or delete the saved server without contacting it.
 
 ## Residual native-code authority
 
@@ -380,7 +398,10 @@ cannot supply an app identity or path. This private owning-app access is not
 delegated authority and creates no grant or Run. Generated cross-app reads are
 ordinary capabilities: they require
 a grant, an exact `app-data:<provider>:<collection>` invocation resource, and a
-Run through the full action path. Contract v2 proposal capabilities are also
+Run through the full action path. Chat and agent dispatch derive that resource
+from the exact export schema's `x-kestral-managed-data-export` collection
+annotation, which package inspection checks against the declared export.
+This metadata confers no grant. Contract v2 proposal capabilities are also
 ordinary grants and Runs. They require an exact collection, record, or document
 resource scope derived from the host-generated schema, even when a standing
 grant says all resources. The handler revalidates package/contract bytes and

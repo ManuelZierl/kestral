@@ -214,6 +214,10 @@ describe("TrustedChrome OAuth", () => {
         app_id: "notes",
         app_display_name: "Notes",
         capability: { provider: "files", capability: "write" },
+        capability_description: "Write a note to the selected external workspace",
+        effect: "external-write",
+        input_summary: '{\n  "path": "projects/plan.md",\n  "text": "Review this"\n}',
+        input_summary_truncated: false,
         data_scope: { kind: "none" },
         grant_id: "grant-1",
         run_id: "run-1",
@@ -221,8 +225,40 @@ describe("TrustedChrome OAuth", () => {
       },
     });
 
+    expect(
+      await screen.findByText("Write a note to the selected external workspace"),
+    ).toBeTruthy();
+    expect(screen.getByText("Provider-declared effect: Writes to an external system")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Exact action input" }).textContent).toContain(
+      '"path": "projects/plan.md"',
+    );
     await fireEvent.click(await screen.findByRole("button", { name: "Don't allow" }));
     expect(mocks.resolveApproval).toHaveBeenCalledWith(42, false);
+  });
+
+  it("labels a truncated capability input as a preview", async () => {
+    render(TrustedChrome, { onReady: vi.fn() });
+    await waitFor(() => expect(mocks.handlers.has("trusted-chrome:request")).toBe(true));
+    mocks.handlers.get("trusted-chrome:request")?.({
+      kind: "capability-approval",
+      request_id: 43,
+      prompt: {
+        app_id: "notes",
+        app_display_name: "Notes",
+        capability: { provider: "files", capability: "write" },
+        capability_description: "Write a large note",
+        effect: "external-write",
+        input_summary: '{\n  "text": "partial',
+        input_summary_truncated: true,
+        data_scope: { kind: "none" },
+        grant_id: "grant-1",
+        run_id: "run-2",
+        goal: "save a large note",
+      },
+    });
+
+    expect(await screen.findByText("Action input preview (first 4 KB)")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Action input preview" })).toBeTruthy();
   });
 
   it("does not auto-open an auth URL and exposes explicit manual recovery", async () => {

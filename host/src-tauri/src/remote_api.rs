@@ -209,7 +209,15 @@ impl RemoteChrome {
         self.pending.wait_for_decision(
             request_id,
             request.clone(),
-            || self.events.publish(CHROME_REQUEST_EVENT, &request).is_ok(),
+            // The pending-approvals endpoint is the authoritative source for
+            // the full prompt. The replay ring carries only a wake-up id so
+            // validated invocation input is not retained after resolution and
+            // an old event cannot resurrect a stale approval dialog.
+            || {
+                self.events
+                    .publish(CHROME_REQUEST_EVENT, &request_id)
+                    .is_ok()
+            },
             move || {
                 let _ = events.publish(CHROME_REQUEST_EXPIRED_EVENT, &request_id);
             },
@@ -276,7 +284,11 @@ impl TrustedChrome for RemoteChrome {
             request_id,
             request.clone(),
             denied,
-            || self.events.publish(CHROME_REQUEST_EVENT, &request).is_ok(),
+            || {
+                self.events
+                    .publish(CHROME_REQUEST_EVENT, &request_id)
+                    .is_ok()
+            },
             move || {
                 let _ = events.publish(CHROME_REQUEST_EXPIRED_EVENT, &request_id);
             },
@@ -547,6 +559,15 @@ async fn dispatch(
             crate::update_app_config(
                 state!(),
                 argument(&arguments, "appId")?,
+                argument(&arguments, "config")?
+            )
+            .await
+        ),
+        "compare_and_update_app_config" => done!(
+            crate::compare_and_update_app_config(
+                state!(),
+                argument(&arguments, "appId")?,
+                argument(&arguments, "expectedConfig")?,
                 argument(&arguments, "config")?
             )
             .await
@@ -874,6 +895,7 @@ fn state_change_scopes(command: &str) -> Option<&'static [&'static str]> {
         "send_chat_message" | "cancel_chat_message" => Some(&["artifacts", "chat", "records"]),
         "update_host_config"
         | "update_app_config"
+        | "compare_and_update_app_config"
         | "upsert_connector_config"
         | "delete_connector_config"
         | "put_secret"

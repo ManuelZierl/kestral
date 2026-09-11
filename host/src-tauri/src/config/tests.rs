@@ -739,15 +739,10 @@ fn temp_config_path() -> std::path::PathBuf {
 }
 
 #[test]
-fn fresh_config_seeds_removable_kestral_docs_server_and_requests_startup_once() {
+fn fresh_config_seeds_removable_kestral_docs_server_until_user_removes_it() {
     let path = temp_config_path();
-    let mut service = HostConfigService::new(path.clone()).unwrap();
+    let service = HostConfigService::new(path.clone()).unwrap();
 
-    assert_eq!(
-        service.take_startup_mcp_server_request().as_deref(),
-        Some(KESTRAL_GITMCP_SERVER_ID)
-    );
-    assert!(service.take_startup_mcp_server_request().is_none());
     assert_eq!(
         service.mcp_server(KESTRAL_GITMCP_SERVER_ID),
         Some(McpServerConfig {
@@ -760,7 +755,6 @@ fn fresh_config_seeds_removable_kestral_docs_server_and_requests_startup_once() 
     );
 
     let mut reloaded = HostConfigService::new(path.clone()).unwrap();
-    assert!(reloaded.take_startup_mcp_server_request().is_none());
     reloaded
         .delete_mcp_server(KESTRAL_GITMCP_SERVER_ID)
         .unwrap();
@@ -1667,6 +1661,36 @@ fn update_app_config_validates_against_manifest_schema() {
         )
         .unwrap_err();
     assert!(error.contains("invalid config declaration 'chat' for app 'chat'"));
+}
+
+#[test]
+fn compare_and_update_app_config_refuses_a_stale_baseline_without_losing_data() {
+    let mut service = HostConfigService::default();
+    let manifest = test_manifest();
+    let baseline = service.get_app_config("chat");
+    let first: JsonObject = serde_json::from_value(json!({"max_iterations": 7})).unwrap();
+    let second: JsonObject = serde_json::from_value(json!({"max_iterations": 8})).unwrap();
+
+    let applied = service
+        .compare_and_update_app_config("chat", &manifest, baseline.clone(), first.clone())
+        .unwrap();
+    assert_eq!(
+        applied,
+        CompareAppConfigResult::Updated {
+            config: first.clone()
+        }
+    );
+
+    let conflict = service
+        .compare_and_update_app_config("chat", &manifest, baseline, second)
+        .unwrap();
+    assert_eq!(
+        conflict,
+        CompareAppConfigResult::Conflict {
+            current: first.clone()
+        }
+    );
+    assert_eq!(service.get_app_config("chat"), first);
 }
 
 fn assert_update_app_config_failure_keeps_state(operation: FailingFileOperation) {

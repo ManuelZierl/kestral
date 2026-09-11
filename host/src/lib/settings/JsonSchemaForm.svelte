@@ -26,7 +26,14 @@
     if (nextValue !== loadedValue) {
       loadedValue = nextValue;
       values = Object.fromEntries(
-        schemaFields(schema).map((field) => [field.name, toInputValue(initialValue[field.name])]),
+        schemaFields(schema).map((field) => [
+          field.name,
+          Object.prototype.hasOwnProperty.call(initialValue, field.name)
+            ? toInputValue(initialValue[field.name])
+            : field.type === "boolean" && field.required
+              ? "false"
+              : "",
+        ]),
       );
     }
   });
@@ -66,6 +73,7 @@
         <input
           type="checkbox"
           checked={values[field.name] === "true"}
+          aria-required={field.required}
           onchange={(event) => updateValue(field.name, event.currentTarget.checked ? "true" : "false")}
         />
         <span>{field.title}</span>
@@ -73,10 +81,11 @@
         <span>{field.title}</span>
         {#if field.type === "string" && field.input === "multiline"}
           <textarea
+            minlength={field.minLength}
             maxlength={field.maxLength}
             value={values[field.name]}
             oninput={(event) => updateValue(field.name, event.currentTarget.value)}
-            required={field.required}
+            required={field.required && field.type !== "string"}
           ></textarea>
         {:else}
           <input
@@ -84,10 +93,11 @@
             step={field.type === "integer" ? "1" : field.type === "number" ? "any" : undefined}
             min={field.minimum}
             max={field.maximum}
+            minlength={field.minLength}
             maxlength={field.maxLength}
             value={values[field.name]}
             oninput={(event) => updateValue(field.name, event.currentTarget.value)}
-            required={field.required}
+            required={field.required && field.type !== "string"}
           />
         {/if}
       {/if}

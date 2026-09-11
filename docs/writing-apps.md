@@ -52,6 +52,47 @@ normalized path, byte length, and exact staged file body, sorted by path. It
 covers `app.json` and all declared payload. This differs from the kernel
 manifest seal, which covers only the translated kernel declaration.
 
+## Scaffold a focused app
+
+The Kestral source repository includes a dependency-free project scaffold for
+the shortest useful custom-app path. It creates a working dashboard with its
+own durable item model, a sandboxed custom surface, and an optional
+review-before-apply model suggestion:
+
+```bash
+node scripts/create-app.mjs ../my-focus-app \
+  --id com.example.my-focus-app \
+  --name "My Focus App"
+cd ../my-focus-app
+npm test
+```
+
+The helper delegates to the dependency-free `create-kestral-app` package in
+`packages/create-kestral-app`. Its bundled template also works outside a core
+checkout: from that package directory, run `npm pack` and install the resulting
+`create-kestral-app-0.1.0-alpha.1.tgz` with `npm install --global <tarball-path>`.
+Then use `create-kestral-app <directory> --id <id> --name <name>`. Registry
+publication is still a release step; these instructions do not assume an npm
+registry release exists.
+
+The generated project needs Node.js 22 or newer but has no package dependencies. It builds a
+ready-to-install `dist/` directory, and its own `npm run build` command updates
+the SHA-256 asset declarations after UI changes. Install `dist/` through
+**Apps → Install an app**.
+
+The starter remains useful when model access is denied or unconfigured. Its UI
+has no direct network origin and it runs no backend process; pressing the model
+button is the only path that requests the exact
+`llm-provider/llm.generate` capability. The returned text stays visibly staged
+until the person chooses **Add suggestion**. The generated safety test makes
+those defaults explicit so later authority changes are visible in code review.
+
+Start by replacing the item schema and interface with one concrete recurring
+job. Keep task-specific interaction and data in the app; add host capabilities
+only for work that crosses an app, model, file, or external-system boundary.
+Kestral's package inspection remains the authoritative full schema and semantic
+validator.
+
 ## Minimal manifest
 
 This package contributes metadata only and therefore uses `backend.kind =
@@ -387,8 +428,6 @@ state envelope; a failed commit leaves the previous state authoritative.
 Contract v2 can structurally read retained v1 record stores without publisher
 code. A v1 package cannot reactivate after v2 state has been published.
 
-An optional `exports` entry binds one manifest capability to a fixed host read:
-
 ### Managed-data proposals
 
 Contract v2 proposals are fixed host operations for backend-free packages. A
@@ -424,6 +463,10 @@ replaying a proposal is frontend responsibility: the surface must perform the
 managed-data CAS mutation itself after comparing the artifact's target version.
 Delegated managed-data writes remain unsupported.
 
+### Managed-data read exports
+
+An optional `exports` entry binds one manifest capability to a fixed host read:
+
 ```json
 "exports": [{
   "capability": "list_read_marks",
@@ -443,6 +486,7 @@ The matching capability for that example is:
   "effect": "read-only",
   "input_schema": {
     "type": "object",
+    "x-kestral-managed-data-export": { "collection": "read-marks" },
     "additionalProperties": false,
     "required": ["equals"],
     "properties": {
@@ -506,6 +550,13 @@ and `limit`. Results are either one record or
 `id`, `revision`, `created_at`, `updated_at`, and the declared `value`. This
 exact-schema check prevents a package from describing behavior different from
 the host operation it receives.
+
+Every export input schema also includes `x-kestral-managed-data-export` with
+exactly its declared collection. Chat and agent dispatch use that host-defined
+annotation to request the exact collection resource, independently of model
+arguments. It does not grant access. Packages missing or changing the annotation
+fail inspection; pre-publication development packages must be rebuilt against
+this contract.
 
 An indexed `list` export may set `equals_host_input` to
 `current-chat-thread-id`. The generated capability then requires the matching
@@ -614,7 +665,7 @@ The `manifest` can declare:
 
 | Field | Purpose |
 |---|---|
-| `capabilities` | Named actions through which this app, Chat, or another granted caller can do work. Each has an input and optional output JSON Schema plus an advisory effect. |
+| `capabilities` | Named actions through which this app, Chat, or another granted caller can do work. Each has an input and optional output JSON Schema plus an effect classification used for risk presentation and own-surface confirmation policy. |
 | `surfaces` | Focused panels, cards, forms, pickers, or dashboards that emit declared intents. |
 | `agents`, `skills`, `assistant_profiles`, `automations` | Data contributions interpreted by capable userland apps; the kernel does not become an agent or scheduler. Skills are reviewed, enabled, and digested by Chat but never grant authority. Assistant profiles reference locally declared skills and only suggest capabilities or an engine contract. |
 | `connectors` | Names and descriptions of required secrets, never secret values. |
@@ -625,6 +676,22 @@ The `manifest` can declare:
 | `config_declarations` | One host-stored config section in the 0.1 series. The generic host editor supports scalar fields; apps with structured values edit them through a standalone dashboard. |
 | `grant_requests` | Permissions the app needs; requests confer no authority. |
 | `event_subscriptions` | Limited minimized host event topics, not cross-app RPC. |
+
+A bundle-free `form` surface uses Kestral's generic capability editor. Object
+schemas made entirely of declared string, number, integer, and boolean
+properties with supported constraints receive individual controls. Numeric
+minimum/maximum and string minimum/maximum length are checked before submission.
+Required strings may be empty unless their schema sets a positive minimum length.
+Enums, patterns, formats, exclusive bounds, multiples, arrays,
+nested objects, unions, schema composition, and other unsupported constraints
+instead receive a labelled JSON-object
+editor with the declared schema visible for reference. The editor preserves the
+JSON structure and keeps the submitted input available after completion or
+failure. The latest Run ID, returned result, and produced artifact identities
+remain visible beside the form. Ship a custom surface when an end-user workflow
+needs richer guidance than raw JSON. Browser-side JSON numbers must be finite;
+integer-valued inputs outside JavaScript's safe integer range are refused
+instead of being rounded. Model exact larger identifiers as strings.
 
 For a config schema string that needs line breaks, set
 `"x-kestral-input": "multiline"` on the property. The host renders that field
@@ -1070,20 +1137,30 @@ grant, never as an invocation data scope. State that breadth in `reason`.
 Prefer exact capabilities and `requires-approval` for external writes or
 destructive effects.
 
-Grant interaction conditions are delegation policy, not extra confirmation for
-the provider app's own UI. A declared capability invoked by a person from that
-provider's live surface remains grant-checked and audited, but the host does not
-emit a `notify` notice or request per-use approval. The same capability keeps
-its configured condition when another app, an LLM or agent flow, automation, or
-other programmatic initiator invokes it. Apps should still provide an
-in-surface confirmation for an irreversible direct action when recovery is not
-available.
+Grant interaction conditions are delegation policy. A declared capability
+invoked by a person from that provider's live surface remains grant-checked and
+audited, but the host does not emit a `notify` notice. Under a
+`requires-approval` grant, the direct click counts as approval only when the
+declared effect is `read-only` or `local-write`. `unspecified`, `external-write`,
+and `destructive` effects still require trusted chrome. The same capability
+keeps its configured condition when another app, an LLM or agent flow,
+automation, or other programmatic initiator invokes it. Apps should still
+provide an in-surface confirmation for an irreversible direct action when
+recovery is not available.
+
+Declare effects truthfully. The kernel does not infer behavior from handler
+code. For custom surfaces, the host frame requires its own physical confirmation
+before forwarding every own-provider `read-only`/`local-write` invocation,
+including under `silent` or `notify` grants. This conservative alpha guard is
+independent of frontend grant snapshots and is not a kernel-consumed gesture
+token. It does not prove actual effects or permit relabeling external or
+destructive work as `local-write`.
 
 ## Backend kinds
 
 | Kind | Behavior |
 |---|---|
-| `none` | No process. The app cannot declare capabilities of its own. |
+| `none` | No process. Capabilities may only bind fixed host-managed data exports or proposals. |
 | `mcp-stdio` | Starts a command already available on the host and speaks MCP over stdio. |
 | `mcp-streamable-http` | Connects to an MCP Streamable HTTP endpoint. |
 | `executable` | Selects a checksummed packaged executable for the host platform; it speaks MCP over stdio. Supported keys are `windows-x86_64`, `windows-aarch64`, `macos-x86_64`, `macos-aarch64`, `linux-x86_64`, and `linux-aarch64`. |
@@ -1183,6 +1260,16 @@ resource scope has the shape
 `{ kind: "resources", resource_ids: ["resource-id"] }`. Both methods are
 limited to the surface's declared intents and run through the complete kernel
 grant and action path. Supplying a resource ID never creates or widens a grant.
+
+Surface configuration uses `window.appHost.getConfig()` and
+`window.appHost.updateConfig(config)`. Editors that can be open in more than one
+window or client must avoid read-then-write data loss by calling
+`window.appHost.compareUpdateConfig(expected, config)` instead. It returns
+`{ kind: "updated", config }` only when the complete current configuration still
+equals `expected`; otherwise it returns `{ kind: "conflict", current }` without
+writing. Merge against `current` and retry with that exact object as the next
+expected value. The host validates every proposed configuration against the
+app's declared schema before comparing or persisting it.
 
 ### Colors and Appearance
 

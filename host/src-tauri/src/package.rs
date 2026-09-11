@@ -1344,6 +1344,7 @@ fn validate_host_managed_data(
         }
         let expected_input = managed_export_input_schema(
             export.operation,
+            &export.collection,
             collection,
             index,
             export.equals_host_input,
@@ -1480,11 +1481,12 @@ fn validate_managed_data_name(value: &str, label: &str) -> Result<(), String> {
 
 pub(crate) fn managed_export_input_schema(
     operation: ManagedDataExportOperation,
+    collection_name: &str,
     collection: &ManagedDataCollection,
     index: Option<&ManagedDataIndex>,
     equals_host_input: Option<ManagedDataExportHostInput>,
 ) -> app_host_kernel::JsonObject {
-    let value = match operation {
+    let mut value = match operation {
         ManagedDataExportOperation::Get => serde_json::json!({
             "type": "object",
             "additionalProperties": false,
@@ -1532,6 +1534,13 @@ pub(crate) fn managed_export_input_schema(
             })
         }
     };
+    value
+        .as_object_mut()
+        .expect("managed input schema is an object")
+        .insert(
+            crate::tool_mapping::MANAGED_DATA_EXPORT_ANNOTATION.into(),
+            serde_json::json!({"collection": collection_name}),
+        );
     value
         .as_object()
         .cloned()

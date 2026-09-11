@@ -771,6 +771,7 @@ fn generated_reads_use_exact_resource_grants_and_the_kernel_action_path() {
         description: "List items by group".into(),
         input_schema: crate::package::managed_export_input_schema(
             ManagedDataExportOperation::List,
+            "items",
             &collection,
             collection.indexes.first(),
             None,
@@ -800,33 +801,67 @@ fn generated_reads_use_exact_resource_grants_and_the_kernel_action_path() {
         provider: app.clone(),
         capability: app_host_kernel::ids::CapabilityName::new("list_items"),
     };
+    let input = object(json!({"equals": "one"}));
+    let mapped_scope =
+        crate::tool_mapping::invocation_data_scope(&kernel, &consumer, &reference, &input);
     let resource = app_host_kernel::ids::ResourceId::new(super::resource_id(&app, "items"));
-    kernel
-        .issue_grant(
-            &consumer,
-            &GrantRequest {
-                scope: GrantScope::ExactCapability {
-                    provider: app,
-                    capability: reference.capability.clone(),
-                },
-                data_scope: DataScope::resources(vec![resource.clone()]).unwrap(),
-                condition: GrantCondition::Silent,
-                reason: "Read the selected app collection".into(),
-                duration: GrantDuration::NonExpiring,
-            },
-        )
-        .unwrap();
-    let result = invoke(
+    assert_eq!(
+        mapped_scope,
+        DataScope::resources(vec![resource.clone()]).unwrap()
+    );
+    let missing_grant = invoke(
         &mut kernel,
         &consumer,
         &reference,
-        object(json!({"equals": "one"})),
-        DataScope::resources(vec![resource]).unwrap(),
+        input.clone(),
+        mapped_scope.clone(),
     );
-    let InvocationResult::Completed { result, .. } = result else {
-        panic!("generated managed-data read should complete: {result:?}");
-    };
-    assert_eq!(result["records"][0]["value"]["title"], "First");
+    assert!(matches!(missing_grant, InvocationResult::Refused { .. }));
+    for grant_scope in [
+        DataScope::resources(vec![resource]).unwrap(),
+        DataScope::AllResources,
+    ] {
+        let issued = kernel
+            .issue_grant(
+                &consumer,
+                &GrantRequest {
+                    scope: GrantScope::ExactCapability {
+                        provider: app.clone(),
+                        capability: reference.capability.clone(),
+                    },
+                    data_scope: grant_scope,
+                    condition: GrantCondition::Silent,
+                    reason: "Read the selected app collection".into(),
+                    duration: GrantDuration::NonExpiring,
+                },
+            )
+            .unwrap();
+        let app_host_kernel::services::broker::IssueResult::Issued(grant) = issued else {
+            panic!("test chrome should approve the read grant");
+        };
+        let result = invoke(
+            &mut kernel,
+            &consumer,
+            &reference,
+            input.clone(),
+            mapped_scope.clone(),
+        );
+        let InvocationResult::Completed { result, .. } = result else {
+            panic!("generated managed-data read should complete: {result:?}");
+        };
+        assert_eq!(result["records"][0]["value"]["title"], "First");
+        kernel.revoke_grant(&grant.grant_id).unwrap();
+        assert!(matches!(
+            invoke(
+                &mut kernel,
+                &consumer,
+                &reference,
+                input.clone(),
+                mapped_scope.clone(),
+            ),
+            InvocationResult::Refused { .. }
+        ));
+    }
 
     fs::remove_dir_all(apps_root).unwrap();
 }

@@ -46,6 +46,7 @@ describe("parseAppMessage", () => {
       { kind: "invoke", capability: { provider: "a", capability: "c" }, input: {}, data_scope: { kind: "none" }, goal: "g" },
       { kind: "get-config" },
       { kind: "update-config", config: { theme: "dark" } },
+      { kind: "compare-update-config", expected: { theme: "dark" }, config: { theme: "light" } },
       { kind: "get-state", key: "message-1" },
       { kind: "put-state", key: "message-1", expectedRevision: 2, value: { read: true } },
       { kind: "put-state", key: "message-1", expectedRevision: 3, value: null },
@@ -130,6 +131,22 @@ describe("parseAppMessage", () => {
     expect(parseAppMessage(envelope({ type: "extension-state" })).ok).toBe(false);
   });
 
+  it("rejects non-JSON objects and values", () => {
+    const invalid = [
+      { kind: "update-config", config: new Map([["theme", "dark"]]) },
+      { kind: "compare-update-config", expected: {}, config: new Date() },
+      { kind: "invoke", capability: { provider: "a", capability: "c" }, input: { nested: new Map() }, data_scope: { kind: "none" }, goal: "g" },
+      { kind: "invoke", capability: { provider: "a", capability: "c" }, input: {}, data_scope: { kind: "none", extra: new Date() }, goal: "g" },
+      { kind: "update-config", config: { missing: undefined } },
+      { kind: "update-config", config: { amount: Number.POSITIVE_INFINITY } },
+      { kind: "data-v1", request: { kind: "list", collection: "items", query: { index: "group", equals: new Date() } } },
+    ];
+    for (const op of invalid) {
+      expect(parseAppMessage(envelope({ type: "request", requestId: 1, op })).ok).toBe(false);
+    }
+    expect(parseAppMessage(envelope({ type: "extension-state", payload: { nested: new Set() } })).ok).toBe(false);
+  });
+
   it("rejects malformed requests", () => {
     // non-numeric requestId
     expect(
@@ -158,6 +175,9 @@ describe("parseAppMessage", () => {
     // update-config with non-object config
     expect(
       parseAppMessage(envelope({ type: "request", requestId: 1, op: { kind: "update-config", config: 5 } })).ok,
+    ).toBe(false);
+    expect(
+      parseAppMessage(envelope({ type: "request", requestId: 1, op: { kind: "compare-update-config", expected: [], config: {} } })).ok,
     ).toBe(false);
     expect(
       parseAppMessage(envelope({ type: "request", requestId: 1, op: { kind: "get-state", key: 5 } })).ok,

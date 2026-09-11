@@ -80,7 +80,9 @@ pub fn manifest_for_mcp_server(
             description: tool.description.clone(),
             input_schema: tool.input_schema.clone(),
             // MCP tool metadata carries no reliable effect semantics, so the
-            // bridge stays conservative; approval gating does the real work.
+            // bridge stays conservative. With the default requires-approval
+            // grant, Unspecified also keeps generated-form submissions behind
+            // trusted chrome.
             effect: CapabilityEffect::Unspecified,
             output_schema: tool.output_schema.clone(),
         })

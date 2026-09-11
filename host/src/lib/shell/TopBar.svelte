@@ -13,7 +13,7 @@
   const titles: Record<Tab, { title: string; subtitle: string }> = {
     chat: {
       title: "Chat",
-      subtitle: "Talk to your apps. Every action is checked and recorded.",
+      subtitle: "Talk to your apps. Actions routed through Kestral are checked and recorded.",
     },
     apps: {
       title: "Apps",

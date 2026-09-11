@@ -24,21 +24,21 @@ hidden fallback behavior.
   package-source warnings can still apply.
 - No MSI is published for the alpha because the current Tauri/WiX bundler
   rejects a non-numeric SemVer prerelease identifier.
-- The frontend dependency audit reports moderate instances of
-  `GHSA-frvp-7c67-39w9` through the MCP SDK's Hono dependency. No compatible
-  fix is available; Kestral does not use the affected inbound static-file
-  server path. High-severity npm audit findings remain a release failure.
+- The frontend dependency audit can still report moderate advisories in
+  development tooling, including Vitest's mocker and the MCP SDK's Hono
+  dependency. High-severity npm audit findings remain a release failure.
 - App packages install from directories or public HTTPS Git repositories.
   `.ahpkg` archive ingestion and private Git authentication are not supported.
 - External source-built apps can require their own runtimes; normal product
   startup does not.
 - The base installer bundles the provider worker, its pinned provider SDK graph,
   and a Node runtime. External apps are independently built, tested, and
-  released. Installer and installed size, cold and warm startup, idle CPU and
-  memory, per-worker resources, app startup, and time to first useful result do
-  not yet have a published baseline, release ceilings, or regression gates.
-  "Lean" therefore remains a product goal rather than a demonstrated release
-  result.
+  released. CI now enforces release-artifact size ceilings for the Linux
+  AppImage, Debian package, backend archive, browser client, Windows portable
+  archive, and NSIS installer. Cold and warm startup, idle CPU and memory,
+  per-worker resources, app startup, and time to first useful result still lack
+  published baselines and regression ceilings. "Lean" is therefore partly
+  release-gated, not yet a complete runtime performance contract.
 
 ## Isolation and app runtime
 
@@ -50,7 +50,23 @@ hidden fallback behavior.
   can activate. The opt-in is host-wide rather than scoped to one package.
 - Custom app UI is sandboxed in an opaque-origin iframe, but OS-level per-frame
   process isolation is not guaranteed.
-- App backends have no general crash-loop or automatic restart policy.
+- As a conservative alpha guard, every sandboxed custom surface own-provider
+  `read-only`/`local-write` invoke requires a host-owned physical confirmation
+  before the frame may forward the request. This intentionally applies even
+  when the current standing grant is `silent` or `notify`: using a frontend
+  grant snapshot to decide whether confirmation is needed creates a race if
+  authority changes before kernel preparation. The frame cannot synthesize the
+  host confirmation. This is a frontend guard, not a single-use attestation
+  consumed by the kernel. Capability effects remain provider-declared, so the
+  guard does not independently prove that the declared effect matches the
+  app's implementation. Cross-app, external-write,
+  destructive, and unspecified effects continue through normal kernel-owned
+  trusted chrome. The cleaner long-term fix is a single-use kernel-consumed
+  gesture attestation, or removal of the direct-surface approval shortcut.
+- App backends have no general crash-loop or automatic restart policy. The Apps
+  screen exposes failed startup state and a manual retry that tears down the
+  failed lifecycle and reactivates the same inspected revision through the
+  ordinary enable path.
 - The file broker resolves a requested path, proves the result is inside the
   granted resource root, and then re-opens it by path. The opened handle is
   checked to be the same file the containment check saw, but a directory

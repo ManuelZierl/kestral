@@ -2,7 +2,8 @@ use super::*;
 use std::collections::HashSet;
 use std::time::Duration;
 
-use app_host_kernel::ids::{AppId, CapabilityName};
+use app_host_kernel::ids::{AppId, CapabilityName, GrantId, RunId};
+use app_host_kernel::primitives::capability::{CapabilityEffect, CapabilityRef};
 use app_host_kernel::primitives::grant::{
     DataScope, GrantCondition, GrantDuration, GrantOrigin, GrantScope,
 };
@@ -123,6 +124,79 @@ fn remote_create_chat_thread_does_not_nest_async_runtimes() {
         .unwrap();
 
     assert!(value["id"].as_str().is_some());
+    drop(host);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn remote_compare_and_update_app_config_refuses_a_stale_write() {
+    let path = std::env::temp_dir().join(format!("remote-config-cas-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&path).unwrap();
+    let events = Arc::new(RemoteEventHub::default());
+    let pending = Arc::new(PendingApprovals::default());
+    let notices = Arc::new(Mutex::new(
+        TrustedNoticeStore::new(path.join("trusted-notices.json")).unwrap(),
+    ));
+    let chrome = Arc::new(RemoteChrome {
+        pending: pending.clone(),
+        notices: notices.clone(),
+        events: events.clone(),
+        next_request_id: AtomicU64::new(0),
+    });
+    let paths =
+        HostPaths::resolve_startup_from(path.clone(), std::iter::empty::<OsString>(), |_| None)
+            .unwrap();
+    let host = build_host(paths, chrome, pending, notices).unwrap();
+    {
+        let mut kernel = host.kernel.lock().unwrap();
+        let manifest = crate::chat_app::chat_manifest_for_kernel(&kernel);
+        let prepared = kernel
+            .prepare_install_with_grant_origin(
+                manifest,
+                crate::chat_app::chat_handlers(host.chat_store.clone()),
+                GrantOrigin::SystemBundled,
+            )
+            .unwrap();
+        kernel.commit_install(prepared.await_approval()).unwrap();
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    runtime
+        .block_on(async {
+            let initial = json!({ "max_iterations": 4 });
+            let mut arguments = Map::new();
+            arguments.insert("appId".into(), json!("chat"));
+            arguments.insert("config".into(), initial.clone());
+            assert_eq!(
+                dispatch(&host, &events, "update_app_config", arguments).await?,
+                initial
+            );
+
+            let changed = json!({ "max_iterations": 5 });
+            let mut arguments = Map::new();
+            arguments.insert("appId".into(), json!("chat"));
+            arguments.insert("expectedConfig".into(), initial.clone());
+            arguments.insert("config".into(), changed.clone());
+            assert_eq!(
+                dispatch(&host, &events, "compare_and_update_app_config", arguments).await?,
+                json!({ "kind": "updated", "config": changed })
+            );
+
+            let mut arguments = Map::new();
+            arguments.insert("appId".into(), json!("chat"));
+            arguments.insert("expectedConfig".into(), initial);
+            arguments.insert("config".into(), json!({ "max_iterations": 6 }));
+            assert_eq!(
+                dispatch(&host, &events, "compare_and_update_app_config", arguments).await?,
+                json!({ "kind": "conflict", "current": changed })
+            );
+            Ok::<_, String>(())
+        })
+        .unwrap();
+
     drop(host);
     let _ = std::fs::remove_dir_all(path);
 }
@@ -251,9 +325,7 @@ fn event_hubs_identify_distinct_backend_processes() {
 #[test]
 fn event_pressure_drops_streaming_before_trusted_chrome() {
     let events = RemoteEventHub::default();
-    events
-        .publish(CHROME_REQUEST_EVENT, &json!({ "request": 1 }))
-        .unwrap();
+    events.publish(CHROME_REQUEST_EVENT, &1_u64).unwrap();
     for sequence in 0..=MAX_EVENTS {
         events
             .publish("chat-stream:request", &json!({ "sequence": sequence }))
@@ -396,5 +468,81 @@ fn remote_chrome_groups_one_apps_permissions_into_one_install_request() {
         decision.grant_decisions,
         vec![ApprovalDecision::Approved, ApprovalDecision::Denied]
     );
+    let _ = std::fs::remove_file(notice_path);
+}
+
+#[test]
+fn remote_chrome_replay_retains_only_a_capability_approval_wake_up_id() {
+    let pending = Arc::new(PendingApprovals::default());
+    let events = Arc::new(RemoteEventHub::default());
+    let notice_path =
+        std::env::temp_dir().join(format!("remote-capability-notices-{}.json", Uuid::new_v4()));
+    let chrome = Arc::new(RemoteChrome {
+        pending: pending.clone(),
+        notices: Arc::new(Mutex::new(
+            TrustedNoticeStore::new(notice_path.clone()).unwrap(),
+        )),
+        events: events.clone(),
+        next_request_id: AtomicU64::new(0),
+    });
+    let prompt = CapabilityApprovalPrompt {
+        app_id: AppId::new("notes"),
+        app_display_name: "Notes".into(),
+        capability: CapabilityRef {
+            provider: AppId::new("files"),
+            capability: CapabilityName::new("write"),
+        },
+        capability_description: "Write a note".into(),
+        effect: CapabilityEffect::ExternalWrite,
+        input_summary: "{\n  \"secret\": \"do-not-replay\"\n}".into(),
+        input_summary_truncated: false,
+        data_scope: DataScope::None,
+        grant_id: GrantId::new("grant-1"),
+        run_id: RunId::new("run-1"),
+        goal: "Save a note".into(),
+    };
+
+    let approval = std::thread::spawn(move || chrome.approve_capability(prompt));
+    let request_id = (0..100)
+        .find_map(|_| {
+            let request = pending.pending_requests().into_iter().next();
+            if request.is_none() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            request
+        })
+        .map(|request| match request {
+            ChromeRequest::CapabilityApproval { request_id, .. } => request_id,
+            _ => panic!("remote chrome emitted the wrong request kind"),
+        })
+        .expect("capability approval became pending");
+
+    let batch = (0..100)
+        .find_map(|_| {
+            let batch = events.since(0).unwrap();
+            if batch
+                .events
+                .iter()
+                .any(|event| event.event == CHROME_REQUEST_EVENT)
+            {
+                Some(batch)
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+                None
+            }
+        })
+        .expect("approval wake-up was published");
+    let wake_up = batch
+        .events
+        .iter()
+        .find(|event| event.event == CHROME_REQUEST_EVENT)
+        .expect("approval wake-up was published");
+    assert_eq!(wake_up.payload, json!(request_id));
+    assert!(!serde_json::to_string(&batch)
+        .unwrap()
+        .contains("do-not-replay"));
+
+    pending.resolve(request_id, false).unwrap();
+    assert_eq!(approval.join().unwrap(), ApprovalDecision::Denied);
     let _ = std::fs::remove_file(notice_path);
 }

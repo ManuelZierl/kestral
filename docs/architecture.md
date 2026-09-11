@@ -110,7 +110,9 @@ exact or `all-resources` grant to the exact current IDs before preparation.
 ## Five primitives
 
 - **Capability:** something the system can do, declared and invoked through the
-  kernel with input/output schemas and an advisory effect. MCP tools and
+  kernel with input/output schemas and a provider-declared effect
+  classification. Effects do not grant authority or prove actual behavior. They
+  inform UI and the narrow own-surface confirmation policy. MCP tools and
   host-provided actions such as artifact access are adapter-specific forms of
   this broader primitive.
 - **Surface:** a visual place an app renders. It receives data and emits only
@@ -269,9 +271,15 @@ prepare -> authorize -> execute -> finalize
 1. **Prepare** validates input schema, app identity, capability declaration,
    grant scope, data scope, expiry, cancellation, and deadline.
 2. **Authorize** obtains trusted-chrome approval when the grant requires it.
-3. **Execute** calls the handler outside the host's kernel mutex.
+3. **Execute** checks cooperative cancellation and the deadline immediately
+   before dispatch, then calls the handler outside the host's kernel mutex.
 4. **Finalize** revalidates authority and lifecycle state, validates all output
    and artifact schemas, stamps provenance, and commits ledger records.
+
+A cancellation observed after authorization but before dispatch skips provider
+code and finalizes as cancelled. Once provider code has started, cancellation is
+cooperative; rejecting a late result cannot undo an external effect already
+performed by that handler.
 
 Ending a Run or removing/replacing either side of an invocation records pending
 work as cancelled in the same durable transition. Opaque phase tokens are unique
@@ -279,12 +287,25 @@ across live kernel instances, so a decision or handler result prepared against
 one kernel cannot be consumed by another.
 
 Grant interaction conditions apply to delegated authority. When a person uses
-a declared action in the provider app's own live surface, that
-`SurfaceAction` remains a schema-validated, grant-checked, attributable Run, but
-`notify` does not create a trusted notice and `requires-approval` does not add a
-second confirmation. The surface action is already the person's explicit
-command. Calls to another app or LLM provider, agent and automation work, and
-all other programmatic invocations retain their configured grant condition.
+a declared action in the provider app's own live surface, that `SurfaceAction`
+remains a schema-validated, grant-checked, attributable Run and `notify` does
+not create a trusted notice. Under a `requires-approval` grant, the click itself
+counts as approval only for `read-only` and `local-write` effects. `unspecified`,
+`external-write`, and `destructive` effects still enter trusted chrome. Calls to
+another app or LLM provider, agent and automation work, and all other
+programmatic invocations retain their configured grant condition.
+
+This exception is convenience for an honestly declared, user-driven surface;
+it is not an isolation boundary against a malicious app. Effect metadata comes
+from the provider, and a custom iframe's bridge message proves the live surface
+binding and declared intent but not a physical user gesture. The host frame adds
+a conservative confirmation before forwarding every custom own-provider
+`read-only`/`local-write` invocation, including those with `silent` or `notify`
+grants. The app cannot synthesize that host-owned physical interaction. This
+avoids relying on a frontend grant snapshot that may change before preparation.
+The guard is not a single-use attestation consumed by the kernel and does not
+prove an honestly declared effect. Consolidating it into one authoritative
+kernel policy remains an alpha limitation.
 
 The ledger records the requested data scope on invocation and approval events.
 Invocation input and result bodies are not duplicated into audit history; the
@@ -335,6 +356,13 @@ and processing flow through explicit app contracts; it cannot inherit device
 authority from Chat or bypass the sandbox and capability boundaries.
 
 ## Package and protocol boundary
+
+External apps own their builds, tests, dependencies, and releases; core CI
+consumes their release evidence rather than their source or package bytes.
+The in-tree Daily Review authoring example under `examples/` and the creator's
+template are core-owned qualification inputs. They exercise public package
+contracts without being bundled, auto-installed, or special-cased by runtime
+app identity. The example's qualification is not an external-app release claim.
 
 ```text
 app.json -- host package reader --> generic manifest -- seal --> kernel
@@ -391,15 +419,15 @@ headers only when that revision defines them. Neither the credential nor HTTP
 authentication becomes a kernel primitive or packaged-app backend feature.
 
 A fresh profile seeds one ordinary unauthenticated Streamable HTTP configuration
-for the public Kestral GitMCP documentation endpoint. The host makes one
-best-effort connection attempt only while that profile is first bootstrapped,
-after trusted chrome and bundled Chat are ready. Discovered tools still install
-through the generic MCP bridge and its normal consent prompts. Chat receives no
-implicit authority: the host separately prepares exact, non-expiring,
-requires-approval grant requests for the discovered capabilities and trusted
+for the public Kestral GitMCP documentation endpoint. It remains inert until the
+owner explicitly chooses **Connect** under **Settings → Tool servers**; startup
+does not contact the endpoint, discover tools, install an app, or request a
+grant. Discovered tools then install through the generic MCP bridge and its
+normal consent prompts. Chat receives no implicit authority: the owner requests
+exact tool access through the ordinary permission-proposal flow, and trusted
 chrome decides each request. The saved server has no built-in identity or
-lifecycle privilege and remains editable and removable. Later process starts do
-not reconnect it automatically.
+lifecycle privilege and remains editable and removable. Kestral never reconnects
+it automatically.
 
 Managed-app lifecycle writes are serialized by a host transition guard, not by
 holding the kernel or app-manager mutex for the whole operation. Package
@@ -508,7 +536,10 @@ CAS revisions, transactions, quotas, and lifecycle checks. An owning live sandbo
 the authenticated surface bridge without a grant or Run. Fixed generated
 `get`/`list` capabilities bind delegated reads to the provider app identity and
 enter the normal grant-checked action path with exact
-`app-data:<app-id>:<collection>` resource scope. Indexed reads may bind their
+`app-data:<app-id>:<collection>` resource scope. Their exact input schemas include
+the host-defined `x-kestral-managed-data-export` collection annotation; Chat and
+agent dispatch derive the invocation scope from it, never from model input.
+Indexed reads may bind their
 equality value from trusted current-Chat context so it is not model-controlled.
 Delegated mutations remain unsupported until the action path can stage a side
 effect and commit it only after finalization revalidates authority. Contract v2

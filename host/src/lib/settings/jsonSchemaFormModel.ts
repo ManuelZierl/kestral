@@ -7,6 +7,7 @@ export interface JsonSchemaField {
   input: "single-line" | "multiline";
   description: string;
   required: boolean;
+  minLength?: number;
   maxLength?: number;
   minimum?: number;
   maximum?: number;
@@ -16,6 +17,7 @@ interface PropertySchema {
   type?: string;
   title?: string;
   description?: string;
+  minLength?: number;
   maxLength?: number;
   minimum?: number;
   maximum?: number;
@@ -23,26 +25,111 @@ interface PropertySchema {
 }
 
 const supportedFieldTypes = new Set(["string", "integer", "number", "boolean"]);
-const schemaCompositionKeywords = ["$ref", "allOf", "anyOf", "oneOf", "if", "then", "else"];
+const schemaCompositionKeywords = [
+  "$ref",
+  "$dynamicRef",
+  "allOf",
+  "anyOf",
+  "oneOf",
+  "not",
+  "if",
+  "then",
+  "else",
+];
+const unsupportedObjectFormKeywords = [
+  "const",
+  "enum",
+  "minProperties",
+  "patternProperties",
+  "propertyNames",
+  "dependentRequired",
+  "dependentSchemas",
+  "unevaluatedProperties",
+];
+const unsupportedPropertyFormKeywords = [
+  "const",
+  "enum",
+  "pattern",
+  "format",
+  "multipleOf",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+];
 
 function usesSchemaComposition(schema: Record<string, unknown>): boolean {
   return schemaCompositionKeywords.some((keyword) => keyword in schema);
 }
 
+function usesUnsupportedObjectFormKeyword(schema: Record<string, unknown>): boolean {
+  return unsupportedObjectFormKeywords.some((keyword) => keyword in schema);
+}
+
+function usesUnsupportedPropertyFormKeyword(schema: Record<string, unknown>): boolean {
+  return unsupportedPropertyFormKeywords.some((keyword) => keyword in schema);
+}
+
 export function supportsJsonSchemaForm(schema: JsonObject): boolean {
-  if (schema.type !== "object" || usesSchemaComposition(schema)) return false;
-  const properties = schema.properties;
-  if (properties === undefined) return true;
+  if (schema.type !== "object"
+    || usesSchemaComposition(schema)
+    || usesUnsupportedObjectFormKeyword(schema)) return false;
+  if ("additionalProperties" in schema
+    && schema.additionalProperties !== false
+    && schema.additionalProperties !== undefined) return false;
+  // A schema may require keys without declaring their property schemas. Those
+  // inputs need the JSON editor, not an empty scalar form.
+  const properties = schema.properties === undefined ? {} : schema.properties;
   if (typeof properties !== "object" || properties === null || Array.isArray(properties)) {
+    return false;
+  }
+  const propertyNames = new Set(Object.keys(properties));
+  if (Array.isArray(schema.required)
+    && schema.required.some((name) => typeof name !== "string" || !propertyNames.has(name))) {
     return false;
   }
   return Object.values(properties).every((property) => {
     if (typeof property !== "object" || property === null || Array.isArray(property)) return false;
     const propertySchema = property as PropertySchema & Record<string, unknown>;
     return !usesSchemaComposition(propertySchema)
+      && !usesUnsupportedPropertyFormKeyword(propertySchema)
       && typeof propertySchema.type === "string"
       && supportedFieldTypes.has(propertySchema.type);
   });
+}
+
+function requireSafeJsonNumbers(value: JsonValue, path = "input"): void {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error(`${path} contains a non-finite number.`);
+    }
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      throw new Error(`${path} contains an integer outside JavaScript's safe range.`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => requireSafeJsonNumbers(entry, `${path}[${index}]`));
+    return;
+  }
+  if (typeof value === "object" && value !== null) {
+    for (const [key, entry] of Object.entries(value)) {
+      requireSafeJsonNumbers(entry, `${path}.${key}`);
+    }
+  }
+}
+
+export function parseJsonObjectInput(source: string): JsonObject {
+  let value: unknown;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    throw new Error("Enter valid JSON.");
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Input must be a JSON object.");
+  }
+  const object = value as JsonObject;
+  requireSafeJsonNumbers(object);
+  return object;
 }
 
 export function schemaFields(schema: JsonObject): JsonSchemaField[] {
@@ -55,6 +142,7 @@ export function schemaFields(schema: JsonObject): JsonSchemaField[] {
     input: property["x-kestral-input"] === "multiline" ? "multiline" : "single-line",
     description: property.description ?? "",
     required: required.has(name),
+    minLength: property.minLength,
     maxLength: property.maxLength,
     minimum: property.minimum,
     maximum: property.maximum,
@@ -73,12 +161,15 @@ export function coerceFieldValue(type: string, rawValue: string): JsonValue {
   const value = rawValue.trim();
   if (type === "integer") {
     const parsed = Number(value);
-    if (!Number.isInteger(parsed)) throw new Error("must be an integer");
+    if (!Number.isSafeInteger(parsed)) throw new Error("must be a safe integer");
     return parsed;
   }
   if (type === "number") {
     const parsed = Number(value);
-    if (Number.isNaN(parsed)) throw new Error("must be a number");
+    if (!Number.isFinite(parsed)) throw new Error("must be a finite number");
+    if (Number.isInteger(parsed) && !Number.isSafeInteger(parsed)) {
+      throw new Error("must be within JavaScript's safe integer range");
+    }
     return parsed;
   }
   if (type === "boolean") {
@@ -96,15 +187,37 @@ export function collectJsonObject(
 ): JsonObject {
   const collected: JsonObject = {};
   for (const field of schemaFields(schema)) {
+    const present = Object.prototype.hasOwnProperty.call(values, field.name);
     const raw = values[field.name] ?? "";
-    if (raw.trim() === "") {
-      if (field.required) {
-        throw new Error(`${field.name} is required`);
-      }
+    const blank = raw.trim() === "";
+    if (!present) {
+      if (field.required) throw new Error(`${field.name} is required`);
       continue;
     }
+    if (blank && !field.required) continue;
+    if (blank && field.type !== "string") {
+      throw new Error(`${field.name} is required`);
+    }
     try {
-      collected[field.name] = coerceFieldValue(field.type, raw);
+      const coerced = coerceFieldValue(field.type, raw);
+      if (typeof coerced === "string") {
+        const length = Array.from(coerced).length;
+        if (field.minLength !== undefined && length < field.minLength) {
+          throw new Error(`must be at least ${field.minLength} characters`);
+        }
+        if (field.maxLength !== undefined && length > field.maxLength) {
+          throw new Error(`must be at most ${field.maxLength} characters`);
+        }
+      }
+      if (typeof coerced === "number") {
+        if (field.minimum !== undefined && coerced < field.minimum) {
+          throw new Error(`must be at least ${field.minimum}`);
+        }
+        if (field.maximum !== undefined && coerced > field.maximum) {
+          throw new Error(`must be at most ${field.maximum}`);
+        }
+      }
+      collected[field.name] = coerced;
     } catch (error) {
       throw new Error(`${field.name} ${String((error as Error).message)}`);
     }

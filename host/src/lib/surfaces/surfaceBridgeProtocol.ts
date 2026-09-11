@@ -140,6 +140,7 @@ export type SurfaceOp =
   | { kind: "cancel-run"; runId: string }
   | { kind: "get-config" }
   | { kind: "update-config"; config: JsonObject }
+  | { kind: "compare-update-config"; expected: JsonObject; config: JsonObject }
   | { kind: "get-state"; key: string }
   | {
       kind: "put-state";
@@ -219,8 +220,31 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isJsonValue(value: unknown): value is JsonValue {
+  const pending = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === null || typeof current === "string" || typeof current === "boolean") continue;
+    if (typeof current === "number") {
+      if (Number.isFinite(current)) continue;
+      return false;
+    }
+    if (Array.isArray(current)) {
+      for (const item of current) pending.push(item);
+      continue;
+    }
+    if (!isObject(current)) return false;
+    const prototype = Object.getPrototypeOf(current);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    for (const item of Object.values(current)) pending.push(item);
+  }
+  return true;
+}
+
 function isPlainJsonObject(value: unknown): value is JsonObject {
-  return isObject(value);
+  if (!isObject(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return (prototype === Object.prototype || prototype === null) && isJsonValue(value);
 }
 
 function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
@@ -250,6 +274,7 @@ function parseManagedDataQuery(value: unknown): ManagedDataQuery | null {
     return null;
   }
   if ((value.index === undefined) !== (value.equals === undefined)) return null;
+  if (value.equals !== undefined && !isJsonValue(value.equals)) return null;
   return {
     ...(value.index === undefined ? {} : { index: value.index as string }),
     ...(value.equals === undefined ? {} : { equals: value.equals as JsonValue }),
@@ -488,9 +513,10 @@ function isDataScope(value: unknown): value is DataScope {
   }
   switch (value.kind) {
     case "none":
-      return true;
+      return hasOnlyKeys(value, ["kind"]);
     case "resources": {
       if (
+        !hasOnlyKeys(value, ["kind", "resource_ids"]) ||
         !Array.isArray(value.resource_ids) ||
         value.resource_ids.length === 0 ||
         value.resource_ids.length > MAX_SURFACE_RESOURCE_IDS
@@ -554,6 +580,14 @@ function parseOp(value: unknown): { ok: true; op: SurfaceOp } | { ok: false; rea
         return { ok: false, reason: "update-config op config must be an object" };
       }
       return { ok: true, op: { kind: "update-config", config: value.config } };
+    case "compare-update-config":
+      if (!isPlainJsonObject(value.expected) || !isPlainJsonObject(value.config)) {
+        return { ok: false, reason: "compare-update-config op expected and config must be objects" };
+      }
+      return {
+        ok: true,
+        op: { kind: "compare-update-config", expected: value.expected, config: value.config },
+      };
     case "get-state":
       if (typeof value.key !== "string" || value.key.length > MAX_SURFACE_IDENTIFIER_CHARS) {
         return { ok: false, reason: "get-state op requires a string key" };

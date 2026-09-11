@@ -28,6 +28,7 @@ vi.mock("$lib/api", async (importOriginal) => {
     ...actual,
     openSurface: vi.fn(async () => ({ app_id: "weather", surface: "panel", instance_id: "i-1" })),
     closeSurface: vi.fn(async () => {}),
+    compareAndUpdateAppConfig: vi.fn(async (_id: string, _expected: unknown, config: unknown) => ({ kind: "updated", config })),
     submitAction: vi.fn(async () => ({
       run_id: "run-1",
       result: { kind: "completed", result: {}, artifacts: [] },
@@ -53,6 +54,7 @@ const api = await import("$lib/api");
 const editorContext = await import("$lib/surfaces/modelProfileEditorContext");
 const openSurface = vi.mocked(api.openSurface);
 const closeSurface = vi.mocked(api.closeSurface);
+const compareAndUpdateAppConfig = vi.mocked(api.compareAndUpdateAppConfig);
 const getAppConfig = vi.mocked(api.getAppConfig);
 const updateAppConfig = vi.mocked(api.updateAppConfig);
 const loadSurfaceHostContext = vi.mocked(editorContext.loadSurfaceHostContext);
@@ -367,6 +369,27 @@ describe("AppSurfaceFrame guards", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await vi.waitFor(() => expect(updateAppConfig).toHaveBeenCalledTimes(3));
     expect(updateAppConfig).toHaveBeenLastCalledWith("weather", { profiles: [] });
+  });
+
+  it("routes compare-and-update config through the app-bound host command", async () => {
+    render(AppSurfaceFrame, props());
+    const iframe = await frame();
+
+    window.dispatchEvent(requestEventFrom(
+      iframe.contentWindow,
+      8,
+      {
+        kind: "compare-update-config",
+        expected: { profiles: [] },
+        config: { profiles: [{ id: "work" }] },
+      },
+    ));
+
+    await vi.waitFor(() => expect(compareAndUpdateAppConfig).toHaveBeenCalledWith(
+      "weather",
+      { profiles: [] },
+      { profiles: [{ id: "work" }] },
+    ));
   });
 
   it("fails explicitly and releases the binding when configuration cannot load", async () => {

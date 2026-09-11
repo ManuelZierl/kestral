@@ -1,4 +1,5 @@
-import type { CapabilityUseView, GrantCondition } from "$lib/api";
+import type { CapabilityUseView, DataScope, GrantCondition } from "$lib/api";
+import { dataScopeCovers } from "$lib/apps/appMetadata";
 
 export interface CapabilityAccessState {
   available: boolean;
@@ -9,13 +10,19 @@ export function capabilityAccessState(
   availableCapabilities: CapabilityUseView[],
   provider: string,
   capability: string,
+  requestedDataScope: DataScope = { kind: "none" },
 ): CapabilityAccessState {
   const match = availableCapabilities.find(
     (item) => item.provider_app_id === provider && item.capability === capability,
   );
+  const authorizations = match?.authorizations.filter(
+    (authorization) => dataScopeCovers(requestedDataScope, authorization.data_scope),
+  ) ?? [];
   return {
-    available: match !== undefined,
-    grantCondition: match ? mostInteractiveCondition(match) : null,
+    available: authorizations.length > 0,
+    grantCondition: match && authorizations.length > 0
+      ? mostInteractiveCondition({ ...match, authorizations })
+      : null,
   };
 }
 
@@ -29,8 +36,8 @@ export function mostInteractiveCondition(view: CapabilityUseView): GrantConditio
 
 export function capabilityAccessBadge(condition: GrantCondition | null): string | null {
   if (condition === null) return null;
-  if (condition === "requires-approval") return "Requires approval";
-  if (condition === "notify") return "Notifies on use";
+  if (condition === "requires-approval") return "Approval on delegated/high-impact use";
+  if (condition === "notify") return "Notifies on delegated use";
   return "Allowed";
 }
 

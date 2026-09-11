@@ -72,6 +72,7 @@ fn host_managed_exports_require_exact_read_only_capability_contracts() {
         description: "List matching items".into(),
         input_schema: managed_export_input_schema(
             export.operation,
+            &export.collection,
             &collection,
             collection.indexes.first(),
             export.equals_host_input,
@@ -102,6 +103,27 @@ fn host_managed_exports_require_exact_read_only_capability_contracts() {
         capability.input_schema["properties"]["equals"][crate::tool_mapping::HOST_INPUT_ANNOTATION],
         crate::tool_mapping::CURRENT_CHAT_THREAD_ID
     );
+    assert_eq!(
+        capability.input_schema[crate::tool_mapping::MANAGED_DATA_EXPORT_ANNOTATION]["collection"],
+        "items"
+    );
+    let mut stale_capability = capability.clone();
+    stale_capability
+        .input_schema
+        .remove(crate::tool_mapping::MANAGED_DATA_EXPORT_ANNOTATION);
+    let stale_error = validate_host_managed_data(
+        1,
+        &collections,
+        &BTreeMap::new(),
+        &limits,
+        std::slice::from_ref(&export),
+        &[],
+        std::slice::from_ref(&stale_capability),
+        &[],
+        "com.example.managed-data",
+    )
+    .unwrap_err();
+    assert!(stale_error.contains("schemas do not match"));
 
     let public_document = json!({
         "format_version": 1,

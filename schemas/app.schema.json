@@ -335,7 +335,7 @@
     },
 
     "CapabilityEffect": {
-      "description": "Advisory effect metadata (primitives/capability.rs). Never grants authority.",
+      "description": "Provider-declared effect metadata used for risk presentation and the narrow own-surface confirmation policy (primitives/capability.rs). It never grants authority or proves actual behavior.",
       "type": "string",
       "enum": ["unspecified", "read-only", "local-write", "external-write", "destructive"]
     },

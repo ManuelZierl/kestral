@@ -117,7 +117,7 @@ The tested core commit precedes one metadata-only promotion commit because a
 commit cannot contain a hash of evidence that names that same not-yet-created
 commit. Release validation proves ancestry and permits only
 `release/promoted-apps.json` and
-`release/v0.1.0-alpha.1-evidence.md` to differ between those commits. The tested
+`release/v<version>-evidence.md` to differ between those commits. The tested
 core commit is an executable/build source freeze. Any code,
 dependency, configuration, schema, workflow, or documentation change requires a
 new candidate and new external evidence.
@@ -291,9 +291,10 @@ always resolved from the current host and app manifests. Unknown saved app IDs
 do not create navigation entries, and newly available destinations append after
 the saved order. Invalid versions, fields, IDs, and duplicate entries are
 reported in the sidebar editor instead of being applied. Version 1 migrates
-forward by adding the removable Kestral documentation MCP destination to
-`hidden`; all existing collapse, order, and other visibility choices remain
-unchanged. Version 2 then preserves an explicit choice to show that destination.
+forward by adding the potential generated Kestral documentation MCP destination
+to `hidden`; all existing collapse, order, and other visibility choices remain
+unchanged. Version 2 then preserves an explicit choice to show that destination
+after its server is connected.
 
 Pending-send recovery v1 is also device-local. It stores only a thread-keyed
 idempotency request ID and exact message so a manual retry can reuse the same
@@ -483,6 +484,14 @@ top-level indexes; indexes may require unique non-null values. Transactions are
 limited to the fixed create/replace/delete union. Generated indexed reads may
 bind their equality value from trusted current-Chat context rather than model
 input. The package declaration supplies lower quotas under host ceilings.
+
+The fixed export input schema includes a host-defined
+`x-kestral-managed-data-export` annotation naming its collection. Package
+inspection requires an exact match to the export declaration, and Chat/agent
+dispatch derives the exact collection scope from it. This does not change the
+managed-data file format or widen grants. Pre-publication packages without the
+annotation must be rebuilt; they are refused rather than silently activated
+with a broken delegated-read path.
 
 The persisted document binds a digest of the contract version, collections,
 schemas, indexes, limits, and exports. A package update or downgrade may use a

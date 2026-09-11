@@ -8,25 +8,35 @@ import {
   validateReleaseChangedPaths,
 } from "./check-promoted-app-contracts.mjs";
 
-const hostVersion = "0.1.0-alpha.1";
+const { version: hostVersion } = JSON.parse(await readFile("host/package.json", "utf8"));
 const coreCommit = "a".repeat(40);
 const contracts = JSON.parse(await readFile("release/host-extension-contracts.json", "utf8"));
 const promotion = JSON.parse(await readFile("release/promoted-apps.json", "utf8"));
+const expectedAppIds = [
+  "com.ma-zierl.kestral-chat-export",
+  "com.ma-zierl.kestral-excalidraw",
+  "com.ma-zierl.kestral-model-profiles",
+  "com.ma-zierl.kestral-pi",
+  "dev.kestral.goal-chat",
+];
 
 function clone(value) {
   return structuredClone(value);
 }
 
 test("current promoted packages match the exact host and provider contracts", () => {
-  assert.equal(validatePromotionDocument(promotion, contracts, hostVersion).length, 6);
+  const apps = validatePromotionDocument(promotion, contracts, hostVersion);
+  assert.deepEqual(apps.map((app) => app.id).sort(), expectedAppIds);
 });
 
 test("contract drift fails closed", () => {
   const changed = clone(promotion);
-  changed.apps.at(-1).extension_contributions[0].contract_version = 5;
+  const contributor = changed.apps.find((app) => app.extension_contributions.length > 0);
+  assert.ok(contributor);
+  contributor.extension_contributions[0].contract_version += 1;
   assert.throws(
     () => validatePromotionDocument(changed, contracts, hostVersion),
-    /host provides v6/,
+    /host provides v1/,
   );
 });
 
@@ -47,10 +57,15 @@ test("release mode refuses missing lifecycle evidence", () => {
 });
 
 test("the post-evidence release commit can change only release metadata", () => {
-  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json"]));
-  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json", "release/v0.1.0-alpha.1-evidence.md"]));
+  const evidencePath = `release/v${hostVersion}-evidence.md`;
+  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json"], hostVersion));
+  assert.doesNotThrow(() => validateReleaseChangedPaths(["release/promoted-apps.json", evidencePath], hostVersion));
   assert.throws(
-    () => validateReleaseChangedPaths(["release/v0.1.0-alpha.1-evidence.md", "host/src-tauri/src/package.rs"]),
+    () => validateReleaseChangedPaths([evidencePath, "host/src-tauri/src/package.rs"], hostVersion),
+    /changed tested core files/,
+  );
+  assert.throws(
+    () => validateReleaseChangedPaths([evidencePath], "0.1.0-alpha.2"),
     /changed tested core files/,
   );
 });

@@ -18,6 +18,7 @@ import type {
   Artifact,
   AppEventView,
   CapabilityRef,
+  CompareAppConfigResult,
   JsonObject,
   JsonValue,
   ManagedDataCommand,
@@ -48,6 +49,7 @@ export interface SurfaceBridgeActions {
   cancelRun(runId: string): Promise<void>;
   getConfig(): Promise<JsonObject>;
   updateConfig(config: JsonObject): Promise<JsonObject>;
+  compareUpdateConfig(expected: JsonObject, config: JsonObject): Promise<CompareAppConfigResult>;
   getState(key: string): Promise<SurfaceStateEntry>;
   putState(
     key: string,
@@ -142,6 +144,8 @@ export function createSurfaceBridge(options: CreateSurfaceBridgeOptions): Surfac
         return (await actions.getConfig()) as JsonValue;
       case "update-config":
         return (await actions.updateConfig(op.config)) as JsonValue;
+      case "compare-update-config":
+        return (await actions.compareUpdateConfig(op.expected, op.config)) as unknown as JsonValue;
       case "get-state":
         return (await actions.getState(op.key)) as unknown as JsonValue;
       case "put-state":

@@ -61,8 +61,8 @@ use std::sync::{Arc, Mutex};
 
 use chat_store::{ChatStore, ChatThread, ChatThreadSummary};
 use config::{
-    ConnectionTestResult, ConnectorConfigView, ConnectorProbe, HostConfig, HostConfigService,
-    McpExportProfileView, McpServerConfigView, ModelListResult,
+    CompareAppConfigResult, ConnectionTestResult, ConnectorConfigView, ConnectorProbe, HostConfig,
+    HostConfigService, McpExportProfileView, McpServerConfigView, ModelListResult,
 };
 use file_resources::{
     file_broker_handlers, file_broker_manifest, file_resource_grant_request,
@@ -1059,20 +1059,6 @@ async fn bootstrap_startup_apps(host: HostState<'_>) -> Result<(), String> {
         Ok::<(), String>(())
     }
     .await;
-    if result.is_ok() {
-        let startup_mcp_server = host_state
-            .config
-            .lock()
-            .map_err(|_| "config lock poisoned".to_string())?
-            .take_startup_mcp_server_request();
-        if let Some(server_id) = startup_mcp_server {
-            if let Err(error) =
-                connect_mcp_server_for_host(host_state.clone(), server_id, true).await
-            {
-                eprintln!("first-start MCP connection failed: {error}");
-            }
-        }
-    }
     if result.is_ok()
         && host_state
             .config
@@ -1575,6 +1561,29 @@ async fn update_app_config(
         .lock()
         .map_err(|_| "config lock poisoned".to_string())?
         .update_app_config(app_id.as_str(), &manifest, config)
+}
+
+#[tauri::command]
+async fn compare_and_update_app_config(
+    host: HostState<'_>,
+    app_id: AppId,
+    expected_config: app_host_kernel::JsonObject,
+    config: app_host_kernel::JsonObject,
+) -> Result<CompareAppConfigResult, String> {
+    let _transition_guard = host.managed_app_transition.lock().await;
+    let app_id_for_lookup = app_id.clone();
+    let manifest = with_kernel_blocking(host.inner().clone(), move |kernel| {
+        kernel
+            .installed_apps()
+            .find(|app| app.manifest.app_id == app_id_for_lookup)
+            .map(|app| app.manifest.clone())
+            .ok_or_else(|| format!("unknown app: {app_id_for_lookup}"))
+    })
+    .await?;
+    host.config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?
+        .compare_and_update_app_config(app_id.as_str(), &manifest, expected_config, config)
 }
 
 async fn require_secret_owner(host: &Arc<Host>, owner: &AppId) -> Result<(), String> {
@@ -2898,14 +2907,10 @@ fn has_mcp_http_auth_secret(host: HostState<'_>, server_id: String) -> Result<bo
 
 #[tauri::command]
 async fn connect_mcp_server(host: HostState<'_>, server_id: String) -> Result<(), String> {
-    connect_mcp_server_for_host(host.inner().clone(), server_id, false).await
+    connect_mcp_server_for_host(host.inner().clone(), server_id).await
 }
 
-async fn connect_mcp_server_for_host(
-    host: Arc<Host>,
-    server_id: String,
-    request_chat_access: bool,
-) -> Result<(), String> {
+async fn connect_mcp_server_for_host(host: Arc<Host>, server_id: String) -> Result<(), String> {
     let connections = host.mcp_connections.clone();
     connections.begin(&server_id)?;
     let config_snapshot = {
@@ -2968,9 +2973,6 @@ async fn connect_mcp_server_for_host(
     match install {
         Ok(()) => {
             connections.complete(&server_id, client)?;
-            if request_chat_access {
-                request_mcp_chat_access(host, mcp::app_id_for_server(&server_id)).await?;
-            }
             Ok(())
         }
         Err(error) => {
@@ -2981,67 +2983,6 @@ async fn connect_mcp_server_for_host(
             Err(error)
         }
     }
-}
-
-async fn request_mcp_chat_access(host: Arc<Host>, provider: AppId) -> Result<(), String> {
-    let prepared = with_kernel_blocking(host.clone(), move |kernel| {
-        let holder = AppId::new("chat");
-        let installed = kernel
-            .installed_app(&provider)
-            .map_err(|error| error.to_string())?;
-        let display_name = installed.manifest.display_name.clone();
-        let capabilities = installed.manifest.capabilities.clone();
-        let active = kernel.grants_for(&holder);
-        capabilities
-            .into_iter()
-            .filter_map(|capability| {
-                let capability_ref = app_host_kernel::primitives::capability::CapabilityRef {
-                    provider: provider.clone(),
-                    capability: capability.name.clone(),
-                };
-                (!active
-                    .iter()
-                    .any(|grant| grant.scope.covers(&capability_ref)))
-                .then(|| {
-                    kernel.prepare_grant(
-                        &holder,
-                        GrantRequest {
-                            scope: GrantScope::ExactCapability {
-                                provider: provider.clone(),
-                                capability: capability.name,
-                            },
-                            data_scope: DataScope::None,
-                            condition: GrantCondition::RequiresApproval,
-                            duration: GrantDuration::NonExpiring,
-                            reason: format!(
-                                "Let Chat use the '{}' tool from {}.",
-                                capability_ref.capability, display_name
-                            ),
-                        },
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())
-    })
-    .await?;
-    if prepared.is_empty() {
-        return Ok(());
-    }
-    let approvals = tauri::async_runtime::spawn_blocking(move || {
-        PreparedGrant::await_grouped_approvals(prepared).map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|error| format!("Chat MCP grant approval task failed: {error}"))??;
-    with_kernel_blocking(host, move |kernel| {
-        for approval in approvals {
-            kernel
-                .commit_grant(approval)
-                .map_err(|error| error.to_string())?;
-        }
-        Ok(())
-    })
-    .await
 }
 
 #[tauri::command]
@@ -4423,6 +4364,7 @@ pub fn run() {
             cancel_chat_message,
             cancel_llm_oauth,
             cancel_surface_action,
+            compare_and_update_app_config,
             delete_chat_thread,
             delete_connector_config,
             delete_kestral_profile,

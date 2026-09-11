@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Review</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 1rem; color: var(--color-text); background: var(--color-surface); font: 1rem/1.45 system-ui, sans-serif; }
+main { max-width: 64rem; margin: auto; }
+header, .row, .panel, .proposal { border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-surface-raised); }
+header, .panel { padding: 1rem; min-width: 0; }
+.grid { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); gap: 1rem; }
+.row, .proposal { padding: .55rem; margin: .4rem 0; }
+h1, h2, h3, p { margin-top: 0; }
+.muted, #status { color: var(--color-text-muted); }
+input, textarea, button { font: inherit; }
+input[type=text], textarea { width: 100%; padding: .55rem; border: 1px solid var(--color-border); border-radius: .45rem; color: var(--color-text); background: var(--color-surface); }
+textarea { min-height: 8rem; resize: vertical; }
+button { padding: .5rem .7rem; border: 0; border-radius: .45rem; background: var(--color-accent); color: var(--color-accent-contrast); cursor: pointer; }
+button.secondary { background: var(--color-surface-hover); color: var(--color-text); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.task { display: flex; gap: .5rem; align-items: center; }
+.task input { min-width: 1.5rem; min-height: 1.5rem; }
+.task .title { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.done .title { text-decoration: line-through; color: var(--color-text-muted); }
+.actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.draft { border-left: .25rem solid var(--color-accent); padding: .75rem; margin-top: .75rem; background: var(--color-surface); }
+details { margin-top: .75rem; }
+#preview, #ai-context { white-space: pre-wrap; overflow-wrap: anywhere; }
+.stale { color: var(--color-warning-text); }
+@media (max-width: 44em) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body><main>
+<header>
+  <h1>Daily Review</h1><p class="muted" id="date"></p>
+  <p>Capture today, keep unfinished work visible, and use AI or Chat without giving either direct edit authority.</p>
+  <button id="refresh" class="secondary" type="button">Refresh data</button>
+</header>
+<div class="grid">
+  <section class="panel">
+    <h2>Tasks</h2>
+    <form id="task-form"><label for="task-input">New task</label><input id="task-input" type="text" maxlength="240" placeholder="- [ ] Add a task" autocomplete="off"></form>
+    <p class="muted">Enter creates a task. Select a task, then press Tab in the task box to create a sub-task beneath it. Shift+Tab always moves focus.</p>
+    <div id="tasks"></div><details><summary>Archive</summary><div id="archive"></div></details>
+  </section>
+  <section class="panel">
+    <h2>Notes</h2><label for="note">Note for the displayed date</label>
+    <textarea id="note" maxlength="12000" placeholder="Notes for today…" disabled></textarea>
+    <div class="actions">
+      <button id="save-note" type="button">Save note</button>
+      <button id="discard-note" class="secondary" type="button" hidden>Discard draft and load saved note</button>
+      <button id="suggest" class="secondary" type="button">Ask AI to review</button>
+    </div>
+    <div id="draft" class="draft" hidden>
+      <strong>Proposed next task</strong><p id="draft-text"></p>
+      <div class="actions"><button id="accept" type="button">Add task</button><button id="reject" class="secondary" type="button">Dismiss</button></div>
+    </div>
+    <details><summary>Saved note preview</summary><p id="preview" class="muted">No note saved yet.</p></details>
+    <details><summary>Last context sent for AI review</summary><p id="ai-context" class="muted">No AI review requested.</p></details>
+    <h3>Chat proposals</h3>
+    <p class="muted">Chat may read tasks only through its approved read capability. A change arrives here as a revision-bound artifact and still needs your approval.</p>
+    <div class="actions"><button id="refresh-proposals" class="secondary" type="button">Refresh proposals</button></div>
+    <p id="proposal-status" role="status"></p><div id="proposals"></div>
+  </section>
+</div>
+<p id="status" role="status" aria-live="polite"></p>
+<script>
+const $ = selector => document.querySelector(selector);
+const input = $("#task-input"), note = $("#note"), status = $("#status");
+const tasksEl = $("#tasks"), archiveEl = $("#archive"), proposalsEl = $("#proposals");
+const draft = $("#draft"), draftText = $("#draft-text");
+const appId = "com.ma-zierl.daily-review";
+let day = localDay(), tasks = [], generation = 0, selected = null;
+let pending = false, ready = false, initialized = false, aiPending = false;
+let noteBase = null, savedNote = null, noteDirty = false, noteEdits = 0;
+
+function localDay() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+function report(error, prefix) {
+  status.textContent = `${prefix}: ${error instanceof Error ? error.message : String(error)}`;
+  window.appHost.reportError(status.textContent);
+}
+function controls() {
+  for (const id of ["#save-note", "#accept"]) $(id).disabled = pending || !ready || aiPending;
+  $("#suggest").disabled = pending || !ready || aiPending;
+  $("#refresh").disabled = pending;
+  $("#refresh-proposals").disabled = pending;
+  $("#discard-note").hidden = !noteDirty;
+  $("#discard-note").disabled = pending;
+  note.disabled = !initialized;
+  $("#date").textContent = day + (day !== localDay() && noteDirty ? " — unsaved note kept from this date; save or discard it to move to today." : "");
+  for (const checkbox of document.querySelectorAll(".task input")) checkbox.disabled = pending || !ready;
+  for (const button of document.querySelectorAll(".proposal button")) button.disabled = pending || !ready || button.dataset.stale === "true";
+}
+function titleValue(title) {
+  return Array.from(title.trim().replace(/^-\s*\[[ xX]\]\s*/, "").replace(/[\r\n]+/g, " ").trim()).slice(0, 240).join("");
+}
+function validRecord(record) {
+  return record && typeof record.id === "string" && Number.isSafeInteger(record.revision) && record.revision > 0 && record.value;
+}
+function recordPage(snapshot, index) {
+  const page = snapshot?.results?.[index];
+  if (!Number.isSafeInteger(snapshot?.generation) || snapshot.generation < 0 || page?.kind !== "record-list" ||
+      !Array.isArray(page.records) || !page.records.every(validRecord) ||
+      !(page.nextAfter === null || typeof page.nextAfter === "string")) throw Error("Invalid data snapshot");
+  return page;
+}
+
+// Never publish a partial task collection. All pages belong to one generation;
+// a concurrent write makes the host reject the next page rather than mixing views.
+async function readData(readDay) {
+  const snapshot = await window.appHost.data.v2.readSnapshot({ reads: [
+    { kind: "record-list", collection: "tasks", query: { limit: 100 } },
+    { kind: "record-list", collection: "notes", query: { index: "day", equals: readDay, limit: 1 } },
+  ] });
+  const first = recordPage(snapshot, 0), notePage = recordPage(snapshot, 1);
+  const records = [...first.records], seen = new Set();
+  let after = first.nextAfter;
+  while (after !== null) {
+    if (!after || seen.has(after) || records.length >= 10000) throw Error("Invalid task pagination cursor");
+    seen.add(after);
+    const next = await window.appHost.data.v2.readSnapshot({ expectedGeneration: snapshot.generation, reads: [
+      { kind: "record-list", collection: "tasks", query: { limit: 100, after } },
+    ] });
+    if (next.generation !== snapshot.generation) throw Error("Task store changed during refresh; refresh again");
+    const page = recordPage(next, 0);
+    records.push(...page.records);
+    after = page.nextAfter;
+  }
+  if (new Set(records.map(record => record.id)).size !== records.length) throw Error("Duplicate task in snapshot");
+  return { generation: snapshot.generation, tasks: records, note: notePage.records[0] || null };
+}
+
+function taskTrees() {
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const children = new Map();
+  for (const task of tasks) {
+    const parent = byId.has(task.value.parentId) ? task.value.parentId : null;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(task);
+  }
+  for (const siblings of children.values()) siblings.sort((a, b) =>
+    String(a.createdAt).localeCompare(String(b.createdAt)) || a.id.localeCompare(b.id));
+  const trees = [], visited = new Set();
+  // The fallback also keeps orphaned or cyclic imported records visible.
+  for (const root of [...(children.get(null) || []), ...tasks]) {
+    if (visited.has(root.id)) continue;
+    const rows = [], stack = [{ task: root, depth: 0 }];
+    while (stack.length) {
+      const row = stack.pop();
+      if (visited.has(row.task.id)) continue;
+      visited.add(row.task.id);
+      rows.push(row);
+      for (const child of [...(children.get(row.task.id) || [])].reverse()) stack.push({ task: child, depth: row.depth + 1 });
+    }
+    trees.push({ root, rows });
+  }
+  return trees;
+}
+function renderTasks() {
+  tasksEl.replaceChildren();
+  archiveEl.replaceChildren();
+  for (const { root, rows } of taskTrees()) {
+    const target = root.value.done ? archiveEl : tasksEl;
+    if (root.value.done && rows.some(row => row.task.id === selected)) selected = null;
+    for (const { task, depth } of rows) {
+      const row = document.createElement("div");
+      row.className = "row task" + (task.value.done ? " done" : "");
+      row.style.marginLeft = `${Math.min(depth, 6) * 0.9}rem`;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = task.value.done;
+      checkbox.setAttribute("aria-label", `Complete ${task.value.title}`);
+      checkbox.addEventListener("change", () => toggle(task, checkbox.checked));
+      const title = document.createElement("button");
+      title.type = "button";
+      title.className = "secondary title";
+      title.textContent = task.value.title;
+      title.setAttribute("aria-pressed", String(selected === task.id));
+      title.addEventListener("click", () => { selected = root.value.done ? null : task.id; renderTasks(); });
+      row.append(checkbox, title);
+      target.append(row);
+    }
+  }
+  controls();
+}
+
+async function loadData(acknowledgedNote = null) {
+  let readDay = noteDirty ? day : localDay();
+  let snapshot = await readData(readDay);
+  // A midnight refresh may be in flight while the user starts typing into
+  // the still-visible previous day's note. Keep that draft on its original
+  // date, and re-read that date before publishing any part of the snapshot.
+  if (noteDirty && readDay !== day) {
+    readDay = day;
+    snapshot = await readData(readDay);
+  }
+  generation = snapshot.generation;
+  tasks = snapshot.tasks;
+  if (selected && !tasks.some(task => task.id === selected)) selected = null;
+  day = readDay;
+  savedNote = snapshot.note;
+  if (!noteDirty) {
+    noteBase = savedNote;
+    note.value = savedNote?.value.body || "";
+  } else if (acknowledgedNote && acknowledgedNote.day === day && savedNote?.value.body === acknowledgedNote.body &&
+      savedNote.revision === acknowledgedNote.revision && (!acknowledgedNote.id || savedNote.id === acknowledgedNote.id)) {
+    // Edits typed while our save was in flight are based on our own new revision,
+    // not on an unrelated writer's later revision.
+    noteBase = savedNote;
+    noteDirty = note.value !== savedNote.value.body;
+  }
+  initialized = true;
+  ready = true;
+  $("#preview").textContent = savedNote?.value.body || "No note saved yet.";
+  renderTasks();
+  await loadProposals();
+}
+async function refresh() {
+  if (pending) return false;
+  pending = true;
+  controls();
+  try {
+    await loadData();
+    status.textContent = noteDirty ? "Data refreshed. Your unsaved note is kept; saved note preview shows the current stored version." : "Ready";
+    return true;
+  } catch (error) {
+    ready = false;
+    report(error, "Could not refresh Daily Review; drafts kept");
+    return false;
+  } finally { pending = false; controls(); }
+}
+
+async function mutate(operation, request, success, committed = () => null) {
+  if (pending || !ready) return false;
+  pending = true;
+  controls();
+  let acknowledged = null;
+  try {
+    await window.appHost.data.v2[operation]({ mutationId: `daily-review-${crypto.randomUUID()}`, ...request });
+    acknowledged = committed();
+  } catch (error) {
+    // Keep the editor AND its original revision. Refresh must not turn a stale
+    // draft into permission to overwrite another window's saved note.
+    ready = false;
+    renderTasks();
+    report(error, "Change not confirmed; drafts kept. Refresh data before retrying");
+    pending = false;
+    controls();
+    return false;
+  }
+  try {
+    await loadData(acknowledged);
+    status.textContent = success + (noteDirty ? ". Unsaved note edits kept." : "");
+  } catch (error) {
+    ready = false;
+    report(error, `${success}, but refresh failed; do not repeat the saved change`);
+  } finally { pending = false; controls(); }
+  // A successful write stays successful even if the following read failed.
+  return true;
+}
+function add(title, parentId = null, fromInput = false) {
+  const normalized = titleValue(title);
+  if (!normalized) return Promise.resolve(false);
+  return mutate("create", {
+    expectedGeneration: generation, collection: "tasks",
+    value: { title: normalized, parentId, done: false, day: localDay() },
+  }, "Task added", () => {
+    if (fromInput && input.value === title) input.value = "";
+  });
+}
+function toggle(task, done) {
+  return mutate("replace", {
+    expectedGeneration: generation, collection: "tasks", id: task.id,
+    expectedRevision: task.revision, value: { ...task.value, done },
+  }, "Task updated");
+}
+function saveNote() {
+  const body = note.value, edits = noteEdits, writingDay = day, base = noteBase;
+  return mutate(base ? "replace" : "create", {
+    expectedGeneration: generation, collection: "notes", value: { day: writingDay, body },
+    ...(base ? { id: base.id, expectedRevision: base.revision } : {}),
+  }, "Note saved", () => {
+    if (noteEdits === edits) noteDirty = false;
+    return { day: writingDay, body, id: base?.id, revision: (base?.revision || 0) + 1 };
+  });
+}
+
+function proposalTarget(content) {
+  const prefix = `app-data:${appId}:tasks:record:`;
+  if (content?.targetAppId !== appId || content.targetKind !== "record" || content.collection !== "tasks" ||
+      typeof content.resourceId !== "string" || !content.resourceId.startsWith(prefix)) return null;
+  return content.resourceId.slice(prefix.length);
+}
+async function loadProposals() {
+  proposalsEl.replaceChildren();
+  $("#proposal-status").textContent = "";
+  try {
+    const artifacts = await window.appHost.listArtifacts();
+    for (const artifact of artifacts) {
+      if (artifact?.artifact_type !== "task-title-proposal") continue;
+      const content = artifact.content, id = proposalTarget(content), title = content?.payload?.title;
+      if (!id || typeof title !== "string" || !title.trim()) continue;
+      const task = tasks.find(record => record.id === id);
+      const stale = !task || task.revision !== content.targetRevision || generation !== content.targetGeneration;
+      const card = document.createElement("div");
+      card.className = "proposal";
+      const text = document.createElement("p");
+      text.textContent = task ? `${task.value.title} → ${title}` : `Proposal for unavailable task ${id}`;
+      const meta = document.createElement("p");
+      meta.className = stale ? "stale" : "muted";
+      meta.textContent = stale ? "Stale proposal — the task or store changed after Chat proposed it." : "Current revision matches. Review before applying.";
+      const apply = document.createElement("button");
+      apply.type = "button";
+      apply.textContent = "Apply proposal";
+      apply.dataset.stale = String(stale);
+      apply.addEventListener("click", () => {
+        if (stale || task.revision !== content.targetRevision || generation !== content.targetGeneration) return;
+        return mutate("replace", {
+          expectedGeneration: content.targetGeneration, collection: "tasks", id: task.id,
+          expectedRevision: content.targetRevision, value: { ...task.value, title },
+        }, "Proposal applied");
+      });
+      card.append(text, meta, apply);
+      proposalsEl.append(card);
+    }
+    if (!proposalsEl.children.length) $("#proposal-status").textContent = "No task proposals yet.";
+  } catch (error) {
+    $("#proposal-status").textContent = `Could not load Chat proposals: ${String(error)}. Local notes and tasks are still available.`;
+  }
+  controls();
+}
+async function suggest() {
+  if (aiPending || pending || !ready) return;
+  aiPending = true;
+  controls();
+  try {
+    const open = taskTrees().filter(tree => !tree.root.value.done).flatMap(tree =>
+      tree.rows.map(({ task, depth }) => `${"  ".repeat(Math.min(depth, 6))}- [${task.value.done ? "x" : " "}] ${task.value.title}`)).join("\n");
+    const context = `Tasks:\n${open.slice(0, 12000) || "(none)"}${open.length > 12000 ? "\n[task context truncated]" : ""}\n\nNotes for ${day}:\n${note.value.slice(0, 4000)}`;
+    $("#ai-context").textContent = context;
+    status.textContent = "Waiting for permission and model…";
+    const response = await window.appHost.invoke({ provider: "llm-provider", capability: "llm.generate" }, {
+      messages: [
+        { role: "system", content: "Suggest exactly one concrete next task from this daily review. Return only the task title." },
+        { role: "user", content: context },
+      ], max_output_tokens: 80,
+    }, "Review today's visible tasks and notes");
+    const outcome = response?.result;
+    if (outcome?.kind !== "completed") throw Error(outcome?.reason || outcome?.error || "Model action did not complete");
+    const text = outcome.result?.message?.content;
+    if (typeof text !== "string") throw Error("Model returned no suggestion");
+    const title = titleValue(text.replace(/^\s*(?:[-*]\s+|\d+[.)]\s+)/, ""));
+    if (!title) throw Error("Model returned no suggestion");
+    draftText.textContent = title;
+    draft.hidden = false;
+    status.textContent = "Review the proposal before applying it.";
+  } catch (error) { report(error, "AI review unavailable; nothing changed"); }
+  finally { aiPending = false; controls(); }
+}
+
+$("#task-form").addEventListener("submit", event => { event.preventDefault(); return add(input.value, null, true); });
+input.addEventListener("keydown", event => {
+  if (event.key === "Tab" && !event.shiftKey && selected && titleValue(input.value)) {
+    event.preventDefault();
+    return add(input.value, selected, true);
+  }
+});
+note.addEventListener("input", () => { noteEdits++; noteDirty = true; controls(); });
+$("#save-note").addEventListener("click", saveNote);
+$("#discard-note").addEventListener("click", () => {
+  if (pending) return;
+  // The button is an explicit local draft-discard action; ordinary refresh is not.
+  noteDirty = false;
+  noteBase = savedNote;
+  note.value = savedNote?.value.body || "";
+  return refresh();
+});
+$("#refresh").addEventListener("click", refresh);
+$("#refresh-proposals").addEventListener("click", refresh);
+$("#suggest").addEventListener("click", suggest);
+$("#accept").addEventListener("click", async () => { if (await add(draftText.textContent || "")) draft.hidden = true; });
+$("#reject").addEventListener("click", () => { draft.hidden = true; draftText.textContent = ""; status.textContent = "Proposal dismissed"; });
+window.addEventListener("focus", () => { if (!pending && localDay() !== day) { if (noteDirty) controls(); else void refresh(); } });
+setInterval(() => { if (!pending && localDay() !== day) { if (noteDirty) controls(); else void refresh(); } }, 60000);
+window.appHost.onInit(refresh);
+window.appHost.ready();
+controls();
+</script>
+</main></body></html>

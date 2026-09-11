@@ -1,6 +1,6 @@
 use super::*;
 use app_host_kernel::ids::{AppId, CapabilityName, GrantId, RunId};
-use app_host_kernel::primitives::capability::CapabilityRef;
+use app_host_kernel::primitives::capability::{CapabilityEffect, CapabilityRef};
 use uuid::Uuid;
 
 #[test]
@@ -143,6 +143,10 @@ fn cancelling_one_app_prefix_denies_and_removes_its_pending_approval() {
                 provider: AppId::new("notes"),
                 capability: CapabilityName::new("create"),
             },
+            capability_description: "Create a note from text".into(),
+            effect: CapabilityEffect::LocalWrite,
+            input_summary: "{\n  \"text\": \"hello\"\n}".into(),
+            input_summary_truncated: false,
             data_scope: app_host_kernel::primitives::grant::DataScope::None,
             grant_id: GrantId::new("grant-1"),
             run_id: RunId::new("run-1"),

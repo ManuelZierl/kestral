@@ -158,49 +158,22 @@ fn completed_startup_claim_stays_claimed() {
 }
 
 #[test]
-fn startup_mcp_chat_request_grants_each_tool_with_per_use_approval() {
-    let path = startup_test_dir("startup-mcp-chat-grants");
+fn fresh_profile_docs_shortcut_remains_inert_during_bootstrap() {
+    let path = startup_test_dir("inert-docs-shortcut");
     let host = build_test_host(path.clone()).unwrap();
-    tauri::async_runtime::block_on(install_bundled_apps_phased(
-        host.clone(),
-        host.config.clone(),
-        host.file_resources.clone(),
-    ))
-    .unwrap();
-    let provider = AppId::new(test_app::TEST_APP_ID);
-    let (manifest, handlers) =
-        test_app::test_app_install_parts(Arc::new(Mutex::new(test_app::TestAppStore::default())));
-    tauri::async_runtime::block_on(install_kernel_app_phased(
-        host.clone(),
-        manifest,
-        handlers,
-        GrantOrigin::ManifestRequested,
-    ))
-    .unwrap();
+    let server_id = config::KESTRAL_GITMCP_SERVER_ID;
 
-    tauri::async_runtime::block_on(request_mcp_chat_access(host.clone(), provider.clone()))
-        .unwrap();
+    assert!(host.config.lock().unwrap().mcp_server(server_id).is_some());
+    tauri::async_runtime::block_on(bootstrap_startup_apps(HostState::direct(&host))).unwrap();
 
-    let kernel = host.kernel.lock().unwrap();
-    let grants = kernel.grants_for(&AppId::new("chat"));
-    let tool_grants = grants
-        .iter()
-        .filter(|grant| {
-            matches!(
-                &grant.scope,
-                GrantScope::ExactCapability { provider: granted_provider, .. }
-                    if granted_provider == &provider
-            )
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(tool_grants.len(), 5);
-    assert!(tool_grants.iter().all(|grant| {
-        grant.condition == GrantCondition::RequiresApproval
-            && grant.data_scope == DataScope::None
-            && grant.expires_at.is_none()
-    }));
+    assert!(!host.mcp_connections.is_active(server_id).unwrap());
+    assert!(host
+        .kernel
+        .lock()
+        .unwrap()
+        .installed_app(&mcp::app_id_for_server(server_id))
+        .is_err());
 
-    drop(kernel);
     drop(host);
     let _ = std::fs::remove_dir_all(path);
 }

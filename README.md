@@ -1,8 +1,8 @@
 <div align="center">
   <img src="host/src-tauri/icons/kestral-icon.svg" width="112" alt="Kestral logo">
   <h1>Kestral</h1>
-  <p><strong>Kestral is a personal-first, open-source AI workspace and lean local host for user-chosen apps.</strong></p>
-  <p>Chat is the default starting app, not the canonical interface for all AI work.</p>
+  <p><strong>Kestral is a personal-first, open-source workspace where you can build or install focused AI apps for your own recurring work.</strong></p>
+  <p>Use Chat when conversation fits; build a purpose-built interface when it does not.</p>
   <p>
     <a href=".github/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-GitHub_Actions-2088ff?logo=githubactions&amp;logoColor=white" alt="CI: GitHub Actions"></a>
     <a href="docs/alpha-release.md"><img src="https://img.shields.io/badge/status-alpha-f59e0b" alt="Project status: alpha"></a>
@@ -17,11 +17,29 @@
   </p>
 </div>
 
+Kestral's central bet is not merely that AI should connect to more existing
+services. It is that you should be able to shape the application around a
+specific use case of your own: for example, a notes app built around your review
+ritual, a domain-specific work queue, or a focused canvas. The app owns that
+experience while Kestral supplies shared host capabilities such as app
+lifecycle, provider and credential mediation, grants, Runs, and provenance.
+
 Kestral starts with Chat so a new workspace is useful immediately, but Chat is
-one ordinary app rather than the presumed interface for every task. Notes,
-visual tools, model providers, agent engines, and other focused experiences stay
-in userland. Capability actions routed through Kestral use the same grants,
-Runs, and provenance path whether an app is bundled or installed later.
+one ordinary app rather than the presumed interface for every task. Focused apps
+can be installed as packages or built independently without forking the host.
+Capability actions routed through Kestral use the same grants, Runs, and
+provenance path whether an app is bundled or installed later.
+
+The alpha now treats app lifecycle and trust as product behavior rather than
+only infrastructure: the Apps workspace exposes installation, curated discovery,
+app creation guidance, permission repair, and failed-runtime recovery. As a
+conservative host-side guard, a sandboxed custom surface cannot use its own
+read/local-write action path without a physical confirmation in host-owned UI
+outside the app frame. This is intentionally stricter than standing
+silent/notify grants; the longer-term fix is a single-use gesture proof consumed
+by the kernel, or removal of the kernel's direct-surface approval shortcut.
+Release CI also enforces explicit size ceilings for the shipping Linux and
+Windows artifacts.
 
 > **Status: preparing v0.1.0-alpha.1.** This planned first public testing release
 > has not been published. It is for developers, early technical testers, and
@@ -42,12 +60,21 @@ npm install
 npm run tauri dev
 ```
 
+Or scaffold a standalone focused app from the repository root:
+
+```sh
+node scripts/create-app.mjs ../my-focus-app \
+  --id com.example.my-focus-app \
+  --name "My Focus App"
+```
+
 ## Documentation
 
 The self-contained 0.1 series documentation lives under [`docs/`](docs/):
 
 - [Getting started](docs/getting-started.md)
 - [Using Kestral](docs/user-guide.md)
+- [Building and connecting apps](docs/extending-kestral.md)
 - [Architecture](docs/architecture.md)
 - [Trust model](docs/trust-model.md)
 - [Operations](docs/operations.md)
