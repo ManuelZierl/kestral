@@ -428,7 +428,7 @@ export async function invokeHostWithProgress<T, TEvent>(
 }
 
 export function needsRemoteConnection(): boolean {
-  return !isTauriRuntime() && !isRemoteConnectionReady();
+  return !isTauriRuntime();
 }
 
 export function isRemoteConnectionReady(): boolean {
