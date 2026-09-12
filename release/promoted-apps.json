@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "host_version": "0.1.0-alpha.1",
-  "tested_core_commit": null,
+  "tested_core_commit": "25c00acbc7e6574a875a8f2fd61ce40a9076946d",
   "apps": [
     {
       "id": "com.ma-zierl.kestral-chat-export",
@@ -19,8 +19,8 @@
           "contract_version": 1
         }
       ],
-      "evidence_url": null,
-      "evidence_sha256": null
+      "evidence_url": "https://github.com/ManuelZierl/kestral-chat-export/releases/download/kestral-v0.1.0-alpha.1-evidence-r2/RELEASE-EVIDENCE.json",
+      "evidence_sha256": "sha256-55cd9d6377954168b4980407ba48429867aa97493c187d234a2c6efdd18950e8"
     },
     {
       "id": "com.ma-zierl.kestral-pi",
@@ -32,21 +32,21 @@
       "minimum_host_version": "0.1.0-alpha.1",
       "tested_host_version": "0.1.0-alpha.1",
       "extension_contributions": [],
-      "evidence_url": null,
-      "evidence_sha256": null
+      "evidence_url": "https://github.com/ManuelZierl/kestral-pi/releases/download/kestral-v0.1.0-alpha.1-evidence-r2/RELEASE-EVIDENCE.json",
+      "evidence_sha256": "sha256-c91adcc9f3254b6386e7eb1af0c9d0eb3f108699a33c622bf598c40700f5e644"
     },
     {
       "id": "com.ma-zierl.kestral-excalidraw",
       "display_name": "Whiteboard",
       "repository": "https://github.com/ManuelZierl/kestral-excalidraw",
-      "source_commit": "1c2fd93144b6c5b00a957ef9b2726293a55a180a",
-      "package_version": "0.1.4",
-      "package_digest": "sha256-8d86b048e9a87710c4c4552c4cb9b981c356784cc33a6d30ad1954ffa5954ff6",
+      "source_commit": "d191b9ca1ec738c979a174f8b704fdc7b3eb66d2",
+      "package_version": "0.1.5",
+      "package_digest": "sha256-afe27c27c0db3243e027d2fbad766988290f5209ca4de41125c64103da5fe3e5",
       "minimum_host_version": "0.1.0-alpha.1",
       "tested_host_version": "0.1.0-alpha.1",
       "extension_contributions": [],
-      "evidence_url": null,
-      "evidence_sha256": null
+      "evidence_url": "https://github.com/ManuelZierl/kestral-excalidraw/releases/download/kestral-v0.1.0-alpha.1-evidence-r2/RELEASE-EVIDENCE.json",
+      "evidence_sha256": "sha256-2f58eb5d4c351919c8fa9de45cded44681be687940c90209bb1a8fafa442edf3"
     },
     {
       "id": "com.ma-zierl.kestral-model-profiles",
@@ -64,8 +64,8 @@
           "contract_version": 1
         }
       ],
-      "evidence_url": null,
-      "evidence_sha256": null
+      "evidence_url": "https://github.com/ManuelZierl/kestral-model-profiles/releases/download/kestral-v0.1.0-alpha.1-evidence-r2/RELEASE-EVIDENCE.json",
+      "evidence_sha256": "sha256-c23851354a14e45bb35d25d8aac727bc0cbb43267664c40c4cd60683a86bf71e"
     },
     {
       "id": "dev.kestral.goal-chat",
@@ -77,8 +77,8 @@
       "minimum_host_version": "0.1.0-alpha.1",
       "tested_host_version": "0.1.0-alpha.1",
       "extension_contributions": [],
-      "evidence_url": null,
-      "evidence_sha256": null
+      "evidence_url": "https://github.com/ManuelZierl/kestral-goal-chat/releases/download/kestral-v0.1.0-alpha.1-evidence-r2/RELEASE-EVIDENCE.json",
+      "evidence_sha256": "sha256-a4a261c0d83a771dd394792850864190409027f5678c241e392394932e9ae06a"
     }
   ]
 }
