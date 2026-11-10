@@ -115,17 +115,25 @@ struct TypedExpr {
 
 impl TypedExpr {
     fn field(&self, name: &str) -> Result<Self, ScriptError> {
-        let properties = self.schema.get("properties").and_then(Value::as_object)
+        let properties = self
+            .schema
+            .get("properties")
+            .and_then(Value::as_object)
             .ok_or_else(|| reject("field access requires a declared object output schema"))?;
-        let property = properties.get(name)
+        let property = properties
+            .get(name)
             .ok_or_else(|| reject(format!("unknown output field {name:?}")))?;
         let required = self.schema.get("required").and_then(Value::as_array);
         if !required.is_some_and(|fields| fields.iter().any(|field| field.as_str() == Some(name))) {
-            return Err(reject(format!("output field {name:?} is optional and may be absent")));
+            return Err(reject(format!(
+                "output field {name:?} is optional and may be absent"
+            )));
         }
         checked_type(property)?;
         let ValueExpr::ResultField { step, path } = &self.value else {
-            return Err(reject("field access is only supported on capability results"));
+            return Err(reject(
+                "field access is only supported on capability results",
+            ));
         };
         let mut path = path.clone();
         path.push(name.to_string());
@@ -138,9 +146,14 @@ impl TypedExpr {
 }
 
 fn checked_type(schema: &Value) -> Result<&str, ScriptError> {
-    let name = schema.get("type").and_then(Value::as_str)
+    let name = schema
+        .get("type")
+        .and_then(Value::as_str)
         .ok_or_else(|| reject("an explicit simple JSON Schema type is required"))?;
-    if !matches!(name, "string" | "integer" | "number" | "boolean" | "object" | "array" | "null") {
+    if !matches!(
+        name,
+        "string" | "integer" | "number" | "boolean" | "object" | "array" | "null"
+    ) {
         return Err(reject(format!("unsupported schema type {name:?}")));
     }
     Ok(name)
@@ -158,7 +171,11 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn new(kernel: &Kernel, owner: AppId, specs: Vec<BindingSpec>) -> Result<Self, ScriptError> {
+    pub fn new(
+        kernel: &Kernel,
+        owner: AppId,
+        specs: Vec<BindingSpec>,
+    ) -> Result<Self, ScriptError> {
         kernel.installed_app(&owner)?;
         if specs.len() > MAX_STEPS {
             return Err(reject("too many configured capability bindings"));
@@ -170,18 +187,36 @@ impl Compiler {
             }
             let declaration = kernel.capability_declaration(&spec.capability)?.clone();
             if declaration.input_schema.get("type").and_then(Value::as_str) != Some("object") {
-                return Err(reject(format!("{} needs an object input schema", spec.alias)));
+                return Err(reject(format!(
+                    "{} needs an object input schema",
+                    spec.alias
+                )));
             }
-            let properties = declaration.input_schema.get("properties")
-                .and_then(Value::as_object).ok_or_else(|| reject("input properties are required"))?;
-            let required = declaration.input_schema.get("required")
-                .and_then(Value::as_array).cloned().unwrap_or_default();
-            if spec.arguments.len() > MAX_ARGUMENTS ||
-                spec.arguments.iter().collect::<BTreeSet<_>>().len() != spec.arguments.len() ||
-                spec.arguments.iter().any(|name| !properties.contains_key(name)) ||
-                required.iter().any(|name| !spec.arguments.iter().any(|arg| name.as_str() == Some(arg)))
+            let properties = declaration
+                .input_schema
+                .get("properties")
+                .and_then(Value::as_object)
+                .ok_or_else(|| reject("input properties are required"))?;
+            let required = declaration
+                .input_schema
+                .get("required")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            if spec.arguments.len() > MAX_ARGUMENTS
+                || spec.arguments.iter().collect::<BTreeSet<_>>().len() != spec.arguments.len()
+                || spec
+                    .arguments
+                    .iter()
+                    .any(|name| !properties.contains_key(name))
+                || required
+                    .iter()
+                    .any(|name| !spec.arguments.iter().any(|arg| name.as_str() == Some(arg)))
             {
-                return Err(reject(format!("invalid positional argument mapping for {}", spec.alias)));
+                return Err(reject(format!(
+                    "invalid positional argument mapping for {}",
+                    spec.alias
+                )));
             }
             for name in &spec.arguments {
                 checked_type(&properties[name])?;
@@ -190,7 +225,10 @@ impl Compiler {
                 checked_type(&Value::Object(schema.clone()))?;
             }
             let alias = spec.alias.clone();
-            if bindings.insert(alias.clone(), Binding { spec, declaration }).is_some() {
+            if bindings
+                .insert(alias.clone(), Binding { spec, declaration })
+                .is_some()
+            {
                 return Err(reject(format!("duplicate alias {alias}")));
             }
         }
@@ -205,7 +243,9 @@ impl Compiler {
         engine.set_optimization_level(OptimizationLevel::None);
         engine.set_max_operations(MAX_NODES as u64);
         engine.set_max_variables(MAX_STEPS * 2);
-        let ast = engine.compile(source).map_err(|error| reject(format!("syntax: {error}")))?;
+        let ast = engine
+            .compile(source)
+            .map_err(|error| reject(format!("syntax: {error}")))?;
         if ast.iter_functions().next().is_some() {
             return Err(reject("functions and closures are forbidden"));
         }
@@ -264,9 +304,14 @@ impl Compiler {
 }
 
 fn valid_identifier(name: &str) -> bool {
-    !name.is_empty() &&
-        name.bytes().next().is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_') &&
-        name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    !name.is_empty()
+        && name
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 fn valid_alias(alias: &str) -> bool {
@@ -293,32 +338,42 @@ impl Builder<'_> {
             Expr::IntegerConstant(number, _) => Ok(literal(json!(number), "integer")),
             Expr::BoolConstant(value, _) => Ok(literal(json!(value), "boolean")),
             Expr::Unit(_) => Ok(literal(Value::Null, "null")),
-            Expr::Variable(data, _, _) => self.locals.get(data.1.as_str())
-                .cloned().ok_or_else(|| reject(format!("unknown variable {:?}", data.1))),
-            Expr::Dot(data, flags, _) if flags.is_empty() => {
-                match &data.rhs {
-                    Expr::Property(property, _) => {
-                        self.expression(&data.lhs)?.field(property.2.as_str())
-                    }
-                    Expr::MethodCall(call, _) | Expr::FnCall(call, _) => {
-                        let Expr::Variable(provider, _, _) = &data.lhs else {
-                            return Err(reject("capability calls must use a configured provider alias"));
-                        };
-                        let alias = format!("{}.{}", provider.1, call.name);
-                        self.call(&alias, call)
-                    }
-                    _ => Err(reject("unsupported dot expression")),
+            Expr::Variable(data, _, _) => self
+                .locals
+                .get(data.1.as_str())
+                .cloned()
+                .ok_or_else(|| reject(format!("unknown variable {:?}", data.1))),
+            Expr::Dot(data, flags, _) if flags.is_empty() => match &data.rhs {
+                Expr::Property(property, _) => {
+                    self.expression(&data.lhs)?.field(property.2.as_str())
                 }
-            }
-            _ => Err(reject("unsupported expression (no arithmetic, indexing, eval, or dynamic calls)")),
+                Expr::MethodCall(call, _) | Expr::FnCall(call, _) => {
+                    let Expr::Variable(provider, _, _) = &data.lhs else {
+                        return Err(reject(
+                            "capability calls must use a configured provider alias",
+                        ));
+                    };
+                    let alias = format!("{}.{}", provider.1, call.name);
+                    self.call(&alias, call)
+                }
+                _ => Err(reject("unsupported dot expression")),
+            },
+            _ => Err(reject(
+                "unsupported expression (no arithmetic, indexing, eval, or dynamic calls)",
+            )),
         }
     }
 
     fn call(&mut self, alias: &str, call: &FnCallExpr) -> Result<TypedExpr, ScriptError> {
-        let binding = self.bindings.get(alias)
-            .ok_or_else(|| reject(format!("unknown capability alias {alias:?}")))?.clone();
+        let binding = self
+            .bindings
+            .get(alias)
+            .ok_or_else(|| reject(format!("unknown capability alias {alias:?}")))?
+            .clone();
         if self.steps.len() >= MAX_STEPS || call.args.len() != binding.spec.arguments.len() {
-            return Err(reject(format!("{alias}: step budget or argument count exceeded")));
+            return Err(reject(format!(
+                "{alias}: step budget or argument count exceeded"
+            )));
         }
         // Arguments can contain nested calls, which are lowered into earlier
         // steps. We never re-evaluate an expression when advancing a session.
@@ -330,7 +385,9 @@ impl Builder<'_> {
                 return Err(reject(format!("{alias}.{name}: input type mismatch")));
             }
             if actual.sensitive && !binding.spec.accepts_sensitive {
-                return Err(reject(format!("{alias}: sensitive result cannot flow to this capability")));
+                return Err(reject(format!(
+                    "{alias}: sensitive result cannot flow to this capability"
+                )));
             }
             arguments.insert(name.clone(), actual.value);
         }
@@ -343,11 +400,17 @@ impl Builder<'_> {
             capability: binding.spec.capability.clone(),
             arguments,
         });
-        let schema = binding.declaration.output_schema.as_ref()
+        let schema = binding
+            .declaration
+            .output_schema
+            .as_ref()
             .map(|schema| Value::Object(schema.clone()))
             .unwrap_or(Value::Null);
         Ok(TypedExpr {
-            value: ValueExpr::ResultField { step, path: Vec::new() },
+            value: ValueExpr::ResultField {
+                step,
+                path: Vec::new(),
+            },
             schema,
             sensitive: binding.spec.sensitive_output,
         })
@@ -355,20 +418,24 @@ impl Builder<'_> {
 }
 
 fn literal(value: Value, ty: &str) -> TypedExpr {
-    TypedExpr { value: ValueExpr::Literal { value }, schema: json!({"type": ty}), sensitive: false }
+    TypedExpr {
+        value: ValueExpr::Literal { value },
+        schema: json!({"type": ty}),
+        sensitive: false,
+    }
 }
 
 fn resolve(expr: &ValueExpr, outputs: &[Value]) -> Result<Value, ScriptError> {
     match expr {
         ValueExpr::Literal { value } => Ok(value.clone()),
         ValueExpr::ResultField { step, path } => {
-            let mut value = outputs.get(*step).ok_or_else(|| ScriptError::Execution(
-                format!("step {step} is not completed")
-            ))?;
+            let mut value = outputs
+                .get(*step)
+                .ok_or_else(|| ScriptError::Execution(format!("step {step} is not completed")))?;
             for field in path {
-                value = value.get(field).ok_or_else(|| ScriptError::Execution(
-                    format!("step {step} result lacks field {field:?}")
-                ))?;
+                value = value.get(field).ok_or_else(|| {
+                    ScriptError::Execution(format!("step {step} result lacks field {field:?}"))
+                })?;
             }
             Ok(value.clone())
         }
@@ -390,16 +457,28 @@ pub struct Session {
 
 #[derive(Debug, PartialEq)]
 pub enum Progress {
-    AwaitingAuthorization { step: usize, capability: CapabilityRef },
-    StepCompleted { step: usize },
-    Completed { result: Value },
-    Stopped { outcome: InvocationResult, completed_steps: usize },
+    AwaitingAuthorization {
+        step: usize,
+        capability: CapabilityRef,
+    },
+    StepCompleted {
+        step: usize,
+    },
+    Completed {
+        result: Value,
+    },
+    Stopped {
+        outcome: InvocationResult,
+        completed_steps: usize,
+    },
 }
 
 impl Session {
-    pub fn start(kernel: &mut Kernel, program: CompiledProgram, goal: &str)
-        -> Result<Self, ScriptError>
-    {
+    pub fn start(
+        kernel: &mut Kernel,
+        program: CompiledProgram,
+        goal: &str,
+    ) -> Result<Self, ScriptError> {
         // A plan is no authority: all identities must still exist in the
         // registry at dispatch time, and grants are checked per invocation.
         kernel.installed_app(&program.owner)?;
@@ -409,13 +488,22 @@ impl Session {
                 return Err(reject("capability declaration changed since compilation"));
             }
         }
-        let run_id = kernel.start_run(Initiator::App {
-            app_id: program.owner.clone(),
-            reason: "restricted action script".into(),
-        }, goal)?;
+        let run_id = kernel.start_run(
+            Initiator::App {
+                app_id: program.owner.clone(),
+                reason: "restricted action script".into(),
+            },
+            goal,
+        )?;
         Ok(Self {
-            program, run_id, cursor: 0, results: Vec::new(),
-            pending: None, ended: false, started: Instant::now(), output_bytes: 0,
+            program,
+            run_id,
+            cursor: 0,
+            results: Vec::new(),
+            pending: None,
+            ended: false,
+            started: Instant::now(),
+            output_bytes: 0,
         })
     }
 
@@ -438,7 +526,8 @@ impl Session {
         if self.pending.is_some() {
             let step = &self.program.plan.steps[self.cursor];
             return Ok(Progress::AwaitingAuthorization {
-                step: self.cursor, capability: step.capability.clone(),
+                step: self.cursor,
+                capability: step.capability.clone(),
             });
         }
         if self.started.elapsed() > MAX_RUN_TIME {
@@ -467,12 +556,19 @@ impl Session {
             // A silent grant would allow execution without the trusted prompt.
             // Refuse when ANY live covering authorization could bypass chrome.
             let available = kernel.available_capabilities_for(&self.program.owner)?;
-            let view = available.iter().find(|view| view.provider_app_id == step.capability.provider
-                && view.capability == step.capability.capability);
-            if view.is_some_and(|view| view.authorizations.iter().any(|auth|
-                auth.condition != GrantCondition::RequiresApproval)) {
+            let view = available.iter().find(|view| {
+                view.provider_app_id == step.capability.provider
+                    && view.capability == step.capability.capability
+            });
+            if view.is_some_and(|view| {
+                view.authorizations
+                    .iter()
+                    .any(|auth| auth.condition != GrantCondition::RequiresApproval)
+            }) {
                 self.finish(kernel, RunTerminalState::Failed)?;
-                return Err(reject("unverified capability has a grant that could bypass approval"));
+                return Err(reject(
+                    "unverified capability has a grant that could bypass approval",
+                ));
             }
         }
         let mut input = JsonObject::new();
@@ -483,18 +579,27 @@ impl Session {
             // The kernel truncates its approval summary after this many bytes.
             // Refuse rather than ask a user to approve unseen argument suffixes.
             let summary_size = serde_json::to_string_pretty(&input)
-                .map_err(|error| ScriptError::Execution(error.to_string()))?.len();
+                .map_err(|error| ScriptError::Execution(error.to_string()))?
+                .len();
             if summary_size > MAX_CAPABILITY_APPROVAL_INPUT_BYTES {
-                return Err(reject("resolved write arguments exceed the trusted approval UI budget"));
+                return Err(reject(
+                    "resolved write arguments exceed the trusted approval UI budget",
+                ));
             }
         }
-        match kernel.prepare_invocation(&self.run_id, &step.capability, InvocationRequest {
-            input, data_scope: DataScope::None,
-        })? {
+        match kernel.prepare_invocation(
+            &self.run_id,
+            &step.capability,
+            InvocationRequest {
+                input,
+                data_scope: DataScope::None,
+            },
+        )? {
             PrepareInvocation::Prepared(prepared) => {
                 self.pending = Some(prepared);
                 Ok(Progress::AwaitingAuthorization {
-                    step: self.cursor, capability: step.capability.clone(),
+                    step: self.cursor,
+                    capability: step.capability.clone(),
                 })
             }
             PrepareInvocation::Refused(outcome) => self.stop(kernel, outcome),
@@ -521,34 +626,45 @@ impl Session {
         if self.ended {
             return Err(ScriptError::Execution("run already terminated".into()));
         }
-        let pending = self.pending.take()
+        let pending = self
+            .pending
+            .take()
             .ok_or_else(|| ScriptError::Execution("no prepared step to resume".into()))?;
         if self.started.elapsed() > MAX_RUN_TIME {
             kernel.abort_prepared_invocation(pending)?;
-            return Err(ScriptError::Execution("run time budget exceeded before approval".into()));
+            return Err(ScriptError::Execution(
+                "run time budget exceeded before approval".into(),
+            ));
         }
         let approval = pending.await_approval();
         if self.started.elapsed() > MAX_RUN_TIME {
             // Dropping the one-time approval token cancels the reservation;
             // finish() records the pending invocation cancellation.
             drop(approval);
-            return Err(ScriptError::Execution("run time budget exceeded during approval".into()));
+            return Err(ScriptError::Execution(
+                "run time budget exceeded during approval".into(),
+            ));
         }
         let authorization = kernel.authorize_invocation(approval)?;
         let outcome = match authorization {
-            AuthorizeInvocation::Authorized(authorized) =>
-                kernel.finalize_invocation(authorized.execute())?,
+            AuthorizeInvocation::Authorized(authorized) => {
+                kernel.finalize_invocation(authorized.execute())?
+            }
             AuthorizeInvocation::Refused(outcome) => outcome,
         };
         match outcome {
-            InvocationResult::Completed { result, artifacts: _ } => {
-                let size = serde_json::to_vec(&result).map_err(|e|
-                    ScriptError::Execution(e.to_string()))?.len();
+            InvocationResult::Completed {
+                result,
+                artifacts: _,
+            } => {
+                let size = serde_json::to_vec(&result)
+                    .map_err(|e| ScriptError::Execution(e.to_string()))?
+                    .len();
                 self.output_bytes = self.output_bytes.saturating_add(size);
                 if size > MAX_OUTPUT_BYTES || self.output_bytes > MAX_TOTAL_OUTPUT_BYTES {
                     self.finish(kernel, RunTerminalState::Failed)?;
                     return Err(ScriptError::Execution(
-                        "output budget exceeded after completed effect (no rollback)".into()
+                        "output budget exceeded after completed effect (no rollback)".into(),
                     ));
                 }
                 let completed = self.cursor;
@@ -570,20 +686,27 @@ impl Session {
         Ok(())
     }
 
-    fn stop(&mut self, kernel: &mut Kernel, outcome: InvocationResult)
-        -> Result<Progress, ScriptError>
-    {
+    fn stop(
+        &mut self,
+        kernel: &mut Kernel,
+        outcome: InvocationResult,
+    ) -> Result<Progress, ScriptError> {
         let terminal = match outcome {
             InvocationResult::Refused { .. } => RunTerminalState::Cancelled,
             _ => RunTerminalState::Failed,
         };
         self.finish(kernel, terminal)?;
-        Ok(Progress::Stopped { outcome, completed_steps: self.cursor })
+        Ok(Progress::Stopped {
+            outcome,
+            completed_steps: self.cursor,
+        })
     }
 
-    fn finish(&mut self, kernel: &mut Kernel, terminal: RunTerminalState)
-        -> Result<(), ScriptError>
-    {
+    fn finish(
+        &mut self,
+        kernel: &mut Kernel,
+        terminal: RunTerminalState,
+    ) -> Result<(), ScriptError> {
         self.ended = true;
         kernel.end_run(&self.run_id, terminal)?;
         Ok(())
