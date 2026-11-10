@@ -493,6 +493,11 @@ impl Session {
     /// trusted chrome and the kernel binds that answer to this exact input.
     /// A second resume has no pending token and cannot replay the call.
     pub fn resume(&mut self, kernel: &mut Kernel) -> Result<Progress, ScriptError> {
+        // Misuse of the session API is not an effect failure: callers may
+        // inspect/drive the still-active run after an extra resume attempt.
+        if self.pending.is_none() {
+            return Err(ScriptError::Execution("no prepared step to resume".into()));
+        }
         let progress = self.resume_inner(kernel);
         if progress.is_err() && !self.ended {
             self.finish(kernel, RunTerminalState::Failed)?;
