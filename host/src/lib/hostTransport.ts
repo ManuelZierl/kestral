@@ -107,7 +107,18 @@ async function authFetch(baseUrl: string, path: string, init?: RequestInit): Pro
 }
 
 async function responseValue<T>(response: Response): Promise<T> {
-  const body = (await response.json()) as T | { error?: string };
+  let body: T | { error?: string };
+  try {
+    body = (await response.json()) as T | { error?: string };
+  } catch {
+    // An unproxied static file server often returns HTML for /api/ requests.
+    // A JSON parsing error would hide the real connection problem.
+    throw new Error(
+      `Host URL did not return a Kestral API JSON response (HTTP ${response.status}). ` +
+      "If the browser client is served separately, enter the backend address; " +
+      "otherwise configure an /api/ reverse proxy.",
+    );
+  }
   if (!response.ok) {
     const message = typeof body === "object" && body !== null && "error" in body
       ? String(body.error)
