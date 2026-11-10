@@ -11,7 +11,9 @@ use std::time::{Duration, Instant};
 use app_host_kernel::ids::{AppId, RunId};
 use app_host_kernel::invocation::{InvocationRequest, InvocationResult};
 use app_host_kernel::kernel::{AuthorizeInvocation, PrepareInvocation, PreparedInvocation};
-use app_host_kernel::primitives::capability::{CapabilityDeclaration, CapabilityRef};
+use app_host_kernel::primitives::capability::{
+    CapabilityDeclaration, CapabilityEffect, CapabilityRef,
+};
 use app_host_kernel::primitives::grant::{DataScope, GrantCondition};
 use app_host_kernel::primitives::run::{Initiator, RunTerminalState};
 use app_host_kernel::services::chrome::MAX_CAPABILITY_APPROVAL_INPUT_BYTES;
@@ -186,6 +188,18 @@ impl Compiler {
                 return Err(reject(format!("invalid capability alias {:?}", spec.alias)));
             }
             let declaration = kernel.capability_declaration(&spec.capability)?.clone();
+            // Even operator configuration must not downgrade an explicitly
+            // declared writer or unknown-effect tool to a verified read.
+            // The provider's read-only declaration is necessary, not proof:
+            // verified behavior still requires an operator-controlled wrapper.
+            if spec.policy == BindingPolicy::VerifiedReadOnly
+                && declaration.effect != CapabilityEffect::ReadOnly
+            {
+                return Err(reject(format!(
+                    "{} is not eligible for verified read-only policy",
+                    spec.alias
+                )));
+            }
             if declaration.input_schema.get("type").and_then(Value::as_str) != Some("object") {
                 return Err(reject(format!(
                     "{} needs an object input schema",
