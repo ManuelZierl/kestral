@@ -597,7 +597,9 @@ fn approval_policy_is_bound_to_alias_not_only_capability_identity() {
     .unwrap();
     // Lookup was granted silently. Only the strict alias must be rejected
     // despite the other alias pointing to the same canonical capability.
-    let program = compiler.compile("return contacts.lookup(\"Anna\");").unwrap();
+    let program = compiler
+        .compile("return contacts.lookup(\"Anna\");")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "alias grant").unwrap();
     assert!(run.prepare_next(&mut f.kernel).is_err());
     assert_eq!(f.lookup_calls.load(Ordering::SeqCst), 0);
