@@ -2,7 +2,7 @@
 title: Secure LAN access
 layout: default
 parent: Operations
-nav_order: 2
+nav_order: 4
 ---
 
 # Secure access from another device on your LAN
