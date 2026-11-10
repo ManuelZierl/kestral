@@ -3,7 +3,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use app_host_kernel::ids::{AppId, ArtifactTypeName, CapabilityName};
-use app_host_kernel::invocation::{CapabilityHandler, CapabilityOutcome, HandlerFailure, InvocationResult, RefusalReason};
+use app_host_kernel::invocation::{
+    CapabilityHandler, CapabilityOutcome, HandlerFailure, InvocationResult, RefusalReason,
+};
 use app_host_kernel::manifest::{seal, AppManifest};
 use app_host_kernel::primitives::artifact::ArtifactDraft;
 use app_host_kernel::primitives::capability::CapabilityRef;
@@ -13,9 +15,7 @@ use app_host_kernel::services::chrome::{
     EventSubscriptionPrompt, GrantIssuancePrompt, TrustedChrome,
 };
 use app_host_kernel::Kernel;
-use kestral_action_script_prototype::{
-    BindingPolicy, BindingSpec, Compiler, Progress, Session,
-};
+use kestral_action_script_prototype::{BindingPolicy, BindingSpec, Compiler, Progress, Session};
 use serde_json::{json, Value};
 
 #[derive(Default)]
@@ -65,8 +65,10 @@ fn grant(provider: &str, name: &str, condition: &str) -> Value {
 }
 
 fn install(
-    kernel: &mut Kernel, id: &str,
-    capabilities: Vec<Value>, grants: Vec<Value>,
+    kernel: &mut Kernel,
+    id: &str,
+    capabilities: Vec<Value>,
+    grants: Vec<Value>,
     artifact_types: Vec<Value>,
     handlers: BTreeMap<CapabilityName, CapabilityHandler>,
 ) {
@@ -74,7 +76,8 @@ fn install(
         "app_id": id, "version": "1.0.0", "display_name": id, "description": "test app",
         "capabilities": capabilities, "artifact_types": artifact_types,
         "grant_requests": grants
-    })).unwrap();
+    }))
+    .unwrap();
     let prepared = kernel.prepare_install(seal(manifest), handlers).unwrap();
     kernel.commit_install(prepared.await_approval()).unwrap();
 }
@@ -162,7 +165,10 @@ impl Fixture {
                 result: if ambiguous_state.load(Ordering::SeqCst) {
                     json!({"matches": ["Anna 1", "Anna 2"]})
                 } else {
-                    let value = injected_state.lock().unwrap().clone()
+                    let value = injected_state
+                        .lock()
+                        .unwrap()
+                        .clone()
                         .unwrap_or_else(|| "DE0012345678".into());
                     json!({"iban": value})
                 },
@@ -174,7 +180,10 @@ impl Fixture {
             })
         });
         install(
-            &mut kernel, "contacts", vec![lookup_declaration()], vec![],
+            &mut kernel,
+            "contacts",
+            vec![lookup_declaration()],
+            vec![],
             vec![json!({
                 "name": "lookup-receipt", "description": "Result provenance",
                 "json_schema": {
@@ -190,7 +199,10 @@ impl Fixture {
         let offline_state = offline.clone();
         let observed = observed_ibans.clone();
         let mask: CapabilityHandler = Box::new(move |input, _context| {
-            observed.lock().unwrap().push(input["iban"].as_str().unwrap().into());
+            observed
+                .lock()
+                .unwrap()
+                .push(input["iban"].as_str().unwrap().into());
             mask_count.fetch_add(1, Ordering::SeqCst);
             if offline_state.load(Ordering::SeqCst) {
                 return Err(HandlerFailure("MCP tool server unavailable".into()));
@@ -201,54 +213,88 @@ impl Fixture {
             })
         });
         install(
-            &mut kernel, "directory", vec![mask_declaration()], vec![], vec![],
+            &mut kernel,
+            "directory",
+            vec![mask_declaration()],
+            vec![],
+            vec![],
             BTreeMap::from([(CapabilityName::new("mask"), mask)]),
         );
 
         let send_count = send_calls.clone();
         let send: CapabilityHandler = Box::new(move |_input, _context| {
             send_count.fetch_add(1, Ordering::SeqCst);
-            Ok(CapabilityOutcome { result: json!({"sent": true}), artifacts: vec![] })
+            Ok(CapabilityOutcome {
+                result: json!({"sent": true}),
+                artifacts: vec![],
+            })
         });
         install(
-            &mut kernel, "payments", vec![send_declaration()], vec![], vec![],
+            &mut kernel,
+            "payments",
+            vec![send_declaration()],
+            vec![],
+            vec![],
             BTreeMap::from([(CapabilityName::new("send"), send)]),
         );
 
         install(
-            &mut kernel, "action-script", vec![],
+            &mut kernel,
+            "action-script",
+            vec![],
             vec![
                 grant("contacts", "lookup", "silent"),
                 grant("directory", "mask", "silent"),
                 grant("payments", "send", write_condition),
             ],
-            vec![], BTreeMap::new(),
+            vec![],
+            BTreeMap::new(),
         );
         Self {
-            kernel, chrome, lookup_calls, mask_calls, send_calls, ambiguous, offline,
-            injected_iban, observed_ibans,
+            kernel,
+            chrome,
+            lookup_calls,
+            mask_calls,
+            send_calls,
+            ambiguous,
+            offline,
+            injected_iban,
+            observed_ibans,
         }
     }
 
     fn compiler(&self) -> Compiler {
-        Compiler::new(&self.kernel, AppId::new("action-script"), vec![
-            BindingSpec {
-                alias: "contacts.lookup".into(), capability: cap("contacts", "lookup"),
-                arguments: vec!["name".into()], policy: BindingPolicy::VerifiedReadOnly,
-                sensitive_output: true, accepts_sensitive: false,
-            },
-            BindingSpec {
-                alias: "directory.mask".into(), capability: cap("directory", "mask"),
-                arguments: vec!["iban".into()], policy: BindingPolicy::VerifiedReadOnly,
-                sensitive_output: false, accepts_sensitive: true,
-            },
-            BindingSpec {
-                alias: "payments.send".into(), capability: cap("payments", "send"),
-                arguments: vec!["iban".into(), "amount".into(), "currency".into()],
-                policy: BindingPolicy::RequiresApproval,
-                sensitive_output: false, accepts_sensitive: true,
-            },
-        ]).unwrap()
+        Compiler::new(
+            &self.kernel,
+            AppId::new("action-script"),
+            vec![
+                BindingSpec {
+                    alias: "contacts.lookup".into(),
+                    capability: cap("contacts", "lookup"),
+                    arguments: vec!["name".into()],
+                    policy: BindingPolicy::VerifiedReadOnly,
+                    sensitive_output: true,
+                    accepts_sensitive: false,
+                },
+                BindingSpec {
+                    alias: "directory.mask".into(),
+                    capability: cap("directory", "mask"),
+                    arguments: vec!["iban".into()],
+                    policy: BindingPolicy::VerifiedReadOnly,
+                    sensitive_output: false,
+                    accepts_sensitive: true,
+                },
+                BindingSpec {
+                    alias: "payments.send".into(),
+                    capability: cap("payments", "send"),
+                    arguments: vec!["iban".into(), "amount".into(), "currency".into()],
+                    policy: BindingPolicy::RequiresApproval,
+                    sensitive_output: false,
+                    accepts_sensitive: true,
+                },
+            ],
+        )
+        .unwrap()
     }
 
     fn drive(&mut self, source: &str) -> (Value, app_host_kernel::ids::RunId) {
@@ -258,8 +304,10 @@ impl Fixture {
         loop {
             match run.prepare_next(&mut self.kernel).unwrap() {
                 Progress::AwaitingAuthorization { .. } => {
-                    assert!(matches!(run.resume(&mut self.kernel).unwrap(),
-                        Progress::StepCompleted { .. }));
+                    assert!(matches!(
+                        run.resume(&mut self.kernel).unwrap(),
+                        Progress::StepCompleted { .. }
+                    ));
                 }
                 Progress::Completed { result } => return (result, run_id),
                 other => panic!("unexpected result: {other:?}"),
@@ -271,9 +319,8 @@ impl Fixture {
 #[test]
 fn two_capabilities_produce_a_run_and_attributed_artifact() {
     let mut f = Fixture::new("requires-approval");
-    let (value, run_id) = f.drive(
-        "let person = contacts.lookup(\"Anna\");\nreturn directory.mask(person.iban);"
-    );
+    let (value, run_id) =
+        f.drive("let person = contacts.lookup(\"Anna\");\nreturn directory.mask(person.iban);");
     assert_eq!(value, json!({"masked": "DE00********78"}));
     let view = f.kernel.run_view(&run_id).unwrap();
     assert_eq!(view.terminal_state, Some(RunTerminalState::Completed));
@@ -295,14 +342,33 @@ fn approval_uses_resolved_values_and_denial_cannot_send() {
         "let person = contacts.lookup(\"Anna\");\nreturn payments.send(person.iban, 10, \"EUR\");"
     ).unwrap();
     let mut run = Session::start(&mut f.kernel, program, "send ten euros").unwrap();
-    assert!(matches!(run.prepare_next(&mut f.kernel).unwrap(), Progress::AwaitingAuthorization { step: 0, .. }));
-    assert!(matches!(run.resume(&mut f.kernel).unwrap(), Progress::StepCompleted { step: 0 }));
-    assert!(matches!(run.prepare_next(&mut f.kernel).unwrap(), Progress::AwaitingAuthorization { step: 1, .. }));
+    assert!(matches!(
+        run.prepare_next(&mut f.kernel).unwrap(),
+        Progress::AwaitingAuthorization { step: 0, .. }
+    ));
+    assert!(matches!(
+        run.resume(&mut f.kernel).unwrap(),
+        Progress::StepCompleted { step: 0 }
+    ));
+    assert!(matches!(
+        run.prepare_next(&mut f.kernel).unwrap(),
+        Progress::AwaitingAuthorization { step: 1, .. }
+    ));
     // A second prepare does not rerun the prior lookup or change the pending input.
-    assert!(matches!(run.prepare_next(&mut f.kernel).unwrap(), Progress::AwaitingAuthorization { step: 1, .. }));
+    assert!(matches!(
+        run.prepare_next(&mut f.kernel).unwrap(),
+        Progress::AwaitingAuthorization { step: 1, .. }
+    ));
     assert_eq!(f.lookup_calls.load(Ordering::SeqCst), 1);
-    assert!(matches!(run.resume(&mut f.kernel).unwrap(),
-        Progress::Stopped { outcome: InvocationResult::Refused { reason: RefusalReason::ApprovalDenied }, completed_steps: 1 }));
+    assert!(matches!(
+        run.resume(&mut f.kernel).unwrap(),
+        Progress::Stopped {
+            outcome: InvocationResult::Refused {
+                reason: RefusalReason::ApprovalDenied
+            },
+            completed_steps: 1
+        }
+    ));
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
     let prompts = f.chrome.prompts.lock().unwrap();
     assert_eq!(prompts.len(), 1);
@@ -320,7 +386,10 @@ fn approved_write_is_executed_once_even_when_resumed_again() {
     let mut run = Session::start(&mut f.kernel, program, "send ten euros").unwrap();
     for _ in 0..2 {
         run.prepare_next(&mut f.kernel).unwrap();
-        assert!(matches!(run.resume(&mut f.kernel).unwrap(), Progress::StepCompleted { .. }));
+        assert!(matches!(
+            run.resume(&mut f.kernel).unwrap(),
+            Progress::StepCompleted { .. }
+        ));
     }
     assert!(run.resume(&mut f.kernel).is_err());
     assert!(matches!(run.prepare_next(&mut f.kernel).unwrap(),
@@ -332,12 +401,17 @@ fn approved_write_is_executed_once_even_when_resumed_again() {
 #[test]
 fn unverified_write_with_silent_grant_fails_closed() {
     let mut f = Fixture::new("silent");
-    let program = f.compiler().compile("return payments.send(\"DE00\", 10, \"EUR\");").unwrap();
+    let program = f
+        .compiler()
+        .compile("return payments.send(\"DE00\", 10, \"EUR\");")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "attempt write").unwrap();
     assert!(run.prepare_next(&mut f.kernel).is_err());
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(f.kernel.run_view(run.run_id()).unwrap().terminal_state,
-        Some(RunTerminalState::Failed));
+    assert_eq!(
+        f.kernel.run_view(run.run_id()).unwrap().terminal_state,
+        Some(RunTerminalState::Failed)
+    );
 }
 
 #[test]
@@ -359,7 +433,8 @@ fn invalid_scripts_reject_before_any_effect() {
     }
     let oversized = (0..17)
         .map(|_| "contacts.lookup(\"Anna\");")
-        .collect::<String>() + "return true;";
+        .collect::<String>()
+        + "return true;";
     assert!(f.compiler().compile(&oversized).is_err());
     assert_eq!(f.lookup_calls.load(Ordering::SeqCst), 0);
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
@@ -369,26 +444,38 @@ fn invalid_scripts_reject_before_any_effect() {
 fn ambiguous_result_and_unavailable_tool_stop_without_later_writes() {
     let mut f = Fixture::new("requires-approval");
     f.ambiguous.store(true, Ordering::SeqCst);
-    let program = f.compiler().compile(
-        "let p = contacts.lookup(\"Anna\"); return payments.send(p.iban, 10, \"EUR\");"
-    ).unwrap();
+    let program = f
+        .compiler()
+        .compile("let p = contacts.lookup(\"Anna\"); return payments.send(p.iban, 10, \"EUR\");")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "ambiguous lookup").unwrap();
     run.prepare_next(&mut f.kernel).unwrap();
-    assert!(matches!(run.resume(&mut f.kernel).unwrap(),
-        Progress::Stopped { outcome: InvocationResult::Failed { .. }, completed_steps: 0 }));
+    assert!(matches!(
+        run.resume(&mut f.kernel).unwrap(),
+        Progress::Stopped {
+            outcome: InvocationResult::Failed { .. },
+            completed_steps: 0
+        }
+    ));
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
 
     f.ambiguous.store(false, Ordering::SeqCst);
     f.offline.store(true, Ordering::SeqCst);
-    let program = f.compiler().compile(
-        "let p = contacts.lookup(\"Anna\"); return directory.mask(p.iban);"
-    ).unwrap();
+    let program = f
+        .compiler()
+        .compile("let p = contacts.lookup(\"Anna\"); return directory.mask(p.iban);")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "server offline").unwrap();
     run.prepare_next(&mut f.kernel).unwrap();
     run.resume(&mut f.kernel).unwrap();
     run.prepare_next(&mut f.kernel).unwrap();
-    assert!(matches!(run.resume(&mut f.kernel).unwrap(),
-        Progress::Stopped { outcome: InvocationResult::Failed { .. }, completed_steps: 1 }));
+    assert!(matches!(
+        run.resume(&mut f.kernel).unwrap(),
+        Progress::Stopped {
+            outcome: InvocationResult::Failed { .. },
+            completed_steps: 1
+        }
+    ));
     assert_eq!(f.lookup_calls.load(Ordering::SeqCst), 2);
 }
 
@@ -423,13 +510,16 @@ fn output_is_data_not_a_program_and_sensitive_flows_are_bounded() {
 #[test]
 fn cancellation_discards_prepared_write_without_execution() {
     let mut f = Fixture::new("requires-approval");
-    let program = f.compiler().compile(
-        "return payments.send(\"DE0012345678\", 10, \"EUR\");"
-    ).unwrap();
+    let program = f
+        .compiler()
+        .compile("return payments.send(\"DE0012345678\", 10, \"EUR\");")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "cancel pending payment").unwrap();
     let run_id = run.run_id().clone();
-    assert!(matches!(run.prepare_next(&mut f.kernel).unwrap(),
-        Progress::AwaitingAuthorization { step: 0, .. }));
+    assert!(matches!(
+        run.prepare_next(&mut f.kernel).unwrap(),
+        Progress::AwaitingAuthorization { step: 0, .. }
+    ));
     run.cancel(&mut f.kernel).unwrap();
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
     let view = f.kernel.run_view(&run_id).unwrap();
@@ -440,17 +530,28 @@ fn cancellation_discards_prepared_write_without_execution() {
 #[test]
 fn revoked_grant_between_prepare_and_approval_prevents_dispatch() {
     let mut f = Fixture::new("requires-approval");
-    let program = f.compiler().compile(
-        "return payments.send(\"DE0012345678\", 10, \"EUR\");"
-    ).unwrap();
+    let program = f
+        .compiler()
+        .compile("return payments.send(\"DE0012345678\", 10, \"EUR\");")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "revoke before approval").unwrap();
     run.prepare_next(&mut f.kernel).unwrap();
-    let grant_id = f.kernel.grants_for(&AppId::new("action-script")).into_iter()
+    let grant_id = f
+        .kernel
+        .grants_for(&AppId::new("action-script"))
+        .into_iter()
         .find(|grant| grant.scope.covers(&cap("payments", "send")))
-        .unwrap().grant_id.clone();
+        .unwrap()
+        .grant_id
+        .clone();
     f.kernel.revoke_grant(&grant_id).unwrap();
-    assert!(matches!(run.resume(&mut f.kernel).unwrap(),
-        Progress::Stopped { outcome: InvocationResult::Refused { .. }, completed_steps: 0 }));
+    assert!(matches!(
+        run.resume(&mut f.kernel).unwrap(),
+        Progress::Stopped {
+            outcome: InvocationResult::Refused { .. },
+            completed_steps: 0
+        }
+    ));
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
 }
 
