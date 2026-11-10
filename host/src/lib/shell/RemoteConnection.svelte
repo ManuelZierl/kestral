@@ -2,6 +2,7 @@
   import "$lib/stores/theme";
   import { pairRemoteConnection, remoteUrlDefault, signInRemoteConnection } from "$lib/hostTransport";
   import { passkeysAvailable } from "$lib/remotePasskeys";
+  import { checkRemoteSetup, type RemoteSetupCheck } from "$lib/remoteSetupCheck";
 
   interface Props {
     onConnected: () => void;
@@ -12,6 +13,19 @@
   let pairingCode = $state("");
   let connecting = $state(false);
   let error = $state<string | null>(null);
+  let checking = $state(false);
+  let checkResult = $state<RemoteSetupCheck | null>(null);
+
+  async function checkConnection() {
+    const checkedUrl = url;
+    checking = true;
+    try {
+      const result = await checkRemoteSetup(checkedUrl, window.location.origin);
+      if (url === checkedUrl) checkResult = result;
+    } finally {
+      checking = false;
+    }
+  }
 
   async function signIn() {
     await runConnection(() => signInRemoteConnection(url));
@@ -56,8 +70,18 @@
     </p>
     <label>
       Host URL
-      <input bind:value={url} type="url" autocomplete="url" required />
+      <input bind:value={url} oninput={() => { checkResult = null; }} type="url" autocomplete="url" required />
     </label>
+    <p class="connection-help">
+      On your LAN, use a stable HTTPS hostname with a trusted certificate.
+      <a href="https://manuelzierl.github.io/kestral/lan-access.html" target="_blank" rel="noopener noreferrer">Secure LAN setup</a>
+    </p>
+    <button type="button" class="secondary" onclick={checkConnection} disabled={checking || connecting}>
+      {checking ? "Checking connection..." : "Check connection"}
+    </button>
+    {#if checkResult}
+      <p role="status" class="check-result" class:check-error={!checkResult.ok}>{checkResult.message}</p>
+    {/if}
     {#if !passkeysAvailable()}
       <p class="error" role="alert">This browser does not support passkeys. Use a current browser over HTTPS.</p>
     {/if}
@@ -129,6 +153,19 @@
     display: grid;
     gap: 1rem;
   }
+  .connection-help,
+  .check-result {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    font-size: 0.875rem;
+  }
+  .check-result.check-error {
+    color: var(--color-danger-text);
+  }
+  .connection-help a {
+    color: var(--color-accent-text);
+  }
   .pairing-help {
     margin: 0;
     color: var(--color-text-muted);
@@ -182,6 +219,11 @@
     font: inherit;
     font-weight: 700;
     cursor: pointer;
+  }
+  button.secondary {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
   }
   button:disabled {
     cursor: wait;
