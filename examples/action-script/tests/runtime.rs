@@ -402,7 +402,7 @@ fn output_is_data_not_a_program_and_sensitive_flows_are_bounded() {
     let (_, run_id) = f.drive(script);
     assert_eq!(f.kernel.run_view(&run_id).unwrap().invocations.len(), 2);
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(f.observed_ibans.lock().unwrap().as_slice(), &[injection]);
+    assert_eq!(f.observed_ibans.lock().unwrap().as_slice(), &[injection.to_string()]);
 
     // A sensitive lookup cannot be passed to an untrusted/unapproved sink.
     let compiler = Compiler::new(&f.kernel, AppId::new("action-script"), vec![
