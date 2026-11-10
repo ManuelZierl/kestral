@@ -12,7 +12,7 @@ use app_host_kernel::services::chrome::{
     ApprovalDecision, CapabilityApprovalPrompt, ChromeNotice, ChromeNoticeError,
     EventSubscriptionPrompt, GrantIssuancePrompt, TrustedChrome,
 };
-use app_host_kernel::{JsonObject, Kernel};
+use app_host_kernel::Kernel;
 use kestral_action_script_prototype::{
     BindingPolicy, BindingSpec, Compiler, Progress, Session,
 };
@@ -45,10 +45,6 @@ impl TrustedChrome for Chrome {
     fn show_notice(&self, _: ChromeNotice) -> Result<(), ChromeNoticeError> {
         Ok(())
     }
-}
-
-fn obj(value: Value) -> JsonObject {
-    value.as_object().unwrap().clone()
 }
 
 fn cap(provider: &str, name: &str) -> CapabilityRef {
