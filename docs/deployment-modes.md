@@ -49,6 +49,12 @@ secret writes, approvals, and gateway administration. The passkey login is an
 owner/root login, not app or integration authority. Expose selected capabilities
 through an MCP export profile instead.
 
+For a LAN browser that connects **without an SSH tunnel**, start with the
+[secure LAN access guide](https://manuelzierl.github.io/kestral/lan-access.html).
+It compares certificate and private-network options and includes the firewall,
+origin, pairing, and second-device verification steps. Do not expose the owner
+console directly or use a non-loopback HTTP bind.
+
 ## Run an Ubuntu backend
 
 The release server archive contains `host-server`, `LICENSE`,
