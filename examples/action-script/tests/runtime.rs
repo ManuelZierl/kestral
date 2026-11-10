@@ -453,3 +453,25 @@ fn revoked_grant_between_prepare_and_approval_prevents_dispatch() {
         Progress::Stopped { outcome: InvocationResult::Refused { .. }, completed_steps: 0 }));
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
 }
+
+#[test]
+fn approval_policy_is_bound_to_alias_not_only_capability_identity() {
+    let mut f = Fixture::new("silent");
+    let arguments = vec!["iban".into(), "amount".into(), "currency".into()];
+    let compiler = Compiler::new(&f.kernel, AppId::new("action-script"), vec![
+        BindingSpec {
+            alias: "a.send".into(), capability: cap("payments", "send"),
+            arguments: arguments.clone(), policy: BindingPolicy::VerifiedReadOnly,
+            sensitive_output: false, accepts_sensitive: false,
+        },
+        BindingSpec {
+            alias: "payments.send".into(), capability: cap("payments", "send"),
+            arguments, policy: BindingPolicy::RequiresApproval,
+            sensitive_output: false, accepts_sensitive: false,
+        },
+    ]).unwrap();
+    let program = compiler.compile("return payments.send(\"DE00\", 10, \"EUR\");").unwrap();
+    let mut run = Session::start(&mut f.kernel, program, "alias grant").unwrap();
+    assert!(run.prepare_next(&mut f.kernel).is_err());
+    assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
+}
