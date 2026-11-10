@@ -14,6 +14,7 @@ use app_host_kernel::kernel::{AuthorizeInvocation, PrepareInvocation, PreparedIn
 use app_host_kernel::primitives::capability::{CapabilityDeclaration, CapabilityRef};
 use app_host_kernel::primitives::grant::{DataScope, GrantCondition};
 use app_host_kernel::primitives::run::{Initiator, RunTerminalState};
+use app_host_kernel::services::chrome::MAX_CAPABILITY_APPROVAL_INPUT_BYTES;
 use app_host_kernel::{JsonObject, Kernel, KernelError};
 use rhai::{ASTFlags, Engine, Expr, FnCallExpr, OptimizationLevel, Stmt};
 use serde::Serialize;
@@ -476,6 +477,15 @@ impl Session {
         for (name, expr) in &step.arguments {
             input.insert(name.clone(), resolve(expr, &self.results)?);
         }
+        if bound.spec.policy == BindingPolicy::RequiresApproval {
+            // The kernel truncates its approval summary after this many bytes.
+            // Refuse rather than ask a user to approve unseen argument suffixes.
+            let summary_size = serde_json::to_string_pretty(&input)
+                .map_err(|error| ScriptError::Execution(error.to_string()))?.len();
+            if summary_size > MAX_CAPABILITY_APPROVAL_INPUT_BYTES {
+                return Err(reject("resolved write arguments exceed the trusted approval UI budget"));
+            }
+        }
         match kernel.prepare_invocation(&self.run_id, &step.capability, InvocationRequest {
             input, data_scope: DataScope::None,
         })? {
@@ -515,7 +525,14 @@ impl Session {
             kernel.abort_prepared_invocation(pending)?;
             return Err(ScriptError::Execution("run time budget exceeded before approval".into()));
         }
-        let authorization = kernel.authorize_invocation(pending.await_approval())?;
+        let approval = pending.await_approval();
+        if self.started.elapsed() > MAX_RUN_TIME {
+            // Dropping the one-time approval token cancels the reservation;
+            // finish() records the pending invocation cancellation.
+            drop(approval);
+            return Err(ScriptError::Execution("run time budget exceeded during approval".into()));
+        }
+        let authorization = kernel.authorize_invocation(approval)?;
         let outcome = match authorization {
             AuthorizeInvocation::Authorized(authorized) =>
                 kernel.finalize_invocation(authorized.execute())?,
