@@ -421,6 +421,14 @@ impl Session {
     }
 
     pub fn prepare_next(&mut self, kernel: &mut Kernel) -> Result<Progress, ScriptError> {
+        let progress = self.prepare_next_inner(kernel);
+        if progress.is_err() && !self.ended {
+            self.finish(kernel, RunTerminalState::Failed)?;
+        }
+        progress
+    }
+
+    fn prepare_next_inner(&mut self, kernel: &mut Kernel) -> Result<Progress, ScriptError> {
         if self.ended {
             return Err(ScriptError::Execution("run already terminated".into()));
         }
@@ -485,11 +493,23 @@ impl Session {
     /// trusted chrome and the kernel binds that answer to this exact input.
     /// A second resume has no pending token and cannot replay the call.
     pub fn resume(&mut self, kernel: &mut Kernel) -> Result<Progress, ScriptError> {
+        let progress = self.resume_inner(kernel);
+        if progress.is_err() && !self.ended {
+            self.finish(kernel, RunTerminalState::Failed)?;
+        }
+        progress
+    }
+
+    fn resume_inner(&mut self, kernel: &mut Kernel) -> Result<Progress, ScriptError> {
         if self.ended {
             return Err(ScriptError::Execution("run already terminated".into()));
         }
         let pending = self.pending.take()
             .ok_or_else(|| ScriptError::Execution("no prepared step to resume".into()))?;
+        if self.started.elapsed() > MAX_RUN_TIME {
+            kernel.abort_prepared_invocation(pending)?;
+            return Err(ScriptError::Execution("run time budget exceeded before approval".into()));
+        }
         let authorization = kernel.authorize_invocation(pending.await_approval())?;
         let outcome = match authorization {
             AuthorizeInvocation::Authorized(authorized) =>
