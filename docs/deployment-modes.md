@@ -152,6 +152,12 @@ must be frameable by that same trusted origin. A proxy that appends the shell
 CSP or `X-Frame-Options: DENY` to those responses will stop every custom app
 surface from starting.
 
+The generic released browser-client ZIP has no hard-coded backend address.
+On first connection, **Host URL** defaults to the browser page origin. This
+works with the `/api/` proxy above, but not with a plain static file server.
+For separately served clients, enter the reachable **backend** origin instead;
+Kestral does not guess a port or probe other addresses.
+
 Open `https://kestral.example` and use that same URL as **Host URL**. Pair the
 first browser with the SSH-generated code, then use **Sign in with passkey** on
 later visits. `HOST_REMOTE_ORIGIN` must exactly match the browser origin,
@@ -266,9 +272,12 @@ Ubuntu backend, so a callback to the client device's `localhost` cannot reach
 it. Device-code login avoids that callback topology.
 
 `npm run build` creates the static `host/build` directory for deployment.
-`VITE_HOST_API_URL` can provide a build-time default Host URL when the static
-client and API deliberately use separate origins. It never contains an owner
-credential.
+For a site-specific build, set `VITE_HOST_API_URL` when running the build to
+preconfigure the Host URL (for example,
+`VITE_HOST_API_URL=https://api.kestral.example npm run build`). The released
+browser-client ZIP is built without this override, so its default remains the
+page origin. The setting supplies only a UI default, never an owner credential;
+it does not configure the backend, allowed browser origin, or proxy.
 
 ## Minimal Windows-to-Ubuntu release test
 
@@ -301,8 +310,10 @@ ssh.exe -N -L 1420:127.0.0.1:1420 -L 4310:127.0.0.1:4310 user@ubuntu-host
 ```
 
 In another Ubuntu SSH shell with the same `KESTRAL_DATA_DIR`, run
-`./host-server owner pair`. Open `http://localhost:1420` on Windows, enter
-`http://localhost:4310` as **Host URL**, and pair with that code. Use `localhost`
+`./host-server owner pair`. Open `http://localhost:1420` on Windows. The
+pre-filled **Host URL** is `http://localhost:1420` (the static file server),
+which cannot serve `/api/` requests. Change it to `http://localhost:4310`
+(the forwarded backend port), then pair with that code. Use `localhost`
 for both browser and Host URL; the configured browser origin must match exactly.
 Loopback HTTP is accepted for local WebAuthn testing, but public deployments
 require HTTPS.
