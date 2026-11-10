@@ -489,21 +489,35 @@ fn output_is_data_not_a_program_and_sensitive_flows_are_bounded() {
     let (_, run_id) = f.drive(script);
     assert_eq!(f.kernel.run_view(&run_id).unwrap().invocations.len(), 2);
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(f.observed_ibans.lock().unwrap().as_slice(), &[injection.to_string()]);
+    assert_eq!(
+        f.observed_ibans.lock().unwrap().as_slice(),
+        &[injection.to_string()]
+    );
 
     // A sensitive lookup cannot be passed to an untrusted/unapproved sink.
-    let compiler = Compiler::new(&f.kernel, AppId::new("action-script"), vec![
-        BindingSpec {
-            alias: "contacts.lookup".into(), capability: cap("contacts", "lookup"),
-            arguments: vec!["name".into()], policy: BindingPolicy::VerifiedReadOnly,
-            sensitive_output: true, accepts_sensitive: false,
-        },
-        BindingSpec {
-            alias: "directory.mask".into(), capability: cap("directory", "mask"),
-            arguments: vec!["iban".into()], policy: BindingPolicy::VerifiedReadOnly,
-            sensitive_output: false, accepts_sensitive: false,
-        },
-    ]).unwrap();
+    let compiler = Compiler::new(
+        &f.kernel,
+        AppId::new("action-script"),
+        vec![
+            BindingSpec {
+                alias: "contacts.lookup".into(),
+                capability: cap("contacts", "lookup"),
+                arguments: vec!["name".into()],
+                policy: BindingPolicy::VerifiedReadOnly,
+                sensitive_output: true,
+                accepts_sensitive: false,
+            },
+            BindingSpec {
+                alias: "directory.mask".into(),
+                capability: cap("directory", "mask"),
+                arguments: vec!["iban".into()],
+                policy: BindingPolicy::VerifiedReadOnly,
+                sensitive_output: false,
+                accepts_sensitive: false,
+            },
+        ],
+    )
+    .unwrap();
     assert!(compiler.compile(script).is_err());
 }
 
@@ -559,19 +573,32 @@ fn revoked_grant_between_prepare_and_approval_prevents_dispatch() {
 fn approval_policy_is_bound_to_alias_not_only_capability_identity() {
     let mut f = Fixture::new("silent");
     let arguments = vec!["iban".into(), "amount".into(), "currency".into()];
-    let compiler = Compiler::new(&f.kernel, AppId::new("action-script"), vec![
-        BindingSpec {
-            alias: "a.send".into(), capability: cap("payments", "send"),
-            arguments: arguments.clone(), policy: BindingPolicy::VerifiedReadOnly,
-            sensitive_output: false, accepts_sensitive: false,
-        },
-        BindingSpec {
-            alias: "payments.send".into(), capability: cap("payments", "send"),
-            arguments, policy: BindingPolicy::RequiresApproval,
-            sensitive_output: false, accepts_sensitive: false,
-        },
-    ]).unwrap();
-    let program = compiler.compile("return payments.send(\"DE00\", 10, \"EUR\");").unwrap();
+    let compiler = Compiler::new(
+        &f.kernel,
+        AppId::new("action-script"),
+        vec![
+            BindingSpec {
+                alias: "a.send".into(),
+                capability: cap("payments", "send"),
+                arguments: arguments.clone(),
+                policy: BindingPolicy::VerifiedReadOnly,
+                sensitive_output: false,
+                accepts_sensitive: false,
+            },
+            BindingSpec {
+                alias: "payments.send".into(),
+                capability: cap("payments", "send"),
+                arguments,
+                policy: BindingPolicy::RequiresApproval,
+                sensitive_output: false,
+                accepts_sensitive: false,
+            },
+        ],
+    )
+    .unwrap();
+    let program = compiler
+        .compile("return payments.send(\"DE00\", 10, \"EUR\");")
+        .unwrap();
     let mut run = Session::start(&mut f.kernel, program, "alias grant").unwrap();
     assert!(run.prepare_next(&mut f.kernel).is_err());
     assert_eq!(f.send_calls.load(Ordering::SeqCst), 0);
