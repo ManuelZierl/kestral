@@ -544,9 +544,15 @@ impl Session {
             return Ok(Progress::Completed { result });
         }
         let step = self.program.plan.steps[self.cursor].clone();
-        let bound = self.program.bindings.iter().find(|bound|
-            bound.spec.alias == step.binding_alias && bound.spec.capability == step.capability)
-            .cloned().ok_or_else(|| reject("step uses a capability without a bound contract"))?;
+        let bound = self
+            .program
+            .bindings
+            .iter()
+            .find(|bound| {
+                bound.spec.alias == step.binding_alias && bound.spec.capability == step.capability
+            })
+            .cloned()
+            .ok_or_else(|| reject("step uses a capability without a bound contract"))?;
         // The provider can be upgraded or permissions revoked between calls.
         if kernel.capability_declaration(&step.capability)? != &bound.declaration {
             self.finish(kernel, RunTerminalState::Failed)?;
