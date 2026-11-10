@@ -79,6 +79,7 @@ pub enum ValueExpr {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
+    pub binding_alias: String,
     pub capability: CapabilityRef,
     pub arguments: BTreeMap<String, ValueExpr>,
 }
@@ -338,6 +339,7 @@ impl Builder<'_> {
         }
         let step = self.steps.len();
         self.steps.push(Step {
+            binding_alias: alias.to_string(),
             capability: binding.spec.capability.clone(),
             arguments,
         });
@@ -454,7 +456,7 @@ impl Session {
         }
         let step = self.program.plan.steps[self.cursor].clone();
         let bound = self.program.bindings.iter().find(|bound|
-            bound.spec.capability == step.capability)
+            bound.spec.alias == step.binding_alias && bound.spec.capability == step.capability)
             .cloned().ok_or_else(|| reject("step uses a capability without a bound contract"))?;
         // The provider can be upgraded or permissions revoked between calls.
         if kernel.capability_declaration(&step.capability)? != &bound.declaration {
