@@ -1,0 +1,16 @@
+[package]
+name = "kestral-action-script-prototype"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Userland restricted action-script runtime adapter prototype for Kestral"
+
+# Stay outside the host workspace: the prototype has its own pinned Rhai frontend.
+[workspace]
+
+[dependencies]
+app-host-kernel = { path = "../../crates/kernel" }
+rhai = { version = "=1.26.1", features = ["internals", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"

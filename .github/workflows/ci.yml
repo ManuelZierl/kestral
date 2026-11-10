@@ -24,6 +24,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  action-script-prototype:
+    name: Restricted action-script prototype
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Formatting
+        run: cargo fmt --manifest-path examples/action-script/Cargo.toml -- --check
+      - name: Clippy
+        if: always()
+        run: cargo clippy --manifest-path examples/action-script/Cargo.toml --all-targets -- -D warnings
+      - name: Tests
+        if: always()
+        run: cargo test --manifest-path examples/action-script/Cargo.toml
+
   test-linux:
     name: Core tests + packages (Linux)
     runs-on: ubuntu-22.04
