@@ -227,7 +227,7 @@ impl Compiler {
             }
             match statement {
                 Stmt::Noop(_) => {}
-                Stmt::Var(data, flags, _) if !flags.contains(ASTFlags::EXPORTED) => {
+                Stmt::Var(data, _, _) => {
                     let (ident, expr, _) = &**data;
                     let name = ident.name.to_string();
                     if !valid_identifier(&name) || builder.locals.contains_key(&name) {
@@ -314,7 +314,7 @@ impl Builder<'_> {
 
     fn call(&mut self, alias: &str, call: &FnCallExpr) -> Result<TypedExpr, ScriptError> {
         let binding = self.bindings.get(alias)
-            .ok_or_else(|| reject(format!("unknown capability alias {alias:?}")))?;
+            .ok_or_else(|| reject(format!("unknown capability alias {alias:?}")))?.clone();
         if self.steps.len() >= MAX_STEPS || call.args.len() != binding.spec.arguments.len() {
             return Err(reject(format!("{alias}: step budget or argument count exceeded")));
         }
@@ -443,10 +443,10 @@ impl Session {
             self.finish(kernel, RunTerminalState::Completed)?;
             return Ok(Progress::Completed { result });
         }
-        let step = &self.program.plan.steps[self.cursor];
+        let step = self.program.plan.steps[self.cursor].clone();
         let bound = self.program.bindings.iter().find(|bound|
             bound.spec.capability == step.capability)
-            .ok_or_else(|| reject("step uses a capability without a bound contract"))?;
+            .cloned().ok_or_else(|| reject("step uses a capability without a bound contract"))?;
         // The provider can be upgraded or permissions revoked between calls.
         if kernel.capability_declaration(&step.capability)? != &bound.declaration {
             self.finish(kernel, RunTerminalState::Failed)?;
