@@ -802,7 +802,7 @@ fn chat_contribution_schema() -> Value {
 fn chat_manifest() -> AppManifest {
     AppManifest {
         app_id: chat_app_id(),
-        version: "0.7.0".into(),
+        version: "0.7.1".into(),
         display_name: "Chat".into(),
         description: "Translates your messages into runs — driven by the \
                       LLM provider, with all actions mediated by the kernel"
@@ -1043,7 +1043,8 @@ fn chat_manifest() -> AppManifest {
             })),
         }],
         artifact_types: vec![],
-        extension_points: vec![
+        extension_points: {
+            let mut points = vec![
             ExtensionPointDeclaration {
                 name: ExtensionPointName::new("composer-context"),
                 contract_version: COMPOSER_CONTEXT_CONTRACT,
@@ -1140,7 +1141,22 @@ fn chat_manifest() -> AppManifest {
                     "additionalProperties": false
                 })),
             },
-        ],
+            ];
+            // A native message presenter is a general UI extension point, not
+            // a Chat implementation of any particular third-party plugin.
+            // Reuse the exact completed-message context already proven by
+            // message-actions v6, but keep the presentation contract independent.
+            let message_context = points.iter()
+                .find(|point| point.name == ExtensionPointName::new("message-actions"))
+                .expect("Chat declares message-actions")
+                .context_schema.clone();
+            points.push(ExtensionPointDeclaration {
+                name: ExtensionPointName::new("message-presentation"),
+                contract_version: 1,
+                context_schema: message_context,
+            });
+            points
+        },
         extension_contributions: vec![],
         grant_requests: vec![
             GrantRequest {
