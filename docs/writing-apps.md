@@ -888,6 +888,44 @@ by an API key or OAuth credential is available only while it is the host's
 synthetic broker alias to an invocation; the companion app and Chat do not read
 another profile's stored credential to make a selection work.
 
+### Chat message presentation (v1)
+
+Chat offers a distinct `message-presentation` extension point at contract
+version 1. This is for an optional, installed app that presents a completed
+assistant response **inside the existing Chat message**, rather than displaying
+an additional annotation card. It receives the same bounded completed-response
+context as `message-actions` v6, including `thread_id`, `resource_id`,
+`message_id`, `assistant_response_text`, and timestamped canonical parts.
+
+An app contributes a `card` surface normally, with
+`extension_point: "message-presentation"` and `contract_version: 1`.
+Only the first compatible presenter (deterministic installed-app name ordering)
+is mounted for a message. The app may publish:
+
+```json
+{ "kind": "message-presentation", "contract": 1, "handled": true }
+```
+
+Until the exact valid state is received, Chat keeps rendering its own Markdown.
+Once received, the presenter's iframe becomes the visual representation and
+Chat offers **Show original** to inspect/copy the unchanged canonical answer.
+The original text remains in the durable Chat transcript and is the text
+replayed to the LLM. A missing, disabled, incompatible, or uninstalled app
+cannot prevent native rendering. The app's UI is sandboxed; it never receives
+credentials or trusted-chrome authority through this display contract.
+
+When the user chooses **Show original**, Chat sends the presenter an event
+`{ "kind": "message-source-revealed", "contract": 1 }`. A presenter
+tracking which details were expanded should account for the original having
+become visible before asserting any details were hidden. The contract does
+**not** grant the plugin access to `llm.generate` or Chat injection:
+these require separately declared surface intents and approved grants.
+Presenters do not alter Chat generation or replace the stored message; a
+structured-output pass is a separately attributable capability invocation.
+
+This is a new extension point, not an expansion of the stable
+`message-actions` v6 annotation contract.
+
 ### Chat message text marks
 
 Chat's `message-actions` extension point uses contract version 6. Its context
