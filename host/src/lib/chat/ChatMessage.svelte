@@ -99,6 +99,52 @@
     { sendExtensionEvent: (extensionKey: string, payload: JsonObject) => boolean } | undefined
   >();
 
+  // The host owns the original text. A compatible, explicitly installed
+  // presenter may replace its *visual* rendering only after it reports ready.
+  // Uninstall, invalid state, and failed loading all restore native Markdown.
+  let presentationActive = $state(false);
+  let presentationKey = $state<string | null>(null);
+  let originalVisible = $state(false);
+  let presentationSlot = $state<
+    { sendExtensionEvent: (extensionKey: string, payload: JsonObject) => boolean } | undefined
+  >();
+
+  function handlePresentationState(
+    key: string,
+    _appId: string,
+    _appName: string,
+    payload: JsonObject,
+  ): void {
+    if (payload.kind !== "message-presentation" || payload.contract !== 1 || typeof payload.handled !== "boolean") {
+      handlePresentationRemoved(key);
+      return;
+    }
+    if (payload.handled) {
+      presentationKey = key;
+      presentationActive = true;
+    } else {
+      handlePresentationRemoved(key);
+    }
+  }
+
+  function handlePresentationRemoved(key: string): void {
+    if (presentationKey !== key) return;
+    presentationActive = false;
+    presentationKey = null;
+    originalVisible = false;
+  }
+
+  function toggleOriginal(): void {
+    originalVisible = !originalVisible;
+    if (originalVisible && presentationKey) {
+      // The extension must not continue claiming details were definitely
+      // hidden if the canonical uncollapsed response is revealed.
+      presentationSlot?.sendExtensionEvent(presentationKey, {
+        kind: "message-source-revealed", contract: 1,
+      });
+    }
+  }
+
   const annotators = $derived(
     Object.entries(textMarks).sort(([left], [right]) => left.localeCompare(right)),
   );
@@ -640,6 +686,33 @@
         <div class="status status-completed" role="status" aria-live="polite">{statusLabel}</div>
       {/if}
       {#if message.role === "assistant"}
+        {#if message.status === "completed" && message.text.trim() !== "" && message.created_at}
+          <ChatExtensionSlot
+            bind:this={presentationSlot}
+            pointName="message-presentation"
+            single
+            context={{
+              thread_id: threadId,
+              resource_id: threadResourceId,
+              message_id: message.id,
+              assistant_message_number: assistantMessageNumber,
+              assistant_response_excerpt: message.text.slice(0, 500),
+              assistant_response_text: message.text,
+              created_at: message.created_at,
+              completed_at: message.completed_at ?? message.created_at,
+              role: "assistant",
+              part_count: parts.length,
+              parts: parts.map((part) => ({
+                index: part.index,
+                excerpt: part.excerpt,
+                plain_text: part.plainText,
+              })),
+            }}
+            onExtensionState={handlePresentationState}
+            onExtensionRemoved={handlePresentationRemoved}
+          />
+        {/if}
+        {#if !presentationActive || originalVisible}
         <!-- Assistant replies are Markdown; renderMarkdown escapes first, so
              this {@html} only ever contains tags the renderer itself emits. -->
         {#if annotators.length > 0 && parts.length > 0}
@@ -655,6 +728,12 @@
           </div>
         {:else}
           <div class="text markdown">{@html renderMarkdown(message.text)}</div>
+        {/if}
+        {/if}
+        {#if presentationActive}
+          <button type="button" class="source-toggle" onclick={toggleOriginal}>
+            {originalVisible ? "Hide original" : "Show original"}
+          </button>
         {/if}
       {:else}
         <p class="text">{message.text}</p>
@@ -1239,5 +1318,21 @@
   }
   .entry.user code {
     background: var(--color-surface-hover);
+  }
+  .source-toggle {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .source-toggle:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 3px;
   }
 </style>
