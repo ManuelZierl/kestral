@@ -56,6 +56,24 @@ fn release_extension_contracts_match_the_chat_manifest() {
 }
 
 #[test]
+fn chat_declares_non_privileged_message_presentation_contract() {
+    let manifest = chat_manifest();
+    let presentation = manifest.extension_points.iter()
+        .find(|point| point.name.as_str() == "message-presentation")
+        .expect("Chat must expose a generic presenter extension point");
+    let annotations = manifest.extension_points.iter()
+        .find(|point| point.name.as_str() == "message-actions")
+        .expect("Chat must still expose the established annotation contract");
+
+    assert_eq!(presentation.contract_version, 1);
+    assert_eq!(annotations.contract_version, MESSAGE_ACTIONS_CONTRACT);
+    assert_eq!(presentation.context_schema, annotations.context_schema);
+    assert_eq!(presentation.context_schema["additionalProperties"], false);
+    assert!(presentation.context_schema["required"].as_array().unwrap()
+        .iter().any(|field| field == "assistant_response_text"));
+}
+
+#[test]
 fn chat_declares_resource_bound_thread_actions() {
     let manifest = chat_manifest();
     let point = manifest
