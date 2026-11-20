@@ -119,7 +119,6 @@ fn metadata_and_version_upgrade_preserves_authority_and_history() {
     assert!(kernel.records().len() > record_count);
 }
 
-
 fn extension_point(name: &str) -> ExtensionPointDeclaration {
     ExtensionPointDeclaration {
         name: ExtensionPointName::new(name),
@@ -142,7 +141,9 @@ fn appended_extension_point_upgrade_preserves_existing_authority_and_history() {
     let record_count = kernel.records().len();
 
     let mut candidate = upgraded_notes_manifest();
-    candidate.extension_points.push(extension_point("message-presentation"));
+    candidate
+        .extension_points
+        .push(extension_point("message-presentation"));
     kernel
         .upgrade_app(seal(candidate), upgraded_notes_handlers())
         .expect("offering a new UI extension slot must not block bundled startup");
@@ -165,7 +166,11 @@ fn appended_extension_points_cannot_mask_other_contract_changes() {
         .unwrap();
     kernel.commit_install(prepared.await_approval()).unwrap();
 
-    let original_hash = kernel.installed_app(&notes_app()).unwrap().content_hash.clone();
+    let original_hash = kernel
+        .installed_app(&notes_app())
+        .unwrap()
+        .content_hash
+        .clone();
     let original_grant = kernel.grants_for(&notes_app())[0].clone();
 
     let mut removed = original.clone();
@@ -194,7 +199,10 @@ fn appended_extension_points_cannot_mask_other_contract_changes() {
             kernel.upgrade_app(seal(candidate), notes_handlers()),
             Err(KernelError::AppUpgradeContractChanged { .. })
         ));
-        assert_eq!(kernel.installed_app(&notes_app()).unwrap().content_hash, original_hash);
+        assert_eq!(
+            kernel.installed_app(&notes_app()).unwrap().content_hash,
+            original_hash
+        );
         assert_eq!(kernel.grants_for(&notes_app())[0], &original_grant);
     }
 }
