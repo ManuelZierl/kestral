@@ -1301,12 +1301,12 @@ fn empty_length_truncated_reasoning_reply_fails_with_clear_message_and_keeps_rea
 
     assert!(session.failed());
     assert!(!reply.truncated);
+    assert!(reply.run_id.is_some());
     assert!(reply.text.contains("length limit while thinking"));
     assert_eq!(
         reply.reasoning.as_deref(),
         Some("Working through the prompt until cut off")
     );
-    assert_eq!(reply.artifacts.len(), 1);
 }
 
 #[test]
