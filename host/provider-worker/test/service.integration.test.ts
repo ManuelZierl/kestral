@@ -115,14 +115,14 @@ test("does not clamp OpenAI-compatible max_tokens against a fabricated 16k conte
     await new WorkerService().handle({
       command: "generate",
       request_id: "generate-large-1",
-      provider: { kind: "open-ai-compatible", base_url: baseUrl },
+      provider: { kind: "open-ai-compatible", base_url: baseUrl, api_key: "integration-secret" },
       model: "local-reasoning-model",
       messages: [{ role: "user", content: largePrompt }],
       timeout_ms: 5_000,
     }, (event) => events.push(event));
 
+    assert(events.some((event) => event.type === "completed"), JSON.stringify(events));
     assert.equal(observedMaxTokens, 4_096);
-    assert(events.some((event) => event.type === "completed"));
   });
 });
 
