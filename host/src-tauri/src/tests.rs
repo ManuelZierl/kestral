@@ -1264,6 +1264,7 @@ fn build_assistant_messages_prepends_tool_status_hint() {
         reasoning: None,
         run_id: Some(RunId::new("run-parent")),
         artifacts: vec![],
+        truncated: false,
     };
     let hint = crate::chat_store::ChatMessage {
         message_id: String::new(),
@@ -1482,6 +1483,7 @@ fn failed_tool_call_is_scoped_to_tool_feedback() {
         reasoning: None,
         run_id: Some(run_id),
         artifacts: vec![],
+        truncated: false,
     };
 
     let messages = crate::chat_runtime::build_assistant_messages(&records, reply, None);
@@ -1508,6 +1510,7 @@ fn failed_chat_run_still_marks_its_assistant_reply_failed() {
         reasoning: None,
         run_id: Some(run_id),
         artifacts: vec![],
+        truncated: false,
     };
 
     let messages = crate::chat_runtime::build_assistant_messages(&records, reply, None);
@@ -1515,4 +1518,34 @@ fn failed_chat_run_still_marks_its_assistant_reply_failed() {
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].role, ChatMessageRole::Assistant);
     assert_eq!(messages[0].status, Some(ChatMessageStatus::Failed));
+}
+
+#[test]
+fn truncated_chat_reply_appends_system_notice_without_altering_reply_text() {
+    let run_id = RunId::new("run-parent");
+    let records = vec![record(
+        LedgerEvent::RunEnded {
+            run_id: run_id.clone(),
+            terminal_state: app_host_kernel::primitives::run::RunTerminalState::Completed,
+        },
+        0,
+    )];
+    let reply = crate::chat_app::ChatReply {
+        text: "Partial answer that got cut off".into(),
+        reasoning: Some("Thinking before cutoff".into()),
+        run_id: Some(run_id.clone()),
+        artifacts: vec![],
+        truncated: true,
+    };
+
+    let messages = crate::chat_runtime::build_assistant_messages(&records, reply, None);
+
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0].role, ChatMessageRole::Assistant);
+    assert_eq!(messages[0].status, Some(ChatMessageStatus::Completed));
+    assert_eq!(messages[0].text, "Partial answer that got cut off");
+    assert_eq!(messages[1].role, ChatMessageRole::System);
+    assert_eq!(messages[1].status, Some(ChatMessageStatus::Completed));
+    assert_eq!(messages[1].run_id.as_deref(), Some(run_id.as_str()));
+    assert!(messages[1].text.contains("length limit"));
 }

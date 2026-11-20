@@ -1262,6 +1262,213 @@ fn cancelled_llm_call_returns_a_clear_cancellation_reply() {
 }
 
 #[test]
+fn empty_length_truncated_reasoning_reply_fails_with_clear_message_and_keeps_reasoning() {
+    let (mut kernel, _) = setup_chat_with_fake_llm(vec![serde_json::json!({
+        "message": {"role": "assistant", "content": ""},
+        "reasoning": "Working through the prompt until cut off",
+        "finish_reason": "length"
+    })]);
+    let ChatStart::Active(mut session) = prepare_chat_message(
+        &mut kernel,
+        &[],
+        "put this in my notes",
+        "test-thread",
+        DEFAULT_MAX_LLM_ITERATIONS,
+        Duration::from_secs(crate::agent_worker::DEFAULT_MAX_DURATION_SECS),
+        None,
+    )
+    .unwrap() else {
+        panic!("expected an active chat session");
+    };
+    let ChatStep::Execute(mut invocation) = session.prepare_next(&mut kernel).unwrap() else {
+        panic!("expected llm invocation");
+    };
+    let approval = invocation
+        .prepared
+        .take()
+        .expect("prepared invocation")
+        .await_approval();
+    let app_host_kernel::AuthorizeInvocation::Authorized(authorized) =
+        kernel.authorize_invocation(approval).unwrap()
+    else {
+        panic!("expected llm authorization");
+    };
+    let result = kernel.finalize_invocation(authorized.execute()).unwrap();
+    let reply = session
+        .finalize_next(&mut kernel, *invocation, result)
+        .unwrap()
+        .expect("expected final reply");
+
+    assert!(session.failed());
+    assert!(!reply.truncated);
+    assert!(reply.text.contains("length limit while thinking"));
+    assert_eq!(
+        reply.reasoning.as_deref(),
+        Some("Working through the prompt until cut off")
+    );
+    assert_eq!(reply.artifacts.len(), 1);
+}
+
+#[test]
+fn empty_stop_llm_reply_fails_instead_of_returning_blank_text() {
+    let (mut kernel, _) = setup_chat_with_fake_llm(vec![llm_reply("   ")]);
+    let ChatStart::Active(mut session) = prepare_chat_message(
+        &mut kernel,
+        &[],
+        "hello",
+        "test-thread",
+        DEFAULT_MAX_LLM_ITERATIONS,
+        Duration::from_secs(crate::agent_worker::DEFAULT_MAX_DURATION_SECS),
+        None,
+    )
+    .unwrap() else {
+        panic!("expected an active chat session");
+    };
+    let ChatStep::Execute(mut invocation) = session.prepare_next(&mut kernel).unwrap() else {
+        panic!("expected llm invocation");
+    };
+    let approval = invocation
+        .prepared
+        .take()
+        .expect("prepared invocation")
+        .await_approval();
+    let app_host_kernel::AuthorizeInvocation::Authorized(authorized) =
+        kernel.authorize_invocation(approval).unwrap()
+    else {
+        panic!("expected llm authorization");
+    };
+    let result = kernel.finalize_invocation(authorized.execute()).unwrap();
+    let reply = session
+        .finalize_next(&mut kernel, *invocation, result)
+        .unwrap()
+        .expect("expected final reply");
+
+    assert!(session.failed());
+    assert!(!reply.truncated);
+    assert!(reply.text.contains("empty reply"));
+}
+
+#[test]
+fn partial_length_truncated_llm_reply_preserves_text_and_marks_truncated() {
+    let (mut kernel, _) = setup_chat_with_fake_llm(vec![serde_json::json!({
+        "message": {"role": "assistant", "content": "Partial summary cut off mid-sentence"},
+        "reasoning": "Initial outline",
+        "finish_reason": "length"
+    })]);
+    let ChatStart::Active(mut session) = prepare_chat_message(
+        &mut kernel,
+        &[],
+        "summarize this lore",
+        "test-thread",
+        DEFAULT_MAX_LLM_ITERATIONS,
+        Duration::from_secs(crate::agent_worker::DEFAULT_MAX_DURATION_SECS),
+        None,
+    )
+    .unwrap() else {
+        panic!("expected an active chat session");
+    };
+    let ChatStep::Execute(mut invocation) = session.prepare_next(&mut kernel).unwrap() else {
+        panic!("expected llm invocation");
+    };
+    let approval = invocation
+        .prepared
+        .take()
+        .expect("prepared invocation")
+        .await_approval();
+    let app_host_kernel::AuthorizeInvocation::Authorized(authorized) =
+        kernel.authorize_invocation(approval).unwrap()
+    else {
+        panic!("expected llm authorization");
+    };
+    let result = kernel.finalize_invocation(authorized.execute()).unwrap();
+    let reply = session
+        .finalize_next(&mut kernel, *invocation, result)
+        .unwrap()
+        .expect("expected final reply");
+
+    assert!(!session.failed());
+    assert!(reply.truncated);
+    assert_eq!(reply.text, "Partial summary cut off mid-sentence");
+    assert_eq!(reply.reasoning.as_deref(), Some("Initial outline"));
+}
+
+#[test]
+fn empty_agent_reply_fails_instead_of_returning_blank_text() {
+    struct EmptyAgentEngine;
+    impl crate::agent_worker::AgentEngine for EmptyAgentEngine {
+        fn run(
+            &self,
+            _job: AgentJob,
+            _bridge: &dyn AgentHostBridge,
+            _progress: &ProgressReporter,
+            _cancellation: &app_host_kernel::invocation::CancellationHandle,
+        ) -> Result<AgentResult, String> {
+            Ok(AgentResult {
+                text: "   ".into(),
+                reasoning: Some("Ran out of room".into()),
+                finish_reason: AgentFinishReason::Stop,
+                turns: 1,
+                transcript: vec![],
+            })
+        }
+    }
+
+    let (mut kernel, _) = make_kernel();
+    install_fake_llm_provider(&mut kernel, vec![]).unwrap();
+    install_chat_app(&mut kernel).unwrap();
+    let kernel = Arc::new(Mutex::new(kernel));
+    install_fake_agent_engine(kernel.clone(), Arc::new(EmptyAgentEngine));
+    issue_test_agent_grant_to_chat(&mut kernel.lock().unwrap());
+
+    let start = {
+        let mut kernel = kernel.lock().unwrap();
+        prepare_chat_message(
+            &mut kernel,
+            &[],
+            "delegate this",
+            "test-thread",
+            DEFAULT_MAX_LLM_ITERATIONS,
+            Duration::from_secs(crate::agent_worker::DEFAULT_MAX_DURATION_SECS),
+            None,
+        )
+        .unwrap()
+    };
+    let ChatStart::Active(mut session) = start else {
+        panic!("expected an active chat session");
+    };
+    let ChatStep::Execute(mut invocation) =
+        session.prepare_next(&mut kernel.lock().unwrap()).unwrap()
+    else {
+        panic!("expected agent invocation");
+    };
+    let approval = invocation
+        .prepared
+        .take()
+        .expect("prepared invocation")
+        .await_approval();
+    let app_host_kernel::AuthorizeInvocation::Authorized(authorized) = kernel
+        .lock()
+        .unwrap()
+        .authorize_invocation(approval)
+        .unwrap()
+    else {
+        panic!("expected agent authorization");
+    };
+    let executed = authorized.execute();
+    let mut kernel_guard = kernel.lock().unwrap();
+    let result = kernel_guard.finalize_invocation(executed).unwrap();
+    let reply = session
+        .finalize_next(&mut kernel_guard, *invocation, result)
+        .unwrap()
+        .expect("expected final reply");
+
+    assert!(session.failed());
+    assert!(!reply.truncated);
+    assert!(reply.text.contains("Agent Engine returned an empty reply"));
+    assert_eq!(reply.reasoning.as_deref(), Some("Ran out of room"));
+}
+
+#[test]
 fn phased_chat_pins_the_llm_profile_for_every_llm_call() {
     let recorded = Arc::new(Mutex::new(Vec::new()));
     let (mut kernel, _) = make_kernel();

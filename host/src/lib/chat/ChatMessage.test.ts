@@ -426,6 +426,52 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Internal reasoning")).toBeTruthy();
     expect(screen.queryByText("Details")).toBeNull();
   });
+
+  it("explains persisted empty assistant replies when thinking is hidden", () => {
+    render(ChatMessage, {
+      message: message({ text: "", reasoning: "Cut off mid-thought" }),
+      showThinking: false,
+    });
+
+    expect(screen.getByText(/No visible reply was produced.*Show provider thinking/)).toBeTruthy();
+    expect(screen.queryByText("Cut off mid-thought")).toBeNull();
+  });
+
+  it("explains persisted empty assistant replies when thinking is shown or absent", () => {
+    const first = render(ChatMessage, {
+      message: message({ text: "", reasoning: "Cut off mid-thought" }),
+      showThinking: true,
+    });
+    expect(screen.getByText("No visible reply was produced before the model stopped.")).toBeTruthy();
+    expect(screen.getByText("Cut off mid-thought")).toBeTruthy();
+    first.unmount();
+
+    render(ChatMessage, {
+      message: message({ text: "", reasoning: null }),
+    });
+    expect(screen.getByText("No visible reply was produced.")).toBeTruthy();
+  });
+
+  it("does not show the empty-reply notice while an assistant reply is pending", () => {
+    render(ChatMessage, {
+      message: message({ text: "", status: "pending" }),
+    });
+
+    expect(screen.getByText("Thinking")).toBeTruthy();
+    expect(screen.queryByText(/No visible reply was produced/)).toBeNull();
+  });
+
+  it("renders system truncation notices cleanly", () => {
+    render(ChatMessage, {
+      message: message({
+        role: "system",
+        text: "This reply was cut off because the model reached its context or output length limit.",
+      }),
+    });
+
+    expect(screen.getByText("System")).toBeTruthy();
+    expect(screen.getByText(/cut off because the model reached its context or output length limit/)).toBeTruthy();
+  });
 });
 
 describe("ChatMessage text marks", () => {

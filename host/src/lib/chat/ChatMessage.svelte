@@ -642,7 +642,17 @@
       {#if message.role === "assistant"}
         <!-- Assistant replies are Markdown; renderMarkdown escapes first, so
              this {@html} only ever contains tags the renderer itself emits. -->
-        {#if annotators.length > 0 && parts.length > 0}
+        {#if message.status !== "pending" && message.text.trim() === ""}
+          <p class="empty-reply" role="status">
+            {#if message.reasoning && !showThinking}
+              No visible reply was produced. Enable “Show provider thinking” in Chat settings to inspect the model’s thinking.
+            {:else if message.reasoning}
+              No visible reply was produced before the model stopped.
+            {:else}
+              No visible reply was produced.
+            {/if}
+          </p>
+        {:else if annotators.length > 0 && parts.length > 0}
           <div class="text markdown" bind:this={messageBody} use:trackTextSelection>
             {@html renderMarkdownWithMarks(message.text, annotators.flatMap(([, annotation]) => [
               ...annotation.ranges.map((range) => ({
@@ -859,13 +869,21 @@
   .entry.assistant .bubble {
     background: transparent;
   }
-  .entry.tool-status .bubble {
+  .entry.tool-status .bubble,
+  .entry.system .bubble {
     background: var(--color-surface-muted);
     border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 0.7rem 0.9rem;
     font-size: 0.88rem;
     color: var(--color-text-muted);
+  }
+  .empty-reply {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-style: italic;
+    line-height: 1.5;
   }
   .entry.failed .bubble,
   .entry.refused .bubble,

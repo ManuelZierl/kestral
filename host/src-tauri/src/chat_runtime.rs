@@ -1014,6 +1014,7 @@ pub(crate) fn build_assistant_messages(
         .as_ref()
         .map(|run_id| run_id.as_str().to_string());
     let status = derive_run_status(records, run_id.as_deref());
+    let truncated = reply.truncated;
     let assistant = ChatMessage {
         message_id: String::new(),
         role: ChatMessageRole::Assistant,
@@ -1031,7 +1032,8 @@ pub(crate) fn build_assistant_messages(
         completed_at: None,
     };
     // Chronological order: an optional permission/status note, then the tool
-    // activity that ran during the turn, then the assistant's final reply.
+    // activity that ran during the turn, then the assistant's final reply,
+    // followed by a system notice if the reply was cut off by a length limit.
     // (Previously the tool feedback was appended after the reply, inverting the
     // narrative it exists to convey.)
     let mut messages = Vec::new();
@@ -1042,6 +1044,21 @@ pub(crate) fn build_assistant_messages(
         messages.extend(tool_feedback(records, run_id));
     }
     messages.push(assistant);
+    if truncated {
+        messages.push(ChatMessage {
+            message_id: String::new(),
+            role: ChatMessageRole::System,
+            status: Some(ChatMessageStatus::Completed),
+            text: "This reply was cut off because the model reached its context or output length limit."
+                .into(),
+            reasoning: None,
+            run_id,
+            artifact_ids: vec![],
+            client_request_id: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            completed_at: None,
+        });
+    }
     messages
 }
 
