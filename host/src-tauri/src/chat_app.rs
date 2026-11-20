@@ -800,7 +800,7 @@ fn chat_contribution_schema() -> Value {
 }
 
 fn chat_manifest() -> AppManifest {
-    AppManifest {
+    let mut manifest = AppManifest {
         app_id: chat_app_id(),
         version: "0.7.1".into(),
         display_name: "Chat".into(),
@@ -1043,8 +1043,7 @@ fn chat_manifest() -> AppManifest {
             })),
         }],
         artifact_types: vec![],
-        extension_points: {
-            let mut points = vec![
+        extension_points: vec![
             ExtensionPointDeclaration {
                 name: ExtensionPointName::new("composer-context"),
                 contract_version: COMPOSER_CONTEXT_CONTRACT,
@@ -1141,22 +1140,7 @@ fn chat_manifest() -> AppManifest {
                     "additionalProperties": false
                 })),
             },
-            ];
-            // A native message presenter is a general UI extension point, not
-            // a Chat implementation of any particular third-party plugin.
-            // Reuse the exact completed-message context already proven by
-            // message-actions v6, but keep the presentation contract independent.
-            let message_context = points.iter()
-                .find(|point| point.name == ExtensionPointName::new("message-actions"))
-                .expect("Chat declares message-actions")
-                .context_schema.clone();
-            points.push(ExtensionPointDeclaration {
-                name: ExtensionPointName::new("message-presentation"),
-                contract_version: 1,
-                context_schema: message_context,
-            });
-            points
-        },
+        ],
         extension_contributions: vec![],
         grant_requests: vec![
             GrantRequest {
@@ -1207,7 +1191,23 @@ fn chat_manifest() -> AppManifest {
             },
         ],
         event_subscriptions: vec![],
-    }
+    };
+
+    // The presentation slot is a separate, generic UI contract. It shares
+    // Chat's completed-response context schema without duplicating it.
+    let message_context = manifest
+        .extension_points
+        .iter()
+        .find(|point| point.name == ExtensionPointName::new("message-actions"))
+        .expect("Chat declares message-actions")
+        .context_schema
+        .clone();
+    manifest.extension_points.push(ExtensionPointDeclaration {
+        name: ExtensionPointName::new("message-presentation"),
+        contract_version: 1,
+        context_schema: message_context,
+    });
+    manifest
 }
 
 pub fn chat_manifest_for_kernel(kernel: &Kernel) -> SealedManifest {
