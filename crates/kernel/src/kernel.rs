@@ -872,10 +872,11 @@ impl Kernel {
     }
 
     /// Atomically replace an installed app's sealed declaration and handlers
-    /// when its authority and behavioral contract are unchanged. Version and
-    /// top-level presentation text are the only declaration differences
-    /// allowed. Grants, history, runs, artifacts, surfaces, and subscriptions
-    /// are preserved.
+    /// when its authority and behavioral contract are unchanged, except for
+    /// append-only declarations of new extension points. Version and top-level
+    /// presentation text may also change. No capability, grant, or existing
+    /// extension contract may change. Grants, history, runs, artifacts,
+    /// surfaces, and subscriptions are preserved.
     pub fn upgrade_app(
         &mut self,
         sealed_manifest: SealedManifest,
