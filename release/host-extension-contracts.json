@@ -17,6 +17,10 @@
           "contract_version": 6
         },
         {
+          "name": "message-presentation",
+          "contract_version": 1
+        },
+        {
           "name": "model-profile-editor",
           "contract_version": 1
         },

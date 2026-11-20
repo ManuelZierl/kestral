@@ -13,6 +13,8 @@
   interface Props {
     pointName: string;
     context: JsonObject;
+    /** A message has at most one active presentation surface. */
+    single?: boolean;
     /// An extension surface published slot state (untrusted, already
     /// bridge-validated as an object). Keyed by the extension's slot key so
     /// the owner can hold state per contributing app.
@@ -29,8 +31,8 @@
     sendExtensionEvent: (payload: JsonObject) => void;
   }
 
-  let { pointName, context, onExtensionState, onExtensionRemoved }: Props = $props();
-  const extensions = $derived(resolveChatExtensions($apps, pointName));
+  let { pointName, context, single = false, onExtensionState, onExtensionRemoved }: Props = $props();
+  const extensions = $derived(resolveChatExtensions($apps, pointName).slice(0, single ? 1 : undefined));
   let bundles = $state<Record<string, SurfaceUiBundle>>({});
   let failures = $state<Record<string, string>>({});
   let frames = $state<Record<string, ExtensionFrameHandle | undefined>>({});
@@ -134,7 +136,7 @@
 {#each extensions as extension (`${extension.app.manifest.app_id}/${extension.surface.name}`)}
   {@const key = `${extension.app.manifest.app_id}/${extension.surface.name}`}
   {#if bundles[key]}
-    <div class="extension-slot" class:hidden={hidden[key] === true}>
+    <div class="extension-slot" class:compact={single} class:hidden={hidden[key] === true}>
       <AppSurfaceFrame
         bind:this={frames[key]}
         app={extension.app}
@@ -166,6 +168,9 @@
   }
   .extension-slot.hidden {
     display: none;
+  }
+  .extension-slot.compact {
+    margin-top: 0;
   }
   :global(.extension-slot .surface-frame) {
     margin-top: 0;

@@ -800,9 +800,9 @@ fn chat_contribution_schema() -> Value {
 }
 
 fn chat_manifest() -> AppManifest {
-    AppManifest {
+    let mut manifest = AppManifest {
         app_id: chat_app_id(),
-        version: "0.7.0".into(),
+        version: "0.7.1".into(),
         display_name: "Chat".into(),
         description: "Translates your messages into runs — driven by the \
                       LLM provider, with all actions mediated by the kernel"
@@ -1191,7 +1191,23 @@ fn chat_manifest() -> AppManifest {
             },
         ],
         event_subscriptions: vec![],
-    }
+    };
+
+    // The presentation slot is a separate, generic UI contract. It shares
+    // Chat's completed-response context schema without duplicating it.
+    let message_context = manifest
+        .extension_points
+        .iter()
+        .find(|point| point.name == ExtensionPointName::new("message-actions"))
+        .expect("Chat declares message-actions")
+        .context_schema
+        .clone();
+    manifest.extension_points.push(ExtensionPointDeclaration {
+        name: ExtensionPointName::new("message-presentation"),
+        contract_version: 1,
+        context_schema: message_context,
+    });
+    manifest
 }
 
 pub fn chat_manifest_for_kernel(kernel: &Kernel) -> SealedManifest {

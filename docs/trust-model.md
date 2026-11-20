@@ -134,9 +134,15 @@ sandboxed app surface does not sandbox its backend.
   revoked without deleting issued facts, and a matching package must pass the
   normal verification and approval path before it can run again.
 - **Bundled declaration upgrades:** version and top-level presentation metadata
-  may change without uninstalling a bundled app. Every authority and behavioral
-  declaration must remain identical; otherwise the transition fails before the
-  manifest or existing grants change.
+  may change without uninstalling a bundled app. A candidate may additionally
+  **append** new unique extension-point declarations, but must preserve all
+  earlier points exactly (name, version, context schema, order). Advertising
+  another UI slot does not itself invoke a capability, reveal data, or issue a
+  grant. An already-installed, previously dormant contribution could become
+  mountable if its declared target/version matches; its installation and
+  permissions were separately reviewed. Every other authority or behavioral
+  declaration must remain identical. Removing, reordering, or changing an
+  existing point is rejected before the installed manifest or grants change.
 - **Bounded event feed:** apps receive minimized host event views, not the raw
   trusted ledger and not cross-app RPC. `run-event` and `app-data-changed` are
   tagged envelopes with bounded, lossy delivery semantics; inbox overflow drops

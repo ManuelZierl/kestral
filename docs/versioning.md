@@ -505,12 +505,23 @@ host-managed data. There is no general restore UI yet.
 
 Bundled apps have a separate declaration-only upgrade path. An installed Chat,
 LLM Provider, Artifacts, Permissions, or File Broker declaration may update its
-version, display name, or top-level description in place. Capability and data
-schemas, effects, surfaces, grants, connectors, config, artifacts, extensions,
-subscriptions, and every other behavioral declaration must remain identical.
-The atomic transition preserves grants, revocations, Runs, ledger records,
-artifacts, and app/config data; an incompatible declaration is refused without
-replacing the installed manifest.
+version, display name, or top-level description in place. It may also append
+new, uniquely named extension-point declarations to the **end** of its existing
+extension-point list, provided every previously offered point retains its exact
+name, version, schema, and position. This is additive UI integration, not a new
+capability or permission. Removing, reordering, or changing an existing point
+still requires a versioned migration. Capability and data schemas, effects,
+surfaces, grants, connectors, config, artifacts, contributions, subscriptions,
+and all other behavioral declarations must remain identical.
+
+An added point may activate a previously installed dormant contribution whose
+exact contract matches. That contribution was separately reviewed at install
+and retains its own grants; no new grant or capability is issued by adding a
+point. The atomic transition preserves grants, revocations, Runs, ledger
+records, artifacts, and app/config data; an incompatible declaration is refused
+without replacing the installed manifest. In particular, existing profiles
+with Chat 0.7.0 (no `message-presentation` point) upgrade to Chat 0.7.1
+without a destructive reinstall.
 
 The active revision and two newest retained revisions are preserved; older
 inactive payloads are pruned. Reversion uses the exact previously verified
