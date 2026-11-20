@@ -17,6 +17,7 @@ testing build.
 | Page | Purpose |
 |---|---|
 | [Deployment modes]({{ internal_link_prefix }}{% link deployment-modes.md %}) | Run the all-in-one desktop or the advanced backend/client split. |
+| [Secure LAN access]({{ internal_link_prefix }}{% link lan-access.md %}) | Reach an Ubuntu host from another trusted device over HTTPS without an everyday SSH tunnel. |
 | [Versioning and recovery]({{ internal_link_prefix }}{% link versioning.md %}) | Understand strict data formats, updates, backups, and failure behavior. |
 | [Alpha limitations]({{ internal_link_prefix }}{% link honest-gaps.md %}) | Know what is intentionally outside the supported boundary. |
 
