@@ -488,7 +488,13 @@ fn extract_validated_archive(path: &Path, destination: &Path) -> Result<Portable
     if zip.is_empty() || zip.len() > MAX_ENTRIES {
         return Err("portable archive entry count is invalid".into());
     }
-    if zip.by_index(0).map_err(|error| error.to_string())?.name() != MANIFEST {
+    if zip
+        .by_index(0)
+        .map_err(|error| error.to_string())?
+        .name()
+        .map_err(|error| format!("read portable entry name failed: {error}"))?
+        != MANIFEST
+    {
         return Err("portable archive manifest must be the first entry".into());
     }
     let manifest: PortableManifest = {
@@ -507,7 +513,10 @@ fn extract_validated_archive(path: &Path, destination: &Path) -> Result<Portable
         let mut entry = zip
             .by_index(index)
             .map_err(|error| format!("read portable entry failed: {error}"))?;
-        let name = entry.name().to_string();
+        let name = entry
+            .name()
+            .map_err(|error| format!("read portable entry name failed: {error}"))?
+            .to_string();
         validate_archive_path(&name)?;
         if entry.is_dir() || !seen.insert(name.clone()) {
             return Err(format!(
