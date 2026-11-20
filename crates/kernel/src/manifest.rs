@@ -183,12 +183,23 @@ pub struct AppManifest {
 impl AppManifest {
     /// Compare declarations for the in-place upgrade boundary.
     ///
-    /// Only the app's version and top-level presentation text may change. All
-    /// capability, surface, data, grant, schema, and other contribution
-    /// fields remain part of the authority or behavioral contract.
+    /// Version and top-level presentation text may change. New extension
+    /// points may be appended: advertising an additional UI integration slot
+    /// does not issue a grant or change an existing capability. Existing
+    /// extension points (including their schemas and order), all other
+    /// declarations, and all authority must remain byte-for-byte equivalent.
+    ///
+    /// This is deliberately append-only: deleting, reordering, or changing an
+    /// existing contract is a breaking upgrade, not a presentation update.
+    /// Callers must still validate the candidate manifest for unique names.
     pub fn has_same_upgrade_contract(&self, candidate: &Self) -> bool {
+        if !candidate.extension_points.starts_with(&self.extension_points) {
+            return false;
+        }
+
         let mut current = self.clone();
         let mut candidate = candidate.clone();
+        candidate.extension_points.truncate(current.extension_points.len());
         for manifest in [&mut current, &mut candidate] {
             manifest.version.clear();
             manifest.display_name.clear();
