@@ -23,13 +23,17 @@ const TEXT_VERBOSITY_LEVELS: TextVerbosity[] = ["low", "medium", "high"];
 function conservativeModel(provider: Provider, id: string, baseUrl?: string): Model<Api> {
   const template = provider.getModels()[0];
   if (!template) throw new Error(`provider ${provider.id} has no known API for custom model ${id}`);
-  return { id, name: id, api: template.api, provider: provider.id, baseUrl: baseUrl ?? provider.baseUrl ?? template.baseUrl, reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 16_384, maxTokens: 4_096 };
+  // Leave contextWindow as 0 when the model's real window is unknown so pi-ai does not
+  // clamp max_tokens down against a guessed 16k limit (which shrinks to 1 token around 12k).
+  return { id, name: id, api: template.api, provider: provider.id, baseUrl: baseUrl ?? provider.baseUrl ?? template.baseUrl, reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 0, maxTokens: 4_096 };
 }
 
 function customOpenAiProvider(config: ProviderConfig, modelId: string): Provider<"openai-completions"> {
   const baseUrl = config.base_url ?? (config.kind === "ollama" ? "http://127.0.0.1:11434/v1" : undefined);
   if (!baseUrl) throw new Error("open-ai-compatible requires provider.base_url");
-  const model: Model<"openai-completions"> = { id: modelId, name: modelId, api: "openai-completions", provider: config.kind, baseUrl, reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 16_384, maxTokens: 4_096, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, supportsUsageInStreaming: false, maxTokensField: "max_tokens" } };
+  // Leave contextWindow as 0 when the server's real window is unknown so pi-ai does not
+  // clamp max_tokens down against a guessed 16k limit (which shrinks to 1 token around 12k).
+  const model: Model<"openai-completions"> = { id: modelId, name: modelId, api: "openai-completions", provider: config.kind, baseUrl, reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 0, maxTokens: 4_096, compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, supportsUsageInStreaming: false, maxTokensField: "max_tokens" } };
   return createProvider({
     id: config.kind,
     name: config.kind,

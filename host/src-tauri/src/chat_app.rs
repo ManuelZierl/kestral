@@ -1243,6 +1243,9 @@ pub struct ChatReply {
     /// answers itself (help/error), which do no work.
     pub run_id: Option<RunId>,
     pub artifacts: Vec<Artifact>,
+    /// True when the provider returned partial visible text cut off at a
+    /// context or output length limit (`finish_reason == "length"`).
+    pub truncated: bool,
 }
 
 /// Handle one user message: start a parent run, drive an LLM tool-use loop
@@ -1619,6 +1622,7 @@ impl ChatSession {
                 reasoning: None,
                 run_id: Some(self.parent_run_id.clone()),
                 artifacts: vec![],
+                truncated: false,
             }));
         }
         match &mut self.mode {
@@ -1684,6 +1688,7 @@ impl ChatSession {
                             reasoning: None,
                             run_id: Some(self.parent_run_id.clone()),
                             artifacts: vec![],
+                            truncated: false,
                         }));
                     }
                 };
@@ -1749,6 +1754,7 @@ impl ChatSession {
                                         reasoning: None,
                                         run_id: Some(self.parent_run_id.clone()),
                                         artifacts: std::mem::take(&mut state.artifacts),
+                                        truncated: false,
                                     }));
                                 }
                                 InvocationResult::Refused { reason } => tool_refusal_message(
@@ -1791,6 +1797,7 @@ impl ChatSession {
                         reasoning: take_reasoning(&mut state.reasoning, None),
                         run_id: Some(self.parent_run_id.clone()),
                         artifacts: std::mem::take(&mut state.artifacts),
+                        truncated: false,
                     }));
                 }
                 let child_run_id = kernel
@@ -1855,6 +1862,7 @@ impl ChatSession {
                             reasoning: None,
                             run_id: Some(self.parent_run_id.clone()),
                             artifacts: std::mem::take(&mut state.artifacts),
+                            truncated: false,
                         }));
                     }
                 };
@@ -1903,17 +1911,37 @@ impl ChatSession {
                 reasoning: None,
                 run_id: Some(parent_run_id),
                 artifacts,
+                truncated: false,
             }));
         }
         match (invocation.kind, result) {
             (ChatInvocationKind::AgentRun, InvocationResult::Completed { result, artifacts }) => {
                 let reply: crate::agent_worker_protocol::AgentResult = serde_json::from_value(result)
                     .map_err(|error| format!("failed to parse agent result: {error}"))?;
+                if reply.text.trim().is_empty() {
+                    self.failed = true;
+                    let text = match reply.finish_reason {
+                        crate::agent_worker_protocol::AgentFinishReason::MaxTurns => {
+                            "The Agent Engine reached its turn limit without producing a visible reply. Retry with a narrower request or check the run ledger for details."
+                        }
+                        crate::agent_worker_protocol::AgentFinishReason::Stop => {
+                            "The Agent Engine returned an empty reply. Retry the message or check the run ledger for details."
+                        }
+                    };
+                    return Ok(Some(ChatReply {
+                        text: text.into(),
+                        reasoning: reply.reasoning,
+                        run_id: Some(parent_run_id),
+                        artifacts,
+                        truncated: false,
+                    }));
+                }
                 Ok(Some(ChatReply {
                     text: reply.text,
                     reasoning: reply.reasoning,
                     run_id: Some(parent_run_id),
                     artifacts,
+                    truncated: false,
                 }))
             }
             (ChatInvocationKind::AgentRun, InvocationResult::Refused { reason }) => Err(format!(
@@ -1947,11 +1975,26 @@ impl ChatSession {
                         return Ok(None);
                     }
                 }
+                let reasoning = take_reasoning(&mut state.reasoning, reply.reasoning);
+                let truncated = reply.finish_reason == "length";
+                let artifacts = std::mem::take(&mut state.artifacts);
+                if reply.message.content.trim().is_empty() {
+                    self.failed = true;
+                    let text = empty_llm_reply_message(truncated, reasoning.is_some());
+                    return Ok(Some(ChatReply {
+                        text: text.into(),
+                        reasoning,
+                        run_id: Some(parent_run_id),
+                        artifacts,
+                        truncated: false,
+                    }));
+                }
                 Ok(Some(ChatReply {
                     text: reply.message.content,
-                    reasoning: take_reasoning(&mut state.reasoning, reply.reasoning),
+                    reasoning,
                     run_id: Some(parent_run_id),
-                    artifacts: std::mem::take(&mut state.artifacts),
+                    artifacts,
+                    truncated,
                 }))
             }
             (
@@ -1981,6 +2024,7 @@ impl ChatSession {
                         reasoning: None,
                         run_id: Some(parent_run_id),
                         artifacts: std::mem::take(&mut state.artifacts),
+                        truncated: false,
                     }));
                 }
                     let capability = &pending.capability;
@@ -2016,12 +2060,28 @@ impl ChatSession {
     }
 }
 
+fn empty_llm_reply_message(truncated: bool, has_reasoning: bool) -> &'static str {
+    match (truncated, has_reasoning) {
+        (true, true) => {
+            "The model reached its length limit while thinking and produced no visible reply. Start a new thread, shorten the conversation, or increase the model's context or output limit."
+        }
+        (true, false) => {
+            "The model reached its length limit before producing a visible reply. Start a new thread, shorten the conversation, or increase the model's context or output limit."
+        }
+        (false, true) => {
+            "The model finished thinking without producing a visible reply. Retry the message or try another model."
+        }
+        (false, false) => "The model returned an empty reply. Retry the message or try another model.",
+    }
+}
+
 fn preparation_error_reply(parent_run_id: RunId, error: String) -> ChatReply {
     ChatReply {
         text: format!("Sorry, something went wrong: {error}"),
         reasoning: None,
         run_id: Some(parent_run_id),
         artifacts: vec![],
+        truncated: false,
     }
 }
 
@@ -2163,6 +2223,7 @@ pub(crate) fn prepare_chat_message_with_prompt(
             reasoning: None,
             run_id: None,
             artifacts: vec![],
+            truncated: false,
         }));
     }
 

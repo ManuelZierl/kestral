@@ -87,10 +87,42 @@ test("refreshes Ollama models through the custom pi provider", async () => {
       type: "models",
       request_id: "models-1",
       models: [
-        { id: "llama3.2", display_name: "llama3.2", reasoning: false, variants: [], text_verbosity: [], context_window: 16_384, max_output_tokens: 4_096 },
-        { id: "qwen3", display_name: "qwen3", reasoning: false, variants: [], text_verbosity: [], context_window: 16_384, max_output_tokens: 4_096 },
+        { id: "llama3.2", display_name: "llama3.2", reasoning: false, variants: [], text_verbosity: [], context_window: 0, max_output_tokens: 4_096 },
+        { id: "qwen3", display_name: "qwen3", reasoning: false, variants: [], text_verbosity: [], context_window: 0, max_output_tokens: 4_096 },
       ],
     }]);
+  });
+});
+
+test("does not clamp OpenAI-compatible max_tokens against a fabricated 16k context window", async () => {
+  let observedMaxTokens: unknown;
+  await withServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk: string) => body += chunk);
+    request.on("end", () => {
+      const payload = JSON.parse(body) as Record<string, unknown>;
+      observedMaxTokens = payload.max_tokens;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write('data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Done"},"finish_reason":null}]}\n\n');
+      response.write('data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n');
+      response.end("data: [DONE]\n\n");
+    });
+  }, async (baseUrl) => {
+    const events: Record<string, unknown>[] = [];
+    // ~14k estimated tokens: previously exceeded 16_384 - 4_096 and clamped max_tokens to 1.
+    const largePrompt = "word ".repeat(11_200);
+    await new WorkerService().handle({
+      command: "generate",
+      request_id: "generate-large-1",
+      provider: { kind: "open-ai-compatible", base_url: baseUrl, api_key: "integration-secret" },
+      model: "local-reasoning-model",
+      messages: [{ role: "user", content: largePrompt }],
+      timeout_ms: 5_000,
+    }, (event) => events.push(event));
+
+    assert(events.some((event) => event.type === "completed"), JSON.stringify(events));
+    assert.equal(observedMaxTokens, 4_096);
   });
 });
 
