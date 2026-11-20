@@ -158,6 +158,117 @@ fn completed_startup_claim_stays_claimed() {
 }
 
 #[test]
+fn existing_alpha_profile_upgrades_chat_when_a_presentation_point_is_added() {
+    // Reproduce an alpha.1 profile: all bundled dependencies are already
+    // installed, and Chat 0.7.0 lacks the new message-presentation point.
+    let path = startup_test_dir("chat-extension-point-upgrade");
+    let host = build_test_host(path.clone()).unwrap();
+    let bundled = GrantOrigin::SystemBundled;
+    tauri::async_runtime::block_on(async {
+        install_kernel_app_phased(
+            host.clone(),
+            seal(llm_provider::llm_provider_manifest()),
+            llm_provider::llm_provider_handlers(host.config.clone()),
+            bundled,
+        )
+        .await
+        .unwrap();
+        install_kernel_app_phased(
+            host.clone(),
+            seal(artifacts_app::artifacts_manifest()),
+            artifacts_app::artifacts_handlers(),
+            bundled,
+        )
+        .await
+        .unwrap();
+        install_kernel_app_phased(
+            host.clone(),
+            seal(permissions_app::permissions_manifest()),
+            permissions_app::permissions_handlers(),
+            bundled,
+        )
+        .await
+        .unwrap();
+        install_kernel_app_phased(
+            host.clone(),
+            seal(file_broker_manifest()),
+            file_broker_handlers(host.file_resources.clone()),
+            bundled,
+        )
+        .await
+        .unwrap();
+    });
+
+    let mut released = {
+        let kernel = host.kernel.lock().unwrap();
+        chat_app::chat_manifest_for_kernel(&kernel).manifest
+    };
+    released.version = "0.7.0".into();
+    released
+        .extension_points
+        .retain(|point| point.name.as_str() != "message-presentation");
+    tauri::async_runtime::block_on(install_kernel_app_phased(
+        host.clone(),
+        seal(released),
+        chat_app::chat_handlers(host.chat_store.clone()),
+        bundled,
+    ))
+    .unwrap();
+
+    let (grants_before, installed_at) = {
+        let kernel = host.kernel.lock().unwrap();
+        let chat = AppId::new("chat");
+        assert_eq!(kernel.installed_app(&chat).unwrap().manifest.version, "0.7.0");
+        (
+            kernel.grants_for(&chat).iter().map(|grant| grant.grant_id.clone()).collect::<Vec<_>>(),
+            kernel.installed_app(&chat).unwrap().installed_at,
+        )
+    };
+
+    // The exact normal startup orchestration must succeed with the old Chat
+    // manifest, without reinstalling the app or silently expanding grants.
+    tauri::async_runtime::block_on(install_bundled_apps_phased(
+        host.clone(),
+        host.config.clone(),
+        host.file_resources.clone(),
+    ))
+    .unwrap();
+
+    {
+        let kernel = host.kernel.lock().unwrap();
+        let chat = AppId::new("chat");
+        let installed = kernel.installed_app(&chat).unwrap();
+        assert_eq!(installed.manifest.version, "0.7.1");
+        assert_eq!(installed.installed_at, installed_at);
+        assert!(installed.manifest.extension_points.iter().any(|point| {
+            point.name.as_str() == "message-presentation" && point.contract_version == 1
+        }));
+        assert_eq!(
+            kernel.grants_for(&chat).iter().map(|grant| grant.grant_id.clone()).collect::<Vec<_>>(),
+            grants_before
+        );
+    }
+    drop(host);
+
+    // The upgraded declaration must also survive a real profile reopen.
+    let reopened = build_test_host(path.clone()).unwrap();
+    tauri::async_runtime::block_on(install_bundled_apps_phased(
+        reopened.clone(),
+        reopened.config.clone(),
+        reopened.file_resources.clone(),
+    ))
+    .unwrap();
+    let kernel = reopened.kernel.lock().unwrap();
+    assert_eq!(
+        kernel.installed_app(&AppId::new("chat")).unwrap().manifest.version,
+        "0.7.1"
+    );
+    drop(kernel);
+    drop(reopened);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn fresh_profile_docs_shortcut_remains_inert_during_bootstrap() {
     let path = startup_test_dir("inert-docs-shortcut");
     let host = build_test_host(path.clone()).unwrap();
