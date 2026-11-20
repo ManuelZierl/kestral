@@ -15,16 +15,15 @@ let receipt = directory.mask(person.iban);
 return receipt;
 ```
 
-Or a nested call (compiled into the same two sequential steps):
-
-```rhai
-return directory.mask(contacts.lookup("Anna").iban);
-```
+Field access applies to named results only: bind a call's result with `let`
+before reading a field from it. `contacts.lookup("Anna").iban` and multi-level
+access such as `person.address.city` are rejected.
 
 Allowed:
 - `let name = literal | capability_call | previous_result | previous_result.field`;
 - UTF-8 string, 64-bit integer, boolean and `()`/null literals;
-- static `provider.action(arg, ...)` bindings; calls may be nested;
+- static `provider.action(arg, ...)` bindings; a call may be passed directly
+  as an argument when its whole result matches the parameter type;
 - direct fields on previously returned objects with *required, typed* output
   schema properties; a final explicit `return expression;`;
 - plain capability-call statements whose result is intentionally discarded.
