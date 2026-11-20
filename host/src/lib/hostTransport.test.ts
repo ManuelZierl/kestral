@@ -77,6 +77,42 @@ describe("remote owner session", () => {
     expect(remoteUrlDefault()).toBe(window.location.origin);
   });
 
+  it("uses a same-origin API proxy for an unconfigured browser client", async () => {
+    const origin = window.location.origin;
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ceremony_id: "login-1", options: {} }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await signInRemoteConnection(remoteUrlDefault());
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      `${origin}/api/auth/login/start`,
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    expect(isRemoteConnectionReady()).toBe(true);
+  });
+
+  it("diagnoses an HTML response from the static client rather than the API", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response("<html>Static client, not the API</html>", {
+        status: 501,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(signInRemoteConnection("http://localhost:1420")).rejects.toThrow(
+      /Host URL did not return a Kestral API JSON response.*backend address.*\/api\//,
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:1420/api/auth/login/start",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(isRemoteConnectionReady()).toBe(false);
+  });
+
   it("resolves authenticated surface routes against the configured remote host", () => {
     sessionStorage.setItem("host.remote.url", "https://kestral.example/");
 

@@ -41,7 +41,7 @@
   function connectionErrorMessage(failure: unknown): string {
     const message = failure instanceof Error ? failure.message : String(failure);
     if (/failed to fetch|networkerror|load failed/i.test(message)) {
-      return `Could not reach a host at ${url}. Check the URL and that the backend is running.`;
+      return `Could not connect to the Kestral backend at ${url}. Check the Host URL, backend, and tunnel. If the origins differ, verify HOST_REMOTE_ORIGIN matches this page.`;
     }
     return message;
   }
@@ -56,8 +56,13 @@
     </p>
     <label>
       Host URL
-      <input bind:value={url} type="url" autocomplete="url" required />
+      <input bind:value={url} type="url" autocomplete="url" aria-describedby="host-url-help" required />
     </label>
+    <p id="host-url-help" class="url-help">
+      The page address works only if it proxies <code>/api/</code> to Kestral.
+      If you serve the browser client separately, enter the backend address
+      (e.g. <code>http://localhost:4310</code> for the documented two-port SSH tunnel).
+    </p>
     {#if !passkeysAvailable()}
       <p class="error" role="alert">This browser does not support passkeys. Use a current browser over HTTPS.</p>
     {/if}
@@ -123,6 +128,12 @@
   .description {
     margin: 0 0 0.5rem;
     color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+  .url-help {
+    margin: -0.25rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
     line-height: 1.5;
   }
   .pairing {
