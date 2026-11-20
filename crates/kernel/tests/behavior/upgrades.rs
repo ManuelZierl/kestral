@@ -119,6 +119,86 @@ fn metadata_and_version_upgrade_preserves_authority_and_history() {
     assert!(kernel.records().len() > record_count);
 }
 
+
+fn extension_point(name: &str) -> ExtensionPointDeclaration {
+    ExtensionPointDeclaration {
+        name: ExtensionPointName::new(name),
+        contract_version: 1,
+        context_schema: obj(json!({
+            "type": "object",
+            "properties": {"message_id": {"type": "string"}},
+            "required": ["message_id"],
+            "additionalProperties": false
+        })),
+    }
+}
+
+#[test]
+fn appended_extension_point_upgrade_preserves_existing_authority_and_history() {
+    let (mut kernel, _, _) = test_kernel();
+    install_notes(&mut kernel, GrantCondition::Silent);
+    let original_grant = kernel.grants_for(&notes_app())[0].clone();
+    let installed_at = kernel.installed_app(&notes_app()).unwrap().installed_at;
+    let record_count = kernel.records().len();
+
+    let mut candidate = upgraded_notes_manifest();
+    candidate.extension_points.push(extension_point("message-presentation"));
+    kernel
+        .upgrade_app(seal(candidate), upgraded_notes_handlers())
+        .expect("offering a new UI extension slot must not block bundled startup");
+
+    let installed = kernel.installed_app(&notes_app()).unwrap();
+    assert_eq!(installed.manifest.version, "2.0.0");
+    assert_eq!(installed.installed_at, installed_at);
+    assert_eq!(installed.manifest.extension_points.len(), 1);
+    assert_eq!(kernel.grants_for(&notes_app())[0], &original_grant);
+    assert_eq!(kernel.records().len(), record_count);
+}
+
+#[test]
+fn appended_extension_points_cannot_mask_other_contract_changes() {
+    let (mut kernel, _, _) = test_kernel();
+    let mut original = notes_manifest(GrantCondition::Silent);
+    original.extension_points = vec![extension_point("existing"), extension_point("second")];
+    let prepared = kernel
+        .prepare_install(seal(original.clone()), notes_handlers())
+        .unwrap();
+    kernel.commit_install(prepared.await_approval()).unwrap();
+
+    let original_hash = kernel.installed_app(&notes_app()).unwrap().content_hash.clone();
+    let original_grant = kernel.grants_for(&notes_app())[0].clone();
+
+    let mut removed = original.clone();
+    removed.version = "2.0.0".into();
+    removed.extension_points.pop();
+
+    let mut modified = original.clone();
+    modified.version = "2.0.0".into();
+    modified.extension_points[0].context_schema = obj(json!({"type": "object"}));
+
+    let mut version_changed = original.clone();
+    version_changed.version = "2.0.0".into();
+    version_changed.extension_points[0].contract_version = 2;
+
+    let mut reordered = original.clone();
+    reordered.version = "2.0.0".into();
+    reordered.extension_points.swap(0, 1);
+
+    let mut new_grant = original.clone();
+    new_grant.version = "2.0.0".into();
+    new_grant.extension_points.push(extension_point("added"));
+    new_grant.grant_requests[0].condition = GrantCondition::RequiresApproval;
+
+    for candidate in [removed, modified, version_changed, reordered, new_grant] {
+        assert!(matches!(
+            kernel.upgrade_app(seal(candidate), notes_handlers()),
+            Err(KernelError::AppUpgradeContractChanged { .. })
+        ));
+        assert_eq!(kernel.installed_app(&notes_app()).unwrap().content_hash, original_hash);
+        assert_eq!(kernel.grants_for(&notes_app())[0], &original_grant);
+    }
+}
+
 #[test]
 fn authority_and_behavioral_contract_changes_are_refused_without_mutation() {
     let (mut kernel, _, _) = test_kernel();
