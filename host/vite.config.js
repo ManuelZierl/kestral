@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import adapter from "@sveltejs/adapter-static";
 import { svelteTesting } from "@testing-library/svelte/vite";
 import { configDefaults } from "vitest/config";
 
@@ -35,7 +36,20 @@ const canonicalLoopbackOrigin = {
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [canonicalLoopbackOrigin, sveltekit(), svelteTesting()],
+  plugins: [
+    canonicalLoopbackOrigin,
+    // Tauri has no Node.js server for SSR, so adapter-static with an
+    // index.html fallback runs the shell in SPA mode.
+    // See https://svelte.dev/docs/kit/single-page-apps and
+    // https://v2.tauri.app/start/frontend/sveltekit/
+    sveltekit({
+      adapter: adapter({ fallback: "index.html" }),
+      // TODO: Kit 3 deprecates `alias`; move `$lib` imports to `#lib` subpath
+      // imports (which need explicit file extensions) in a dedicated change.
+      alias: { $lib: "src/lib" },
+    }),
+    svelteTesting(),
+  ],
 
   test: {
     environment: "jsdom",

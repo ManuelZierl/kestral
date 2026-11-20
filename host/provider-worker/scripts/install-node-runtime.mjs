@@ -146,7 +146,14 @@ async function extract(archivePath, destination) {
   await mkdir(destination, { recursive: true });
   if (process.platform === "win32") {
     const script = "& { param($Archive, $Destination) Expand-Archive -LiteralPath $Archive -DestinationPath $Destination -Force }";
-    await run("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, archivePath, destination]);
+    // When launched from PowerShell 7 (e.g. the GitHub Actions `pwsh` shell),
+    // an inherited PSModulePath makes Windows PowerShell load PowerShell 7's
+    // Archive module, whose Expand-Archive does not run on .NET Framework.
+    // Drop it so powershell.exe resolves its own built-in modules.
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => name.toUpperCase() !== "PSMODULEPATH"),
+    );
+    await run("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, archivePath, destination], { env });
   } else {
     // Archive ownership is irrelevant because only the executable and license
     // are copied into the runtime directory. Avoid privileged extraction
