@@ -193,13 +193,18 @@ impl AppManifest {
     /// existing contract is a breaking upgrade, not a presentation update.
     /// Callers must still validate the candidate manifest for unique names.
     pub fn has_same_upgrade_contract(&self, candidate: &Self) -> bool {
-        if !candidate.extension_points.starts_with(&self.extension_points) {
+        if !candidate
+            .extension_points
+            .starts_with(&self.extension_points)
+        {
             return false;
         }
 
         let mut current = self.clone();
         let mut candidate = candidate.clone();
-        candidate.extension_points.truncate(current.extension_points.len());
+        candidate
+            .extension_points
+            .truncate(current.extension_points.len());
         for manifest in [&mut current, &mut candidate] {
             manifest.version.clear();
             manifest.display_name.clear();
