@@ -218,9 +218,16 @@ fn existing_alpha_profile_upgrades_chat_when_a_presentation_point_is_added() {
     let (grants_before, installed_at) = {
         let kernel = host.kernel.lock().unwrap();
         let chat = AppId::new("chat");
-        assert_eq!(kernel.installed_app(&chat).unwrap().manifest.version, "0.7.0");
+        assert_eq!(
+            kernel.installed_app(&chat).unwrap().manifest.version,
+            "0.7.0"
+        );
         (
-            kernel.grants_for(&chat).iter().map(|grant| grant.grant_id.clone()).collect::<Vec<_>>(),
+            kernel
+                .grants_for(&chat)
+                .iter()
+                .map(|grant| grant.grant_id.clone())
+                .collect::<Vec<_>>(),
             kernel.installed_app(&chat).unwrap().installed_at,
         )
     };
@@ -244,7 +251,11 @@ fn existing_alpha_profile_upgrades_chat_when_a_presentation_point_is_added() {
             point.name.as_str() == "message-presentation" && point.contract_version == 1
         }));
         assert_eq!(
-            kernel.grants_for(&chat).iter().map(|grant| grant.grant_id.clone()).collect::<Vec<_>>(),
+            kernel
+                .grants_for(&chat)
+                .iter()
+                .map(|grant| grant.grant_id.clone())
+                .collect::<Vec<_>>(),
             grants_before
         );
     }
@@ -260,7 +271,11 @@ fn existing_alpha_profile_upgrades_chat_when_a_presentation_point_is_added() {
     .unwrap();
     let kernel = reopened.kernel.lock().unwrap();
     assert_eq!(
-        kernel.installed_app(&AppId::new("chat")).unwrap().manifest.version,
+        kernel
+            .installed_app(&AppId::new("chat"))
+            .unwrap()
+            .manifest
+            .version,
         "0.7.1"
     );
     drop(kernel);
