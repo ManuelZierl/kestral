@@ -300,6 +300,10 @@ npm run tauri:dev:mcp
 ```
 
 This command uses `src-tauri/tauri.mcp.conf.json` and the `dev-mcp` feature.
+The agent-side MCP server is not a `host` dependency (its pinned zod 3 tree
+fails the frontend dependency audit). Configure the MCP client to launch the
+version that matches the Rust `tauri-plugin-mcp-bridge` pin, for example
+`npx -y @hypothesi/tauri-mcp-server@0.12.0`.
 The expected bridge log is:
 
 ```text
