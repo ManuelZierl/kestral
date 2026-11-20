@@ -473,7 +473,7 @@ fn chat_installs_as_ordinary_app() {
 
     let app = kernel.installed_app(&chat_app_id()).unwrap();
     assert_eq!(app.manifest.app_id, chat_app_id());
-    assert_eq!(app.manifest.version, "0.7.0");
+    assert_eq!(app.manifest.version, "0.7.1");
     assert_eq!(
         app.manifest
             .capabilities
