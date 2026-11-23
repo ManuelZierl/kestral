@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn support_probe_reports_windows_appcontainer_or_unsupported_elsewhere() {
+fn support_probe_reports_platform_isolation_availability() {
     let support = native_backend_sandbox_support();
 
     #[cfg(windows)]
@@ -21,7 +21,28 @@ fn support_probe_reports_windows_appcontainer_or_unsupported_elsewhere() {
         ));
     }
 
-    #[cfg(unix)]
+    #[cfg(all(
+        target_os = "linux",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ))]
+    {
+        assert_eq!(support.filesystem, support.network);
+        if let Some(reason) = support.filesystem.reason() {
+            assert!(reason.contains("Bubblewrap"));
+        }
+        assert_eq!(
+            support.process_cleanup,
+            ProcessTreeCleanupSupport::UnixProcessGroupKill
+        );
+    }
+
+    #[cfg(all(
+        unix,
+        not(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))
+    ))]
     {
         assert!(!support.supports_sandboxed_execution());
         assert!(matches!(

@@ -46,6 +46,22 @@ jobs:
           cargo install cargo-audit --version 0.22.2 --locked
           cargo audit --file examples/action-script/Cargo.lock
 
+  linux-backend-sandbox:
+    name: Packaged Linux backend isolation
+    runs-on: ubuntu-24.04
+    env:
+      KESTRAL_REQUIRE_LINUX_SANDBOX_TEST: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+      - name: Verify sandbox enforcement
+        run: cargo test --locked -p mcp-adapter --test linux_sandbox -- --nocapture
+
   test-linux:
     name: Core tests + packages (Linux)
     runs-on: ubuntu-22.04

@@ -24,6 +24,12 @@ use serde_json::{json, Value};
 use crate::errors::McpError;
 use crate::transport::{McpTransport, RequestOptions};
 
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+mod linux_sandbox;
+
 /// How long a cancel probe can go unchecked while waiting on the channel.
 const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const WRITE_QUEUE_POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -55,9 +61,8 @@ struct WriteRequest {
 ///
 /// `Unsandboxed` provides process-tree cleanup and environment minimization,
 /// but makes no claim of filesystem or network sandboxing. `Sandboxed` is a
-/// request for deny-by-default filesystem and network policy; this crate probes
-/// that request and fails closed because the current dependencies do not
-/// enforce it.
+/// request for deny-by-default filesystem and network policy; only the
+/// dedicated platform launcher may satisfy that request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeBackendLaunchPolicy {
     Unsandboxed,
@@ -136,7 +141,7 @@ impl SandboxFeatureSupport {
     }
 }
 
-/// Process lifetime containment is the only native control we currently have.
+/// Process cleanup used by the ordinary (unsandboxed) launcher.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessTreeCleanupSupport {
     #[cfg(windows)]
@@ -149,13 +154,37 @@ pub enum ProcessTreeCleanupSupport {
 
 /// Probe the current platform and dependencies for native backend sandboxing.
 ///
-/// Honest result: the current transport can isolate process lifetime. On
-/// Windows, sandboxed AppContainer launch is available through the dedicated
-/// launcher below; other platforms remain unsupported for sandboxed native
-/// backends.
+/// On Linux the probe verifies Bubblewrap can apply the launch policy. A
+/// successful probe does not override errors in a particular package launch.
 pub fn native_backend_sandbox_support() -> NativeBackendSandboxSupport {
+    #[cfg(all(
+        target_os = "linux",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ))]
+    let feature = match linux_sandbox::probe() {
+        Ok(()) => SandboxFeatureSupport::Supported,
+        Err(reason) => SandboxFeatureSupport::Unsupported { reason },
+    };
     NativeBackendSandboxSupport {
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
+        filesystem: feature,
+        #[cfg(not(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        )))]
         filesystem: native_filesystem_sandbox_support(),
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
+        network: feature,
+        #[cfg(not(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        )))]
         network: native_network_sandbox_support(),
         process_cleanup: process_tree_cleanup_support(),
     }
@@ -168,7 +197,13 @@ fn native_filesystem_sandbox_support() -> SandboxFeatureSupport {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(
+    windows,
+    all(
+        target_os = "linux",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    )
+)))]
 fn native_filesystem_sandbox_support() -> SandboxFeatureSupport {
     SandboxFeatureSupport::Unsupported {
         reason:
@@ -183,7 +218,13 @@ fn native_network_sandbox_support() -> SandboxFeatureSupport {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(
+    windows,
+    all(
+        target_os = "linux",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    )
+)))]
 fn native_network_sandbox_support() -> SandboxFeatureSupport {
     SandboxFeatureSupport::Unsupported {
         reason: "no deny-by-default network sandbox API is wired for native backends",
@@ -247,8 +288,8 @@ impl StdioTransport {
         )
     }
 
-    /// Launch a native backend in a real Windows AppContainer. Unsupported
-    /// platforms fail closed before starting a process.
+    /// Launch a native backend with the platform's OS isolation. Unsupported
+    /// environments never fall back to an ordinary package process.
     pub fn spawn_sandboxed(
         app_container_name: &str,
         command: &str,
@@ -268,7 +309,22 @@ impl StdioTransport {
                 environment,
             )?)
         }
-        #[cfg(not(windows))]
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
+        {
+            let _ = (app_container_name, environment);
+            let launcher = linux_sandbox::prepare(command, args, payload_dir, data_dir)?;
+            Self::spawn_command("sandboxed native backend (Bubblewrap)", launcher)
+        }
+        #[cfg(not(any(
+            windows,
+            all(
+                target_os = "linux",
+                any(target_arch = "x86_64", target_arch = "aarch64")
+            )
+        )))]
         {
             let _ = (
                 app_container_name,
@@ -279,7 +335,7 @@ impl StdioTransport {
                 environment,
             );
             Err(McpError::Transport(
-                "sandboxed native backend launch requires Windows AppContainer".into(),
+                "sandboxed native backend launch is unsupported on this platform".into(),
             ))
         }
     }
@@ -295,7 +351,7 @@ impl StdioTransport {
     ) -> Result<Self, McpError> {
         if let NativeBackendLaunchPolicy::Sandboxed(request) = policy {
             return Err(McpError::Transport(format!(
-                "native sandboxed backend launch requires the AppContainer launcher; this launch path is unsandboxed (filesystem={}, network={})",
+                "native sandboxed backend launch requires a dedicated launcher; this launch path is unsandboxed (filesystem={}, network={})",
                 request.filesystem_label(),
                 request.network_label(),
             )));

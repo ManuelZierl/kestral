@@ -12,10 +12,10 @@ nav_order: 1
 {:toc}
 
 {: .warning }
-Grants, Runs, and provenance constrain actions mediated by Kestral. Native app
-backends and stdio tool servers can act directly with the backend operating-system
-account's filesystem and network authority until process isolation exists. A
-sandboxed app surface does not sandbox its backend.
+Grants, Runs, and provenance constrain actions mediated by Kestral. Unsandboxed
+native app backends and standalone stdio tool servers retain the backend
+operating-system account's filesystem and network authority. A sandboxed app
+surface does not sandbox its backend.
 
 ## Trust zones
 
@@ -301,10 +301,22 @@ owner can edit or delete the saved server without contacting it.
 ## Residual native-code authority
 
 {: .warning }
-Native backends and stdio tool servers are trusted backend code in the 0.1
-series. They run as the backend operating-system account. Kernel grants
+Unsandboxed native backends and standalone stdio tool servers run as the backend
+operating-system account. Kernel grants
 constrain actions sent through the host, not direct OS filesystem or network
 access by that process. Sandboxed app UI does not make its backend sandboxed.
+
+On supported Linux x86-64 and ARM64 hosts, a packaged `mcp-stdio` or
+`executable` backend with `authority_mode: "sandboxed"` uses Bubblewrap. It has
+a separate process, mount, IPC, and network view, cannot create network sockets
+or connect to host Unix sockets, and receives no ambient environment or file descriptors. It can read
+its package payload and the host's system binary and library directories, write
+its own app-data directory, and use private scratch space and basic virtual
+devices. This trusts the host kernel, administrator-managed runtime, and the
+filesystem supplied by the host. It does not enforce resource quotas or
+reverse-isolate app data from other unsandboxed processes on the host. If the
+required isolation cannot be established, Kestral refuses to run the backend;
+it does not retry without the sandbox.
 
 Package-declared app-data migration commands are native backend code with the
 same authority mode as their app backend. They are not kernel capabilities and

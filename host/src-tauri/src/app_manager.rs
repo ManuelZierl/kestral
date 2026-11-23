@@ -505,6 +505,9 @@ fn backend_policy_error(
     };
 
     match native {
+        BackendAuthorityMode::Sandboxed if matches!(backend, Backend::AgentWorker { .. }) => {
+            Some("OS sandboxing is not supported for agent-worker backends".into())
+        }
         BackendAuthorityMode::Sandboxed => {
             let support = native_backend_sandbox_support();
             if support.supports_sandboxed_execution() {

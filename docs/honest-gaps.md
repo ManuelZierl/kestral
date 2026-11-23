@@ -44,8 +44,10 @@ hidden fallback behavior.
 
 - Grants, Runs, and provenance cover actions mediated by Kestral. They do not
   observe or constrain direct actions by an unsandboxed native process.
-- Native app backends and stdio tool servers run as the backend OS user.
-  Filesystem and network access are not OS-sandboxed in the 0.1 series.
+- Linux OS isolation covers packaged `mcp-stdio` and executable backends that
+  declare `sandboxed`, including their migrations. Other operating systems,
+  agent workers, standalone stdio tool servers, and runtime resource quotas
+  are not covered by this launcher.
 - Release builds require a user-level opt-in before any unsandboxed native app
   can activate. The opt-in is host-wide rather than scoped to one package.
 - Custom app UI is sandboxed in an opaque-origin iframe, but OS-level per-frame
@@ -72,9 +74,8 @@ hidden fallback behavior.
   checked to be the same file the containment check saw, but a directory
   component replaced between resolution and open can still be followed
   consistently by both steps. Closing that window needs component-wise
-  `openat`/`O_NOFOLLOW` resolution. This is defence in depth rather than a live
-  escape: app backends are not OS-sandboxed (above), so a process able to win
-  the race can already read the file directly.
+  `openat`/`O_NOFOLLOW` resolution. Treat a brokered directory as trusted if
+  another local process can modify its directory entries concurrently.
 - Packaged MCP backends do not yet receive broker-mediated own secrets,
   initiate child Runs, consume minimized events, or propose multiple typed
   artifacts through the child protocol.

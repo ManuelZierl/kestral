@@ -82,6 +82,12 @@ package can activate.
 The per-user, non-administrator procedure and its broad security effect are
 documented under [Agent Engine opt-in]({{ internal_link_prefix }}{% link getting-started.md %}#agent-engine-opt-in).
 
+Packaged stdio and executable backends marked **sandboxed** can run on Linux
+x86-64 and ARM64 when the distribution's Bubblewrap is installed at
+`/usr/bin/bwrap` and the host permits the required isolation. Kestral refuses
+activation visibly if the sandbox is unavailable. The unsafe-backend opt-in
+does not override this refusal.
+
 ## Updates, downgrades, and revisions
 
 Inspecting another package with the same app ID starts a managed transition.
