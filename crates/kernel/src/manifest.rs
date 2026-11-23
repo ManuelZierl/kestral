@@ -106,6 +106,8 @@ pub struct ConnectorDeclaration {
     pub name: String,
     pub description: String,
     pub secret_names: Vec<SecretName>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secret_prefixes: Vec<String>,
     #[serde(default)]
     pub config_schema: Option<JsonObject>,
 }
@@ -296,6 +298,22 @@ impl AppManifest {
             "connector",
             self.connectors.iter().map(|c| c.name.as_str()),
         )?;
+        for connector in &self.connectors {
+            for prefix in &connector.secret_prefixes {
+                if prefix.is_empty() || prefix.chars().any(char::is_whitespace) {
+                    return Err(KernelError::ManifestContributionInvalid {
+                        app: self.app_id.clone(),
+                        contribution: "connector secret prefix",
+                        names: vec![prefix.clone()],
+                    });
+                }
+            }
+            require_unique(
+                &self.app_id,
+                "connector secret prefix",
+                connector.secret_prefixes.iter().map(String::as_str),
+            )?;
+        }
         require_unique(
             &self.app_id,
             "config declaration",
@@ -348,6 +366,13 @@ impl AppManifest {
         self.connectors
             .iter()
             .flat_map(|connector| connector.secret_names.iter().cloned())
+            .collect()
+    }
+
+    pub fn declared_secret_prefixes(&self) -> Vec<String> {
+        self.connectors
+            .iter()
+            .flat_map(|connector| connector.secret_prefixes.iter().cloned())
             .collect()
     }
 }

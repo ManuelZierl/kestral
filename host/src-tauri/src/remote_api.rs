@@ -581,10 +581,9 @@ async fn dispatch(
             )
             .await
         ),
-        "delete_connector_config" => done!(crate::delete_connector_config(
-            state!(),
-            argument(&arguments, "connectorId")?
-        )),
+        "delete_connector_config" => done!(
+            crate::delete_connector_config(state!(), argument(&arguments, "connectorId")?).await
+        ),
         "put_secret" => done!(
             crate::put_secret(
                 state!(),
