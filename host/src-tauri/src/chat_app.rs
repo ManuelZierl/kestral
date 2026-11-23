@@ -79,6 +79,7 @@ pub const CHAT_AGENT_ENGINE_CONTRACT: &str = "agent.run";
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ChatModelSettings {
     pub provider_profile_ref: Option<String>,
+    pub provider_egress_zone: Option<crate::config::LlmEgressZone>,
     pub model: Option<String>,
     pub reasoning: Option<String>,
     pub temperature: Option<f64>,
@@ -1807,13 +1808,17 @@ impl ChatSession {
                     &state.tool_definitions,
                     &state.model_settings,
                 );
+                let data_scope = crate::llm_provider::invocation_data_scope_for_target(
+                    kernel,
+                    &chat_app_id(),
+                    &capability,
+                    state.model_settings.provider_profile_ref.as_deref(),
+                    state.model_settings.provider_egress_zone,
+                );
                 let prepared = match kernel.prepare_invocation_with_timeout(
                     &child_run_id,
                     &capability,
-                    app_host_kernel::invocation::InvocationRequest {
-                        input,
-                        data_scope: app_host_kernel::primitives::grant::DataScope::None,
-                    },
+                    app_host_kernel::invocation::InvocationRequest { input, data_scope },
                     state.timeout,
                 ) {
                     Err(error) => {

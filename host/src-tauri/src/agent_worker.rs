@@ -294,11 +294,20 @@ struct ChildInvocation {
 
 impl KernelInvokerClient {
     pub(crate) fn spawn(kernel: Arc<Mutex<Kernel>>) -> Self {
+        Self::spawn_with_config(kernel, None)
+    }
+
+    pub(crate) fn spawn_with_config(
+        kernel: Arc<Mutex<Kernel>>,
+        host_config: Option<Arc<Mutex<crate::config::HostConfigService>>>,
+    ) -> Self {
         let (sender, receiver) = mpsc::sync_channel::<QueuedInvokerRequest>(INVOKER_QUEUE_CAPACITY);
         let kernel = Arc::downgrade(&kernel);
+        let host_config = host_config.map(|config| Arc::downgrade(&config));
         let receiver = Arc::new(Mutex::new(receiver));
         for worker in 0..INVOKER_WORKERS {
             let kernel = kernel.clone();
+            let host_config = host_config.clone();
             let receiver = receiver.clone();
             thread::Builder::new()
                 .name(format!("agent-invoker-{worker}"))
@@ -310,7 +319,7 @@ impl KernelInvokerClient {
                     let Ok(queued) = queued else {
                         return;
                     };
-                    handle_request(&kernel, queued.request);
+                    handle_request(&kernel, host_config.as_ref(), queued.request);
                 })
                 .expect("spawn agent kernel invoker worker");
         }
@@ -409,7 +418,11 @@ fn upgrade_kernel(kernel: &Weak<Mutex<Kernel>>) -> Result<Arc<Mutex<Kernel>>, St
 }
 
 /// Service one invoker request on a worker thread and answer its reply channel.
-fn handle_request(kernel: &Weak<Mutex<Kernel>>, request: InvokerRequest) {
+fn handle_request(
+    kernel: &Weak<Mutex<Kernel>>,
+    host_config: Option<&Weak<Mutex<crate::config::HostConfigService>>>,
+    request: InvokerRequest,
+) {
     match request {
         InvokerRequest::Available { app_id, reply } => {
             let result = upgrade_kernel(kernel).and_then(|kernel| {
@@ -426,8 +439,8 @@ fn handle_request(kernel: &Weak<Mutex<Kernel>>, request: InvokerRequest) {
             let _ = reply.send(result);
         }
         InvokerRequest::Invoke { request, reply } => {
-            let result =
-                upgrade_kernel(kernel).and_then(|kernel| dispatch_invocation(&kernel, request));
+            let result = upgrade_kernel(kernel)
+                .and_then(|kernel| dispatch_invocation(&kernel, host_config, request));
             let _ = reply.send(result);
         }
     }
@@ -435,6 +448,7 @@ fn handle_request(kernel: &Weak<Mutex<Kernel>>, request: InvokerRequest) {
 
 fn dispatch_invocation(
     kernel: &Arc<Mutex<Kernel>>,
+    host_config: Option<&Weak<Mutex<crate::config::HostConfigService>>>,
     request: ChildInvocation,
 ) -> Result<InvocationResult, String> {
     let ChildInvocation {
@@ -446,6 +460,26 @@ fn dispatch_invocation(
         progress,
         cancellation,
     } = request;
+    let llm_target = if capability.provider == crate::llm_provider::llm_provider_app_id() {
+        host_config
+            .and_then(Weak::upgrade)
+            .and_then(|config| {
+                config.lock().ok().map(|guard| {
+                    crate::llm_provider::resolve_target_profile_and_zone(&input, &guard)
+                })
+            })
+            .unwrap_or_else(|| {
+                (
+                    input
+                        .get("profile")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    None,
+                )
+            })
+    } else {
+        (None, None)
+    };
     let child_run_id = kernel
         .lock()
         .map_err(|_| "kernel lock poisoned".to_string())?
@@ -467,8 +501,17 @@ fn dispatch_invocation(
             let mut kernel = kernel
                 .lock()
                 .map_err(|_| "kernel lock poisoned".to_string())?;
-            let data_scope =
-                crate::tool_mapping::invocation_data_scope(&kernel, &app_id, &capability, &input);
+            let data_scope = if capability.provider == crate::llm_provider::llm_provider_app_id() {
+                crate::llm_provider::invocation_data_scope_for_target(
+                    &kernel,
+                    &app_id,
+                    &capability,
+                    llm_target.0.as_deref(),
+                    llm_target.1,
+                )
+            } else {
+                crate::tool_mapping::invocation_data_scope(&kernel, &app_id, &capability, &input)
+            };
             kernel
                 .prepare_invocation_with_timeout(
                     &child_run_id,

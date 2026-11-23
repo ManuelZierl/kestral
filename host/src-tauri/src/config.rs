@@ -734,12 +734,29 @@ where
     Option::<T>::deserialize(deserializer)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LlmEgressZone {
+    Local,
+    Cloud,
+}
+
+impl LlmEgressZone {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Cloud => "cloud",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LlmProfileRuntime {
     pub connector_id: String,
     pub kind: ConnectorKind,
     pub base_url: String,
+    pub egress_zone: LlmEgressZone,
     pub default_model: String,
     pub default_variant: Option<ModelVariant>,
     pub default_text_verbosity: Option<TextVerbosity>,
@@ -1623,10 +1640,16 @@ impl HostConfigService {
             .connectors
             .get(connector_id)
             .ok_or_else(|| format!("unknown LLM profile: {connector_id}"))?;
+        let egress_zone = if connector_is_cloud(connector) {
+            LlmEgressZone::Cloud
+        } else {
+            LlmEgressZone::Local
+        };
         Ok(LlmProfileRuntime {
             connector_id: connector_id.to_string(),
             kind: connector.kind,
             base_url: runtime_base_url(connector.kind, &connector.base_url),
+            egress_zone,
             default_model: connector.default_model.clone(),
             default_variant: connector.default_variant,
             default_text_verbosity: connector.default_text_verbosity,
@@ -2328,8 +2351,9 @@ fn active_llm_connector_id(config: &HostConfig) -> Option<String> {
 
 fn connector_is_cloud(connector: &ConnectorConfig) -> bool {
     match connector.kind {
-        ConnectorKind::Ollama => false,
-        ConnectorKind::OpenAiCompatible => !is_local_base_url(&connector.base_url),
+        ConnectorKind::Ollama | ConnectorKind::OpenAiCompatible => {
+            !is_local_base_url(&runtime_base_url(connector.kind, &connector.base_url))
+        }
         ConnectorKind::Openai
         | ConnectorKind::Anthropic
         | ConnectorKind::AnthropicOauth
@@ -2351,20 +2375,25 @@ fn is_local_base_url(base_url: &str) -> bool {
     let Some(host) = url.host_str() else {
         return false;
     };
-    let host = host.to_ascii_lowercase();
-    host == "localhost"
-        || host == "127.0.0.1"
-        || host == "0.0.0.0"
-        || host == "::1"
-        || host.ends_with(".local")
-        || host.starts_with("10.")
-        || host.starts_with("192.168.")
-        || host
-            .strip_prefix("172.")
-            .and_then(|suffix| suffix.split('.').next())
-            .and_then(|octet| octet.parse::<u8>().ok())
-            .map(|octet| (16..=31).contains(&octet))
-            .unwrap_or(false)
+    let unbracketed = host
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or(host);
+    if let Ok(ip) = unbracketed.parse::<std::net::IpAddr>() {
+        return match ip {
+            std::net::IpAddr::V4(v4) => {
+                v4.is_loopback() || v4.is_private() || v4.is_unspecified() || v4.is_link_local()
+            }
+            std::net::IpAddr::V6(v6) => {
+                let first = v6.segments()[0];
+                let is_unique_local = (first & 0xfe00) == 0xfc00;
+                let is_link_local = (first & 0xffc0) == 0xfe80;
+                v6.is_loopback() || v6.is_unspecified() || is_unique_local || is_link_local
+            }
+        };
+    }
+    let domain = unbracketed.trim_end_matches('.');
+    domain.eq_ignore_ascii_case("localhost") || domain.to_ascii_lowercase().ends_with(".local")
 }
 
 fn cloud_profile_acknowledged(config: &HostConfig, connector_id: &str) -> bool {

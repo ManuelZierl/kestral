@@ -485,3 +485,150 @@ fn resolve_profile_allows_non_default_authenticated_local_and_acknowledged_cloud
     .unwrap();
     assert_eq!(acked.connector_id, "llm-provider/acked-cloud");
 }
+
+#[test]
+fn llm_zone_and_profile_grants_block_cloud_egress_for_local_only_apps() {
+    use app_host_kernel::primitives::grant::{
+        GrantCondition, GrantDuration, GrantRequest, GrantScope,
+    };
+    use app_host_kernel::primitives::run::Initiator;
+    use app_host_kernel::services::chrome::SilentChrome;
+
+    let mut config_service = HostConfigService::default();
+    config_service
+        .upsert_connector_config(crate::config::ConnectorConfigView {
+            id: "llm-provider/local-ollama".into(),
+            kind: crate::config::ConnectorKind::Ollama,
+            base_url: "http://127.0.0.1:11434".into(),
+            default_model: "llama3.2".into(),
+            default_variant: None,
+            default_text_verbosity: None,
+            secret_refs: BTreeMap::new(),
+        })
+        .unwrap();
+    config_service
+        .upsert_connector_config_with_egress_acknowledgement(crate::config::ConnectorConfigView {
+            id: "llm-provider/cloud-openai".into(),
+            kind: crate::config::ConnectorKind::Openai,
+            base_url: "https://api.openai.com/v1".into(),
+            default_model: "gpt-4.1".into(),
+            default_variant: None,
+            default_text_verbosity: None,
+            secret_refs: BTreeMap::from([("api_key".into(), "cloud-key".into())]),
+        })
+        .unwrap();
+
+    let local_profile = config_service
+        .llm_profile("llm-provider/local-ollama")
+        .unwrap();
+    let cloud_profile = config_service
+        .llm_profile("llm-provider/cloud-openai")
+        .unwrap();
+    assert_eq!(local_profile.egress_zone, LlmEgressZone::Local);
+    assert_eq!(cloud_profile.egress_zone, LlmEgressZone::Cloud);
+
+    let mut kernel = Kernel::new(Arc::new(SilentChrome));
+    install_llm_provider(&mut kernel, Arc::new(Mutex::new(config_service))).unwrap();
+
+    let local_app = AppId::new("finance-local");
+    let local_manifest = AppManifest {
+        app_id: local_app.clone(),
+        version: "0.1.0".into(),
+        display_name: "Finance Local".into(),
+        description: "Local-only consumer".into(),
+        capabilities: vec![],
+        surfaces: vec![],
+        agents: vec![],
+        skills: vec![],
+        assistant_profiles: vec![],
+        automations: vec![],
+        connectors: vec![],
+        config_declarations: vec![],
+        artifact_types: vec![],
+        extension_points: vec![],
+        extension_contributions: vec![],
+        grant_requests: vec![GrantRequest {
+            scope: GrantScope::ExactCapability {
+                provider: llm_provider_app_id(),
+                capability: CapabilityName::new("llm.generate"),
+            },
+            data_scope: DataScope::Resources {
+                resource_ids: vec![llm_zone_resource_id(LlmEgressZone::Local)],
+            },
+            condition: GrantCondition::Silent,
+            reason: "Local model access only".into(),
+            duration: GrantDuration::NonExpiring,
+        }],
+        event_subscriptions: vec![],
+    };
+    kernel
+        .install(seal(local_manifest), BTreeMap::new())
+        .unwrap();
+
+    let llm_cap = CapabilityRef {
+        provider: llm_provider_app_id(),
+        capability: CapabilityName::new("llm.generate"),
+    };
+
+    // Local profile resolves to llm-zone:local and is permitted by the grant.
+    let local_scope = invocation_data_scope_for_target(
+        &kernel,
+        &local_app,
+        &llm_cap,
+        Some("llm-provider/local-ollama"),
+        Some(LlmEgressZone::Local),
+    );
+    assert_eq!(
+        local_scope,
+        DataScope::Resources {
+            resource_ids: vec![llm_zone_resource_id(LlmEgressZone::Local)]
+        }
+    );
+
+    // Cloud profile resolves to llm-profile:llm-provider/cloud-openai and is refused by the kernel.
+    let cloud_scope = invocation_data_scope_for_target(
+        &kernel,
+        &local_app,
+        &llm_cap,
+        Some("llm-provider/cloud-openai"),
+        Some(LlmEgressZone::Cloud),
+    );
+    assert_eq!(
+        cloud_scope,
+        DataScope::Resources {
+            resource_ids: vec![llm_profile_resource_id("llm-provider/cloud-openai")]
+        }
+    );
+    let run_id = kernel
+        .start_run(
+            Initiator::App {
+                app_id: local_app.clone(),
+                reason: "test cloud refusal".into(),
+            },
+            "attempt cloud call",
+        )
+        .unwrap();
+    let prepared = kernel
+        .prepare_invocation(
+            &run_id,
+            &llm_cap,
+            app_host_kernel::invocation::InvocationRequest {
+                input: object(json!({
+                    "profile": "llm-provider/cloud-openai",
+                    "messages": [{"role": "user", "content": "hi"}]
+                })),
+                data_scope: cloud_scope,
+            },
+        )
+        .unwrap();
+    assert!(matches!(
+        prepared,
+        app_host_kernel::kernel::PrepareInvocation::Refused(_)
+    ));
+
+    // Defense-in-depth: even if a caller passes llm-zone:local scope alongside a cloud profile,
+    // the handler check rejects the mismatch.
+    assert!(enforce_authorized_profile_scope(&local_scope, &local_profile).is_ok());
+    let mismatch = enforce_authorized_profile_scope(&local_scope, &cloud_profile).unwrap_err();
+    assert!(mismatch.0.contains("does not permit LLM profile"));
+}

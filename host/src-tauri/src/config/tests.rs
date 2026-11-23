@@ -608,6 +608,23 @@ fn per_profile_broker_secrets_resolve_concurrently_without_changing_default() {
 }
 
 #[test]
+fn local_endpoint_classification_rejects_deceptive_private_ip_hostnames() {
+    assert!(is_local_base_url("http://127.0.0.1:11434"));
+    assert!(is_local_base_url("http://10.0.0.5:8000/v1"));
+    assert!(is_local_base_url("http://172.16.0.1:8000/v1"));
+    assert!(is_local_base_url("http://192.168.1.20:8000/v1"));
+    assert!(is_local_base_url("http://[::1]:11434"));
+    assert!(is_local_base_url("http://[fd00::1]:8000/v1"));
+    assert!(is_local_base_url("http://localhost:11434"));
+    assert!(is_local_base_url("http://workstation.local:11434"));
+
+    assert!(!is_local_base_url("https://10.evil.com/v1"));
+    assert!(!is_local_base_url("https://192.168.evil.com/v1"));
+    assert!(!is_local_base_url("https://172.16.evil.com/v1"));
+    assert!(!is_local_base_url("https://api.openai.com/v1"));
+}
+
+#[test]
 fn selecting_cloud_default_requires_acknowledgement() {
     let mut service = HostConfigService::default();
     service

@@ -18,4 +18,21 @@ describe("dataScopeLabel", () => {
       "All current and future resources",
     );
   });
+
+  it("formats LLM zone and profile resource scopes clearly", () => {
+    expect(
+      dataScopeLabel({
+        kind: "resources",
+        resource_ids: ["llm-zone:local", "llm-profile:llm-provider/local-ollama"],
+      }),
+    ).toBe(
+      "Resources: Local LLM models (llm-zone:local), LLM profile llm-provider/local-ollama (llm-profile:llm-provider/local-ollama)",
+    );
+    expect(
+      dataScopeLabel({
+        kind: "resources",
+        resource_ids: ["llm-zone:cloud"],
+      }),
+    ).toBe("Resources: Cloud LLM models (llm-zone:cloud)");
+  });
 });

@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
-use app_host_kernel::ids::{AppId, ArtifactTypeName, CapabilityName, SurfaceName};
+use app_host_kernel::ids::{AppId, ArtifactTypeName, CapabilityName, ResourceId, SurfaceName};
 use app_host_kernel::invocation::{CapabilityHandler, CapabilityOutcome, HandlerFailure};
 use app_host_kernel::kernel::Kernel;
 use app_host_kernel::manifest::{seal, AppManifest, ArtifactTypeDeclaration, ConnectorDeclaration};
@@ -32,13 +32,14 @@ use app_host_kernel::primitives::artifact::ArtifactDraft;
 use app_host_kernel::primitives::capability::{
     CapabilityDeclaration, CapabilityEffect, CapabilityRef,
 };
-use app_host_kernel::primitives::grant::GrantOrigin;
+use app_host_kernel::primitives::grant::{DataScope, GrantOrigin};
 use app_host_kernel::primitives::surface::{SurfaceDeclaration, SurfaceKind};
 use app_host_kernel::JsonObject;
 use app_host_kernel::KernelResult;
 
 use crate::config::{
-    active_llm_api_key_secret, HostConfigService, LlmProfileRuntime, LLM_PROFILE_SECRET_PREFIX,
+    active_llm_api_key_secret, HostConfigService, LlmEgressZone, LlmProfileRuntime,
+    LLM_PROFILE_SECRET_PREFIX,
 };
 use crate::llm_client::{
     backend_from_profile_secrets, models_from_profile_secrets, ChatMessage, CompletionRequest,
@@ -87,6 +88,123 @@ pub fn llm_provider_app_id() -> AppId {
 
 pub const LLM_RESPONSE_ARTIFACT_TYPE: &str = "llm-response";
 pub const NO_PROVIDER_CONFIGURED_ERROR: &str = "no LLM provider profile is configured";
+pub const LLM_PROFILE_RESOURCE_PREFIX: &str = "llm-profile:";
+pub const LLM_ZONE_LOCAL_RESOURCE_ID: &str = "llm-zone:local";
+pub const LLM_ZONE_CLOUD_RESOURCE_ID: &str = "llm-zone:cloud";
+
+pub fn llm_profile_resource_id(connector_id: &str) -> ResourceId {
+    ResourceId::new(format!("{LLM_PROFILE_RESOURCE_PREFIX}{connector_id}"))
+}
+
+pub fn llm_zone_resource_id(zone: LlmEgressZone) -> ResourceId {
+    match zone {
+        LlmEgressZone::Local => ResourceId::new(LLM_ZONE_LOCAL_RESOURCE_ID),
+        LlmEgressZone::Cloud => ResourceId::new(LLM_ZONE_CLOUD_RESOURCE_ID),
+    }
+}
+
+/// Resolve the target `(connector_id, egress_zone)` for an LLM capability
+/// invocation using `input["profile"]` or the active default profile.
+pub fn resolve_target_profile_and_zone(
+    input: &JsonObject,
+    host_config: &HostConfigService,
+) -> (Option<String>, Option<LlmEgressZone>) {
+    if let Some(requested) = input.get("profile").and_then(Value::as_str) {
+        let zone = host_config
+            .llm_profile(requested)
+            .ok()
+            .map(|profile| profile.egress_zone);
+        return (Some(requested.to_string()), zone);
+    }
+    match host_config.current_llm_profile() {
+        Ok(Some(profile)) => (Some(profile.connector_id), Some(profile.egress_zone)),
+        _ => (None, None),
+    }
+}
+
+/// Select the `DataScope` to request when invoking an `llm-provider`
+/// capability on behalf of `holder`.
+///
+/// Precedence:
+/// 1. Exact profile resource (`llm-profile:<connector_id>`) if covered by an
+///    active grant (including `AllResources`).
+/// 2. Egress zone resource (`llm-zone:local` or `llm-zone:cloud`) if covered
+///    by an active zone-scoped grant.
+/// 3. Legacy unscoped `DataScope::None` if the holder holds an existing
+///    unscoped grant.
+/// 4. Otherwise request the exact profile resource so the kernel refuses with
+///    `NoGrant` and records the exact refused profile in the ledger.
+pub fn invocation_data_scope_for_target(
+    kernel: &Kernel,
+    holder: &AppId,
+    capability: &CapabilityRef,
+    connector_id: Option<&str>,
+    egress_zone: Option<LlmEgressZone>,
+) -> DataScope {
+    if capability.provider != llm_provider_app_id() {
+        return DataScope::None;
+    }
+    let Some(connector_id) = connector_id else {
+        return DataScope::None;
+    };
+    let profile_scope = DataScope::Resources {
+        resource_ids: vec![llm_profile_resource_id(connector_id)],
+    };
+    let zone_scope = egress_zone.map(|zone| DataScope::Resources {
+        resource_ids: vec![llm_zone_resource_id(zone)],
+    });
+    let grants: Vec<_> = kernel
+        .grants_for(holder)
+        .into_iter()
+        .filter(|grant| grant.scope.covers(capability))
+        .collect();
+    if grants
+        .iter()
+        .any(|grant| grant.data_scope.covers(&profile_scope))
+    {
+        return profile_scope;
+    }
+    if let Some(zone_scope) = zone_scope {
+        if grants
+            .iter()
+            .any(|grant| grant.data_scope.covers(&zone_scope))
+        {
+            return zone_scope;
+        }
+    }
+    if grants
+        .iter()
+        .any(|grant| grant.data_scope.covers(&DataScope::None))
+    {
+        return DataScope::None;
+    }
+    profile_scope
+}
+
+fn enforce_authorized_profile_scope(
+    authorized_scope: &DataScope,
+    profile: &LlmProfileRuntime,
+) -> Result<(), HandlerFailure> {
+    match authorized_scope {
+        DataScope::None | DataScope::AllResources => Ok(()),
+        DataScope::Resources { resource_ids } => {
+            let profile_id = llm_profile_resource_id(&profile.connector_id);
+            let zone_id = llm_zone_resource_id(profile.egress_zone);
+            if resource_ids
+                .iter()
+                .any(|id| id == &profile_id || id == &zone_id)
+            {
+                Ok(())
+            } else {
+                Err(HandlerFailure(format!(
+                    "authorized grant scope does not permit LLM profile '{}' (egress zone: {})",
+                    profile.connector_id,
+                    profile.egress_zone.as_str()
+                )))
+            }
+        }
+    }
+}
 
 fn object(value: Value) -> JsonObject {
     match value {
@@ -438,6 +556,7 @@ pub fn llm_provider_handlers(
         let Some(profile) = resolve_profile(input, &generate_config)? else {
             return Err(HandlerFailure(NO_PROVIDER_CONFIGURED_ERROR.into()));
         };
+        enforce_authorized_profile_scope(&context.authorized_data_scope, &profile)?;
         let model = input
             .get("model")
             .and_then(Value::as_str)
@@ -583,6 +702,7 @@ fn models_handler(host_config: Arc<Mutex<HostConfigService>>, refresh: bool) -> 
         }
         let profile = resolve_profile(input, &host_config)?
             .ok_or_else(|| HandlerFailure(NO_PROVIDER_CONFIGURED_ERROR.into()))?;
+        enforce_authorized_profile_scope(&context.authorized_data_scope, &profile)?;
         let needs_api_key = profile.api_key_secret_ref.is_some();
         let oauth_credential = read_profile_oauth_credential(&host_config, &profile)?;
         let result = models_from_profile_secrets(

@@ -190,11 +190,13 @@ pub(crate) async fn send_chat_message_with_progress(
         let selected_is_usable = selected.is_some();
         let (llm_profile, model_settings) = if let Some(receipt) = selected {
             let llm_profile = config.selectable_chat_llm_profile(&receipt.connector_id)?;
+            let egress_zone = llm_profile.egress_zone;
             let allowed_tool_refs = receipt.tool_refs.iter().cloned().collect();
             (
                 Some(llm_profile),
                 chat_app::ChatModelSettings {
                     provider_profile_ref: Some(receipt.connector_id.clone()),
+                    provider_egress_zone: Some(egress_zone),
                     model: Some(receipt.model.clone()),
                     reasoning: receipt.reasoning.clone(),
                     temperature: receipt.temperature,
@@ -210,6 +212,7 @@ pub(crate) async fn send_chat_message_with_progress(
                 llm_profile
                     .map(|profile| chat_app::ChatModelSettings {
                         provider_profile_ref: Some(profile.connector_id),
+                        provider_egress_zone: Some(profile.egress_zone),
                         ..chat_app::ChatModelSettings::default()
                     })
                     .unwrap_or_default(),
