@@ -8,7 +8,7 @@ use crate::llm_client::LlmResponse;
 fn bundled_manifest_identity_is_pinned_for_durable_installs() {
     assert_eq!(
         seal(llm_provider_manifest()).content_hash,
-        "760ee04c7f37196354d1db459a09bd4c4c3e027750b7bd46b5971522b5dea321"
+        "c8fec82c067a18c1d71beb0f7a5ecec3bc561936ff9e923620f67c816f2c651c"
     );
 }
 
@@ -188,7 +188,7 @@ fn models_capability_keeps_its_sealed_output_shape() {
 #[test]
 fn llm_capability_contracts_declare_effects_and_output_schemas() {
     let manifest = llm_provider_manifest();
-    assert_eq!(manifest.version, "0.4.0");
+    assert_eq!(manifest.version, "0.5.0");
     assert_eq!(manifest.capabilities.len(), 3);
 
     let contracts = manifest

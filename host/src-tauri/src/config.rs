@@ -1103,12 +1103,6 @@ impl HostConfigService {
             },
         );
         if acknowledge_data_egress {
-            let active_connector_id = active_llm_connector_id(&next);
-            if active_connector_id.as_deref() != Some(connector.id.as_str()) {
-                return Err(
-                    "data-egress acknowledgement is only valid for the default LLM profile".into(),
-                );
-            }
             let updated_connector = next
                 .connectors
                 .get(&connector.id)
