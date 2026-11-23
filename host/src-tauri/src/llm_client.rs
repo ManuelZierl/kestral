@@ -1188,7 +1188,6 @@ pub fn models_from_profile_secrets(
     connector_id: &str,
     kind: ConnectorKind,
     base_url: String,
-    _default_model: String,
     needs_api_key: bool,
     oauth_credential: Option<String>,
     refresh: bool,

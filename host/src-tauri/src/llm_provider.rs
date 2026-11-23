@@ -590,7 +590,6 @@ fn models_handler(host_config: Arc<Mutex<HostConfigService>>, refresh: bool) -> 
             &profile.connector_id,
             profile.kind,
             profile.base_url.clone(),
-            profile.default_model.clone(),
             needs_api_key,
             oauth_credential,
             refresh,
