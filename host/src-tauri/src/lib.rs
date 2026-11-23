@@ -2099,10 +2099,7 @@ async fn upsert_connector_config(
 }
 
 #[tauri::command]
-async fn delete_connector_config(
-    host: HostState<'_>,
-    connector_id: String,
-) -> Result<(), String> {
+async fn delete_connector_config(host: HostState<'_>, connector_id: String) -> Result<(), String> {
     let has_active_sends = !host
         .active_chat_sends
         .lock()

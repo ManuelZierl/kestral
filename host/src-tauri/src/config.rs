@@ -1669,7 +1669,8 @@ impl HostConfigService {
             .connectors
             .get(connector_id)
             .ok_or_else(|| format!("unknown LLM profile: {connector_id}"))?;
-        if !connector_is_cloud(connector) || cloud_profile_acknowledged(&self.document, connector_id)
+        if !connector_is_cloud(connector)
+            || cloud_profile_acknowledged(&self.document, connector_id)
         {
             return Ok(true);
         }

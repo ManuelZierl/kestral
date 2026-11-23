@@ -1430,10 +1430,8 @@ impl Kernel {
                 invoked_by_content_hash: installed.content_hash.clone(),
                 authorized_data_scope: pending.requested_data_scope.clone(),
                 secrets: {
-                    let provider_manifest = &self
-                        .registry
-                        .app(&pending.capability.provider)?
-                        .manifest;
+                    let provider_manifest =
+                        &self.registry.app(&pending.capability.provider)?.manifest;
                     self.broker.secret_resolver_for_with_prefixes(
                         &pending.capability.provider,
                         provider_manifest.declared_secret_names(),

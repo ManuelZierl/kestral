@@ -425,14 +425,20 @@ fn connector_secret_prefixes_resolve_only_matching_owned_secrets() {
     // Invalid prefixes fail fast at install.
     assert!(matches!(
         kernel
-            .install(seal(make_manifest(AppId::new("bad-empty"), vec!["".into()])), BTreeMap::new())
+            .install(
+                seal(make_manifest(AppId::new("bad-empty"), vec!["".into()])),
+                BTreeMap::new()
+            )
             .unwrap_err(),
         KernelError::ManifestContributionInvalid { .. }
     ));
     assert!(matches!(
         kernel
             .install(
-                seal(make_manifest(AppId::new("bad-space"), vec!["llm profile:".into()])),
+                seal(make_manifest(
+                    AppId::new("bad-space"),
+                    vec!["llm profile:".into()]
+                )),
                 BTreeMap::new()
             )
             .unwrap_err(),
@@ -452,10 +458,16 @@ fn connector_secret_prefixes_resolve_only_matching_owned_secrets() {
     ));
 
     kernel
-        .install(seal(make_manifest(app_a.clone(), vec!["profile:".into()])), BTreeMap::new())
+        .install(
+            seal(make_manifest(app_a.clone(), vec!["profile:".into()])),
+            BTreeMap::new(),
+        )
         .unwrap();
     kernel
-        .install(seal(make_manifest(app_b.clone(), vec!["profile:".into()])), BTreeMap::new())
+        .install(
+            seal(make_manifest(app_b.clone(), vec!["profile:".into()])),
+            BTreeMap::new(),
+        )
         .unwrap();
 
     kernel.put_secret(

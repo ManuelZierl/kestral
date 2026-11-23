@@ -446,21 +446,26 @@ fn resolve_profile_allows_non_default_authenticated_local_and_acknowledged_cloud
             })
             .unwrap();
         guard
-            .upsert_connector_config_with_egress_acknowledgement(crate::config::ConnectorConfigView {
-                id: "llm-provider/acked-cloud".into(),
-                kind: crate::config::ConnectorKind::Anthropic,
-                base_url: "https://api.anthropic.com/v1".into(),
-                default_model: "claude-sonnet-4-5".into(),
-                default_variant: None,
-                default_text_verbosity: None,
-                secret_refs: BTreeMap::from([("api_key".into(), "acked-key".into())]),
-            })
+            .upsert_connector_config_with_egress_acknowledgement(
+                crate::config::ConnectorConfigView {
+                    id: "llm-provider/acked-cloud".into(),
+                    kind: crate::config::ConnectorKind::Anthropic,
+                    base_url: "https://api.anthropic.com/v1".into(),
+                    default_model: "claude-sonnet-4-5".into(),
+                    default_variant: None,
+                    default_text_verbosity: None,
+                    secret_refs: BTreeMap::from([("api_key".into(), "acked-key".into())]),
+                },
+            )
             .unwrap();
     }
 
-    let local_auth = resolve_profile(&object(json!({"profile": "llm-provider/local-vllm"})), &config)
-        .unwrap()
-        .unwrap();
+    let local_auth = resolve_profile(
+        &object(json!({"profile": "llm-provider/local-vllm"})),
+        &config,
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(local_auth.connector_id, "llm-provider/local-vllm");
 
     let unacked_err = resolve_profile(
@@ -468,10 +473,15 @@ fn resolve_profile_allows_non_default_authenticated_local_and_acknowledged_cloud
         &config,
     )
     .unwrap_err();
-    assert!(unacked_err.0.contains("requires data-egress acknowledgement"));
+    assert!(unacked_err
+        .0
+        .contains("requires data-egress acknowledgement"));
 
-    let acked = resolve_profile(&object(json!({"profile": "llm-provider/acked-cloud"})), &config)
-        .unwrap()
-        .unwrap();
+    let acked = resolve_profile(
+        &object(json!({"profile": "llm-provider/acked-cloud"})),
+        &config,
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(acked.connector_id, "llm-provider/acked-cloud");
 }
