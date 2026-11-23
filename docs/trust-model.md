@@ -273,10 +273,17 @@ account eligibility, model availability, quota enforcement, and revocation;
 Kestral does not infer remaining quota or fall back to API-key billing.
 
 Profiles remain explicit authority and policy choices. Cloud profiles require
-the data-egress acknowledgement. Ambient AWS profiles, shared credential files,
-Vertex application-default credentials, and arbitrary provider environment
-lookup are disabled. A new multi-field credential form requires an explicit
-host config and secret schema before support is enabled.
+the data-egress acknowledgement. Grants for `llm-provider` capabilities
+(`llm.generate`, `llm.models.list`, `llm.models.refresh`) can be scoped through
+`DataScope::Resources` to exact provider profiles (`llm-profile:<connector_id>`)
+or egress zones (`llm-zone:local`, `llm-zone:cloud`). Local-versus-cloud
+classification parses IP literals rather than matching hostname prefixes, and
+the `llm-provider` handlers re-verify `context.authorized_data_scope` against
+the resolved profile and zone before invoking any provider worker. Ambient AWS
+profiles, shared credential files, Vertex application-default credentials, and
+arbitrary provider environment lookup are disabled. A new multi-field
+credential form requires an explicit host config and secret schema before
+support is enabled.
 
 No provider is selected in a fresh profile. An unconfigured `llm.generate`
 invocation fails visibly without reading a credential, starting the provider

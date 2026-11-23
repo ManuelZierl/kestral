@@ -491,7 +491,7 @@ fn llm_profile_resolves_by_connector_id_and_rejects_unknown() {
 }
 
 #[test]
-fn chat_model_profiles_cannot_select_an_inactive_cloud_credential() {
+fn chat_model_profiles_allow_acknowledged_inactive_credentials_and_reject_unacknowledged_cloud() {
     let mut service = HostConfigService::default();
     configure_local_ollama(&mut service);
     service
@@ -512,7 +512,116 @@ fn chat_model_profiles_cannot_select_an_inactive_cloud_credential() {
     let error = service
         .selectable_chat_llm_profile("llm-provider/work-openai")
         .unwrap_err();
-    assert!(error.contains("must be selected as Default for Chat"));
+    assert!(error.contains("requires data-egress acknowledgement"));
+
+    service
+        .upsert_connector_config_with_egress_acknowledgement(ConnectorConfigView {
+            id: "llm-provider/work-openai".into(),
+            kind: ConnectorKind::OpenAiCompatible,
+            base_url: "https://example.test/v1".into(),
+            default_model: "gpt-4.1".into(),
+            default_variant: None,
+            default_text_verbosity: None,
+            secret_refs: BTreeMap::from([("api_key".into(), "work-key".into())]),
+        })
+        .unwrap();
+    assert!(service
+        .selectable_chat_llm_profile("llm-provider/work-openai")
+        .is_ok());
+}
+
+#[test]
+fn per_profile_broker_secrets_resolve_concurrently_without_changing_default() {
+    let mut service = HostConfigService::default();
+    configure_local_ollama(&mut service);
+    service
+        .upsert_connector_config_with_egress_acknowledgement(ConnectorConfigView {
+            id: "llm-provider/work-openai".into(),
+            kind: ConnectorKind::Openai,
+            base_url: "https://api.openai.com/v1".into(),
+            default_model: "gpt-4.1".into(),
+            default_variant: None,
+            default_text_verbosity: None,
+            secret_refs: BTreeMap::from([("api_key".into(), "work-openai-key".into())]),
+        })
+        .unwrap();
+    service
+        .upsert_connector_config_with_egress_acknowledgement(ConnectorConfigView {
+            id: "llm-provider/personal-anthropic".into(),
+            kind: ConnectorKind::Anthropic,
+            base_url: "https://api.anthropic.com/v1".into(),
+            default_model: "claude-sonnet-4-5".into(),
+            default_variant: None,
+            default_text_verbosity: None,
+            secret_refs: BTreeMap::from([("api_key".into(), "personal-anthropic-key".into())]),
+        })
+        .unwrap();
+
+    let mut kernel = Kernel::new(Arc::new(SilentChrome));
+    let owner = llm_provider_id();
+    crate::llm_provider::install_llm_provider(
+        &mut kernel,
+        Arc::new(std::sync::Mutex::new(HostConfigService::default())),
+    )
+    .unwrap();
+    service
+        .put_secret(&mut kernel, &owner, "work-openai-key", "sk-work".into())
+        .unwrap();
+    service
+        .put_secret(
+            &mut kernel,
+            &owner,
+            "personal-anthropic-key",
+            "sk-personal".into(),
+        )
+        .unwrap();
+
+    let resolver = kernel.secret_resolver_for(&owner).unwrap();
+    assert_eq!(
+        resolver
+            .resolve(&llm_profile_api_key_secret("llm-provider/work-openai"))
+            .unwrap(),
+        "sk-work"
+    );
+    assert_eq!(
+        resolver
+            .resolve(&llm_profile_api_key_secret(
+                "llm-provider/personal-anthropic"
+            ))
+            .unwrap(),
+        "sk-personal"
+    );
+
+    HostConfigService::clear_llm_profile_secrets(&mut kernel, "llm-provider/work-openai");
+    let resolver = kernel.secret_resolver_for(&owner).unwrap();
+    assert!(resolver
+        .resolve(&llm_profile_api_key_secret("llm-provider/work-openai"))
+        .is_err());
+    assert_eq!(
+        resolver
+            .resolve(&llm_profile_api_key_secret(
+                "llm-provider/personal-anthropic"
+            ))
+            .unwrap(),
+        "sk-personal"
+    );
+}
+
+#[test]
+fn local_endpoint_classification_rejects_deceptive_private_ip_hostnames() {
+    assert!(is_local_base_url("http://127.0.0.1:11434"));
+    assert!(is_local_base_url("http://10.0.0.5:8000/v1"));
+    assert!(is_local_base_url("http://172.16.0.1:8000/v1"));
+    assert!(is_local_base_url("http://192.168.1.20:8000/v1"));
+    assert!(is_local_base_url("http://[::1]:11434"));
+    assert!(is_local_base_url("http://[fd00::1]:8000/v1"));
+    assert!(is_local_base_url("http://localhost:11434"));
+    assert!(is_local_base_url("http://workstation.local:11434"));
+
+    assert!(!is_local_base_url("https://10.evil.com/v1"));
+    assert!(!is_local_base_url("https://192.168.evil.com/v1"));
+    assert!(!is_local_base_url("https://172.16.evil.com/v1"));
+    assert!(!is_local_base_url("https://api.openai.com/v1"));
 }
 
 #[test]

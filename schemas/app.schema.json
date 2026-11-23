@@ -493,6 +493,10 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "secret_prefixes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "config_schema": { "$ref": "#/$defs/jsonSchemaObject" }
       }
     },

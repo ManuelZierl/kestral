@@ -2132,6 +2132,7 @@ fn plain_and_delegated_inputs_use_the_exact_composed_prompt() {
 fn model_settings_reach_plain_and_delegated_provider_calls() {
     let settings = ChatModelSettings {
         provider_profile_ref: Some("llm-provider/research".into()),
+        provider_egress_zone: None,
         model: Some("model-a".into()),
         reasoning: Some("high".into()),
         temperature: Some(0.3),

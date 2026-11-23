@@ -1429,13 +1429,15 @@ impl Kernel {
                 invoked_by_version: installed.manifest.version.clone(),
                 invoked_by_content_hash: installed.content_hash.clone(),
                 authorized_data_scope: pending.requested_data_scope.clone(),
-                secrets: self.broker.secret_resolver_for(
-                    &pending.capability.provider,
-                    self.registry
-                        .app(&pending.capability.provider)?
-                        .manifest
-                        .declared_secret_names(),
-                ),
+                secrets: {
+                    let provider_manifest =
+                        &self.registry.app(&pending.capability.provider)?.manifest;
+                    self.broker.secret_resolver_for_with_prefixes(
+                        &pending.capability.provider,
+                        provider_manifest.declared_secret_names(),
+                        provider_manifest.declared_secret_prefixes(),
+                    )
+                },
                 artifacts: self
                     .artifacts
                     .snapshot_resolver_for(&pending.requested_data_scope),
@@ -1895,10 +1897,14 @@ impl Kernel {
     }
 
     /// Broker-scoped secret access for the app's own connector handlers,
-    /// limited to the names its manifest declares.
+    /// limited to the names and prefixes its manifest declares.
     pub fn secret_resolver_for(&self, app_id: &AppId) -> KernelResult<SecretResolver> {
-        let declared = self.registry.app(app_id)?.manifest.declared_secret_names();
-        Ok(self.broker.secret_resolver_for(app_id, declared))
+        let manifest = &self.registry.app(app_id)?.manifest;
+        Ok(self.broker.secret_resolver_for_with_prefixes(
+            app_id,
+            manifest.declared_secret_names(),
+            manifest.declared_secret_prefixes(),
+        ))
     }
 
     pub fn drain_inbox(&mut self, app_id: &AppId) -> KernelResult<Vec<AppEventEnvelope>> {

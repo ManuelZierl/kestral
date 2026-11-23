@@ -93,8 +93,10 @@ export function connectorUsesOAuth(kind: ConnectorKind): boolean {
 
 export function connectorEndpointKind(connector: ConnectorConfigView): ConnectorEndpointKind {
   switch (connector.kind) {
-    case "ollama":
-      return "local-ollama";
+    case "ollama": {
+      const effectiveUrl = connector.base_url.trim() || "http://localhost:11434";
+      return isLocalBaseUrl(effectiveUrl) ? "local-ollama" : "cloud-provider";
+    }
     case "open-ai-compatible":
       return isLocalBaseUrl(connector.base_url)
         ? "local-openai-compatible"
@@ -121,18 +123,42 @@ function isLocalBaseUrl(baseUrl: string): boolean {
   // Keep local-endpoint detection aligned with host/src-tauri/src/config.rs.
   try {
     const url = new URL(baseUrl);
-    const hostname = url.hostname.toLowerCase();
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0" ||
-      hostname === "::1" ||
-      hostname.endsWith(".local") ||
-      /^10\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
-    );
+    const rawHost = url.hostname.toLowerCase();
+    const hostname =
+      rawHost.startsWith("[") && rawHost.endsWith("]") ? rawHost.slice(1, -1) : rawHost;
+    if (isLocalIpv4(hostname) || isLocalIpv6(hostname)) {
+      return true;
+    }
+    const domain = hostname.replace(/\.+$/, "");
+    return domain === "localhost" || domain.endsWith(".local");
   } catch {
     return false;
   }
+}
+
+function isLocalIpv4(host: string): boolean {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!match) return false;
+  const octets = match.slice(1).map(Number);
+  if (octets.some((octet) => octet < 0 || octet > 255)) return false;
+  const [a, b] = octets;
+  return (
+    a === 127 ||
+    a === 10 ||
+    (a === 192 && b === 168) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 169 && b === 254) ||
+    octets.every((octet) => octet === 0)
+  );
+}
+
+function isLocalIpv6(host: string): boolean {
+  if (!host.includes(":")) return false;
+  if (host === "::1" || host === "::") return true;
+  const firstSegment = host.split(":")[0];
+  if (!/^[0-9a-f]{1,4}$/.test(firstSegment)) return false;
+  const value = Number.parseInt(firstSegment, 16);
+  const isUniqueLocal = (value & 0xfe00) === 0xfc00;
+  const isLinkLocal = (value & 0xffc0) === 0xfe80;
+  return isUniqueLocal || isLinkLocal;
 }

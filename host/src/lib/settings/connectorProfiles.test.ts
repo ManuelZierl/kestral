@@ -108,4 +108,36 @@ describe("connectorProfiles", () => {
     expect(connectorCredentialLabel("amazon-bedrock")).toBe("Bearer token");
     expect(connectorCredentialLabel("anthropic")).toBe("API key");
   });
+
+  it("classifies deceptive private-IP hostnames and remote Ollama endpoints as cloud", () => {
+    for (const baseUrl of [
+      "https://10.evil.com/v1",
+      "https://192.168.evil.com/v1",
+      "https://172.16.evil.com/v1",
+    ]) {
+      expect(
+        connectorIsCloud({
+          id: "llm-provider/deceptive",
+          kind: "open-ai-compatible",
+          base_url: baseUrl,
+          default_model: "model",
+          default_variant: null,
+          default_text_verbosity: null,
+          secret_refs: {},
+        }),
+      ).toBe(true);
+    }
+
+    expect(
+      connectorIsCloud({
+        id: "llm-provider/remote-ollama",
+        kind: "ollama",
+        base_url: "https://ollama.example.com",
+        default_model: "llama3.2",
+        default_variant: null,
+        default_text_verbosity: null,
+        secret_refs: {},
+      }),
+    ).toBe(true);
+  });
 });

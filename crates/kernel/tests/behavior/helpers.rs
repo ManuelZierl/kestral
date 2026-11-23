@@ -345,6 +345,7 @@ pub fn notes_manifest_with_duration(
             name: "notes-backend".into(),
             description: "Imaginary remote notes backend".into(),
             secret_names: vec![api_token_secret()],
+            secret_prefixes: vec![],
             config_schema: None,
         }],
         config_declarations: vec![],

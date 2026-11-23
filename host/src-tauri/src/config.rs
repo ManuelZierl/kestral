@@ -734,12 +734,29 @@ where
     Option::<T>::deserialize(deserializer)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LlmEgressZone {
+    Local,
+    Cloud,
+}
+
+impl LlmEgressZone {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Cloud => "cloud",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LlmProfileRuntime {
     pub connector_id: String,
     pub kind: ConnectorKind,
     pub base_url: String,
+    pub egress_zone: LlmEgressZone,
     pub default_model: String,
     pub default_variant: Option<ModelVariant>,
     pub default_text_verbosity: Option<TextVerbosity>,
@@ -1103,12 +1120,6 @@ impl HostConfigService {
             },
         );
         if acknowledge_data_egress {
-            let active_connector_id = active_llm_connector_id(&next);
-            if active_connector_id.as_deref() != Some(connector.id.as_str()) {
-                return Err(
-                    "data-egress acknowledgement is only valid for the default LLM profile".into(),
-                );
-            }
             let updated_connector = next
                 .connectors
                 .get(&connector.id)
@@ -1629,10 +1640,16 @@ impl HostConfigService {
             .connectors
             .get(connector_id)
             .ok_or_else(|| format!("unknown LLM profile: {connector_id}"))?;
+        let egress_zone = if connector_is_cloud(connector) {
+            LlmEgressZone::Cloud
+        } else {
+            LlmEgressZone::Local
+        };
         Ok(LlmProfileRuntime {
             connector_id: connector_id.to_string(),
             kind: connector.kind,
             base_url: runtime_base_url(connector.kind, &connector.base_url),
+            egress_zone,
             default_model: connector.default_model.clone(),
             default_variant: connector.default_variant,
             default_text_verbosity: connector.default_text_verbosity,
@@ -1641,28 +1658,40 @@ impl HostConfigService {
         })
     }
 
-    /// Resolve a profile that Chat may pin without widening the invocation's
-    /// broker-authorized credential snapshot. Credential-free local profiles
-    /// can be selected directly; a credential-bearing profile must remain the
-    /// active default because only that profile owns the `active_api_key`
-    /// invocation alias.
+    /// Resolve a profile that Chat may pin. Every configured profile now has
+    /// its own broker-scoped credential (`llm_profile:<connector_id>:*`), so
+    /// credential-bearing profiles no longer need to be the global default.
+    /// Cloud profiles still require explicit data-egress acknowledgement unless
+    /// they are already the active default.
     pub fn selectable_chat_llm_profile(
         &self,
         connector_id: &str,
     ) -> Result<LlmProfileRuntime, String> {
         let profile = self.llm_profile(connector_id)?;
-        let needs_credential =
-            profile.api_key_secret_ref.is_some() || profile.oauth_secret_ref.is_some();
-        if needs_credential
-            && self
-                .current_llm_profile()?
-                .is_none_or(|active| active.connector_id != connector_id)
-        {
+        if !self.llm_profile_cloud_egress_allowed(connector_id)? {
             return Err(format!(
-                "LLM profile '{connector_id}' uses a credential and must be selected as Default for Chat before a model profile can use it"
+                "cloud LLM profile '{connector_id}' requires data-egress acknowledgement in Settings before it can be selected"
             ));
         }
         Ok(profile)
+    }
+
+    /// Return whether a configured LLM profile is allowed to be invoked without
+    /// bypassing cloud data-egress acknowledgement. Local profiles and
+    /// acknowledged cloud profiles are allowed; an already-active default
+    /// profile remains allowed for compatibility.
+    pub fn llm_profile_cloud_egress_allowed(&self, connector_id: &str) -> Result<bool, String> {
+        let connector = self
+            .document
+            .connectors
+            .get(connector_id)
+            .ok_or_else(|| format!("unknown LLM profile: {connector_id}"))?;
+        if !connector_is_cloud(connector)
+            || cloud_profile_acknowledged(&self.document, connector_id)
+        {
+            return Ok(true);
+        }
+        Ok(active_llm_connector_id(&self.document).as_deref() == Some(connector_id))
     }
 
     /// Read an OAuth credential for a configured LLM profile. Backend-only:
@@ -1745,10 +1774,64 @@ impl HostConfigService {
         Ok(())
     }
 
-    /// Keep the broker's active LLM alias current. A profile may validly have
-    /// no API key until the user enters one; handlers requiring it fail when
-    /// invoked, while callers that require it up front use `sync_active_llm_secret`.
+    /// Sync every configured LLM profile's credentials into the kernel broker
+    /// under its canonical per-profile secret name (`llm_profile:<id>:api_key`
+    /// and `llm_profile:<id>:oauth`). Transient secret-store read errors leave
+    /// any existing broker entry intact.
+    pub fn refresh_llm_profile_secrets(&self, kernel: &mut Kernel) {
+        let owner = AppId::new("llm-provider");
+        for (connector_id, connector) in &self.document.connectors {
+            let pairs = [
+                (
+                    connector.secret_refs.get("api_key").map(String::as_str),
+                    llm_profile_api_key_secret(connector_id),
+                ),
+                (
+                    connector.secret_refs.get("oauth").map(String::as_str),
+                    llm_profile_oauth_secret(connector_id),
+                ),
+            ];
+            for (local_ref, broker_name) in pairs {
+                let broker_ref = SecretRef {
+                    owner: owner.clone(),
+                    name: broker_name,
+                };
+                let Some(local_name) = local_ref else {
+                    kernel.clear_secret(&broker_ref);
+                    continue;
+                };
+                let stored_ref = SecretRef {
+                    owner: owner.clone(),
+                    name: SecretName::new(local_name),
+                };
+                match self.secrets.read(&stored_ref) {
+                    Ok(Some(secret_value)) => kernel.put_secret(broker_ref, secret_value),
+                    Ok(None) => kernel.clear_secret(&broker_ref),
+                    Err(_) => {}
+                }
+            }
+        }
+    }
+
+    /// Clear per-profile broker credentials for a removed LLM connector profile.
+    pub fn clear_llm_profile_secrets(kernel: &mut Kernel, connector_id: &str) {
+        let owner = AppId::new("llm-provider");
+        kernel.clear_secret(&SecretRef {
+            owner: owner.clone(),
+            name: llm_profile_api_key_secret(connector_id),
+        });
+        kernel.clear_secret(&SecretRef {
+            owner,
+            name: llm_profile_oauth_secret(connector_id),
+        });
+    }
+
+    /// Keep the broker's per-profile LLM credentials and active LLM alias
+    /// current. A profile may validly have no API key until the user enters
+    /// one; handlers requiring it fail when invoked, while callers that
+    /// require it up front use `sync_active_llm_secret`.
     pub fn refresh_active_llm_secret(&self, kernel: &mut Kernel) {
+        self.refresh_llm_profile_secrets(kernel);
         let active_ref = SecretRef {
             owner: AppId::new("llm-provider"),
             name: active_llm_api_key_secret(),
@@ -2268,8 +2351,9 @@ fn active_llm_connector_id(config: &HostConfig) -> Option<String> {
 
 fn connector_is_cloud(connector: &ConnectorConfig) -> bool {
     match connector.kind {
-        ConnectorKind::Ollama => false,
-        ConnectorKind::OpenAiCompatible => !is_local_base_url(&connector.base_url),
+        ConnectorKind::Ollama | ConnectorKind::OpenAiCompatible => {
+            !is_local_base_url(&runtime_base_url(connector.kind, &connector.base_url))
+        }
         ConnectorKind::Openai
         | ConnectorKind::Anthropic
         | ConnectorKind::AnthropicOauth
@@ -2291,20 +2375,25 @@ fn is_local_base_url(base_url: &str) -> bool {
     let Some(host) = url.host_str() else {
         return false;
     };
-    let host = host.to_ascii_lowercase();
-    host == "localhost"
-        || host == "127.0.0.1"
-        || host == "0.0.0.0"
-        || host == "::1"
-        || host.ends_with(".local")
-        || host.starts_with("10.")
-        || host.starts_with("192.168.")
-        || host
-            .strip_prefix("172.")
-            .and_then(|suffix| suffix.split('.').next())
-            .and_then(|octet| octet.parse::<u8>().ok())
-            .map(|octet| (16..=31).contains(&octet))
-            .unwrap_or(false)
+    let unbracketed = host
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or(host);
+    if let Ok(ip) = unbracketed.parse::<std::net::IpAddr>() {
+        return match ip {
+            std::net::IpAddr::V4(v4) => {
+                v4.is_loopback() || v4.is_private() || v4.is_unspecified() || v4.is_link_local()
+            }
+            std::net::IpAddr::V6(v6) => {
+                let first = v6.segments()[0];
+                let is_unique_local = (first & 0xfe00) == 0xfc00;
+                let is_link_local = (first & 0xffc0) == 0xfe80;
+                v6.is_loopback() || v6.is_unspecified() || is_unique_local || is_link_local
+            }
+        };
+    }
+    let domain = unbracketed.trim_end_matches('.');
+    domain.eq_ignore_ascii_case("localhost") || domain.to_ascii_lowercase().ends_with(".local")
 }
 
 fn cloud_profile_acknowledged(config: &HostConfig, connector_id: &str) -> bool {
@@ -2473,8 +2562,18 @@ fn merge_value(target: &mut Value, patch: Value) {
     }
 }
 
+pub const LLM_PROFILE_SECRET_PREFIX: &str = "llm_profile:";
+
 pub fn active_llm_api_key_secret() -> SecretName {
     SecretName::new("active_api_key")
+}
+
+pub fn llm_profile_api_key_secret(connector_id: &str) -> SecretName {
+    SecretName::new(format!("{LLM_PROFILE_SECRET_PREFIX}{connector_id}:api_key"))
+}
+
+pub fn llm_profile_oauth_secret(connector_id: &str) -> SecretName {
+    SecretName::new(format!("{LLM_PROFILE_SECRET_PREFIX}{connector_id}:oauth"))
 }
 
 #[cfg(test)]

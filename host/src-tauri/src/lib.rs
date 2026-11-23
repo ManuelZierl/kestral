@@ -389,8 +389,11 @@ async fn install_kernel_app_phased(
     let prepared = with_kernel_blocking(host.clone(), move |kernel| {
         let expected_manifest = manifest.clone();
         if let Ok(installed) = kernel.installed_app(&expected_manifest.manifest.app_id) {
-            if installed.manifest != expected_manifest.manifest
-                || installed.content_hash != expected_manifest.content_hash
+            if (installed.manifest != expected_manifest.manifest
+                || installed.content_hash != expected_manifest.content_hash)
+                && installed
+                    .manifest
+                    .has_same_upgrade_contract(&expected_manifest.manifest)
             {
                 kernel
                     .upgrade_app(expected_manifest, handlers)
@@ -2096,20 +2099,28 @@ async fn upsert_connector_config(
 }
 
 #[tauri::command]
-fn delete_connector_config(host: HostState<'_>, connector_id: String) -> Result<(), String> {
-    let active_sends = host
+async fn delete_connector_config(host: HostState<'_>, connector_id: String) -> Result<(), String> {
+    let has_active_sends = !host
         .active_chat_sends
         .lock()
-        .map_err(|_| "chat execution lock poisoned".to_string())?;
-    if !active_sends.is_empty() {
+        .map_err(|_| "chat execution lock poisoned".to_string())?
+        .is_empty();
+    if has_active_sends {
         return Err(
             "cancel or finish running Chat messages before changing provider settings".into(),
         );
     }
-    host.config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_string())?
-        .delete_connector_config(&connector_id)
+    let config = host.config.clone();
+    with_kernel_blocking(host.inner().clone(), move |kernel| {
+        let mut config = config
+            .lock()
+            .map_err(|_| "config lock poisoned".to_string())?;
+        config.delete_connector_config(&connector_id)?;
+        HostConfigService::clear_llm_profile_secrets(kernel, &connector_id);
+        config.refresh_active_llm_secret(kernel);
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -4018,7 +4029,9 @@ fn build_host_with_lock(
             .map_err(|error| format!("remove stale MCP app '{}': {error}", app_id))?;
     }
     let kernel = Arc::new(Mutex::new(kernel));
-    let kernel_invoker = agent_worker::KernelInvokerClient::spawn(kernel.clone());
+    let config = Arc::new(Mutex::new(config));
+    let kernel_invoker =
+        agent_worker::KernelInvokerClient::spawn_with_config(kernel.clone(), Some(config.clone()));
     let surface_ui = Arc::new(Mutex::new(SurfaceUiRegistry::new()));
     {
         let mut kernel_guard = kernel
@@ -4032,7 +4045,7 @@ fn build_host_with_lock(
     Ok(Arc::new(Host {
         kernel,
         kernel_invoker,
-        config: Arc::new(Mutex::new(config)),
+        config,
         chat_store: Arc::new(Mutex::new(chat_store)),
         active_chat_sends: Arc::new(Mutex::new(std::collections::HashMap::new())),
         pending,
