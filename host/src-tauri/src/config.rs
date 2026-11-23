@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -2291,20 +2292,13 @@ fn is_local_base_url(base_url: &str) -> bool {
     let Some(host) = url.host_str() else {
         return false;
     };
-    let host = host.to_ascii_lowercase();
-    host == "localhost"
-        || host == "127.0.0.1"
-        || host == "0.0.0.0"
-        || host == "::1"
-        || host.ends_with(".local")
-        || host.starts_with("10.")
-        || host.starts_with("192.168.")
-        || host
-            .strip_prefix("172.")
-            .and_then(|suffix| suffix.split('.').next())
-            .and_then(|octet| octet.parse::<u8>().ok())
-            .map(|octet| (16..=31).contains(&octet))
-            .unwrap_or(false)
+    if let Ok(ip) = host.parse::<Ipv4Addr>() {
+        return ip.is_private() || ip.is_loopback() || ip.is_unspecified();
+    }
+    host.eq_ignore_ascii_case("localhost")
+        || host.eq_ignore_ascii_case("[::1]")
+        || host.eq_ignore_ascii_case("::1")
+        || host.to_ascii_lowercase().ends_with(".local")
 }
 
 fn cloud_profile_acknowledged(config: &HostConfig, connector_id: &str) -> bool {

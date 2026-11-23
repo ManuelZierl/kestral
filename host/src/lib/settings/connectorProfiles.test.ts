@@ -46,6 +46,24 @@ describe("connectorProfiles", () => {
     ).toBe("cloud-openai-compatible");
   });
 
+  it("does not mistake hostnames with private IP prefixes for local addresses", () => {
+    const connector = {
+      id: "llm-provider/generic",
+      kind: "open-ai-compatible" as const,
+      base_url: "",
+      default_model: "model",
+      default_variant: null,
+      default_text_verbosity: null,
+      secret_refs: {},
+    };
+    for (const base_url of ["http://10.1.2.3/v1", "http://172.16.0.1/v1", "http://192.168.1.2/v1", "http://[::1]/v1"]) {
+      expect(connectorIsCloud({ ...connector, base_url }), base_url).toBe(false);
+    }
+    for (const base_url of ["https://10.attacker.example/v1", "https://172.16.attacker.example/v1", "https://192.168.attacker.example/v1"]) {
+      expect(connectorIsCloud({ ...connector, base_url }), base_url).toBe(true);
+    }
+  });
+
   it("derives a stable default secret ref name", () => {
     expect(defaultApiKeySecretName("llm-provider/work-openai")).toBe(
       "llm-provider/work-openai/api_key",
