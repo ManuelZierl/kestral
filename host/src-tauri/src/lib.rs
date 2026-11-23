@@ -4029,6 +4029,7 @@ fn build_host_with_lock(
             .map_err(|error| format!("remove stale MCP app '{}': {error}", app_id))?;
     }
     let kernel = Arc::new(Mutex::new(kernel));
+    let config = Arc::new(Mutex::new(config));
     let kernel_invoker =
         agent_worker::KernelInvokerClient::spawn_with_config(kernel.clone(), Some(config.clone()));
     let surface_ui = Arc::new(Mutex::new(SurfaceUiRegistry::new()));
@@ -4044,7 +4045,7 @@ fn build_host_with_lock(
     Ok(Arc::new(Host {
         kernel,
         kernel_invoker,
-        config: Arc::new(Mutex::new(config)),
+        config,
         chat_store: Arc::new(Mutex::new(chat_store)),
         active_chat_sends: Arc::new(Mutex::new(std::collections::HashMap::new())),
         pending,
