@@ -273,10 +273,14 @@ account eligibility, model availability, quota enforcement, and revocation;
 Kestral does not infer remaining quota or fall back to API-key billing.
 
 Profiles remain explicit authority and policy choices. Cloud profiles require
-the data-egress acknowledgement. Ambient AWS profiles, shared credential files,
-Vertex application-default credentials, and arbitrary provider environment
-lookup are disabled. A new multi-field credential form requires an explicit
-host config and secret schema before support is enabled.
+the data-egress acknowledgement. OpenAI-compatible endpoints at loopback,
+RFC 1918 IPv4 addresses, or `.local` hosts are treated as local; other DNS
+hosts, including names that begin with private-address-looking labels, require
+acknowledgement. This classification is based on the configured URL, not a
+guarantee about DNS resolution or network routing. Ambient AWS profiles,
+shared credential files, Vertex application-default credentials, and arbitrary
+provider environment lookup are disabled. A new multi-field credential form
+requires an explicit host config and secret schema before support is enabled.
 
 No provider is selected in a fresh profile. An unconfigured `llm.generate`
 invocation fails visibly without reading a credential, starting the provider

@@ -422,6 +422,27 @@ fn cloud_policy_covers_all_provider_kinds_and_generic_loopback_is_local() {
         ConnectorKind::OpenAiCompatible,
         "http://127.0.0.1:8080/v1"
     )));
+    for base_url in [
+        "http://10.1.2.3:8080/v1",
+        "http://172.16.0.1:8080/v1",
+        "http://192.168.1.2:8080/v1",
+        "http://[::1]:8080/v1",
+    ] {
+        assert!(
+            !connector_is_cloud(&connector(ConnectorKind::OpenAiCompatible, base_url)),
+            "{base_url}"
+        );
+    }
+    for base_url in [
+        "https://10.attacker.example/v1",
+        "https://172.16.attacker.example/v1",
+        "https://192.168.attacker.example/v1",
+    ] {
+        assert!(
+            connector_is_cloud(&connector(ConnectorKind::OpenAiCompatible, base_url)),
+            "{base_url}"
+        );
+    }
     assert!(connector_is_cloud(&connector(
         ConnectorKind::OpenAiCompatible,
         "https://remote.example/v1"
@@ -541,6 +562,36 @@ fn selecting_cloud_default_requires_acknowledgement() {
         .unwrap_err();
 
     assert!(error.contains("acknowledge the data-egress policy"));
+}
+
+#[test]
+fn private_ip_prefix_hostname_requires_cloud_acknowledgement() {
+    let mut service = HostConfigService::default();
+    service
+        .upsert_connector_config(ConnectorConfigView {
+            id: "llm-provider/remote-openai".into(),
+            kind: ConnectorKind::OpenAiCompatible,
+            base_url: "https://10.attacker.example/v1".into(),
+            default_model: "model".into(),
+            default_variant: None,
+            default_text_verbosity: None,
+            secret_refs: BTreeMap::from([("api_key".into(), "remote-key".into())]),
+        })
+        .unwrap();
+    write_secret(&mut service, "remote-key", "secret-value");
+
+    let error = service
+        .update_host_config(
+            serde_json::from_value(json!({
+                "host": { "default_llm_profile": "remote-openai" }
+            }))
+            .unwrap(),
+        )
+        .unwrap_err();
+    assert!(
+        error.contains("acknowledge the data-egress policy"),
+        "{error}"
+    );
 }
 
 #[test]
