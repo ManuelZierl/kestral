@@ -160,6 +160,7 @@ export interface ConnectorDeclaration {
   name: string;
   description: string;
   secret_names: string[];
+  secret_prefixes?: string[];
   config_schema: JsonObject | null;
 }
 

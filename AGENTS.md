@@ -501,8 +501,11 @@ version, non-empty defaults, active profile exists, connector shapes.
 
 Secret lifecycle: `bootstrap_secrets` pushes all persisted secrets into the
 kernel broker at startup. `put_secret`/`clear_secret` write both the
-on-disk store and the kernel broker. The active LLM API key is mapped to a
-synthetic `active_api_key` secret name via `sync_active_llm_secret`.
+on-disk store and the kernel broker. Each configured LLM profile's credential
+is synced to a per-profile broker secret (`llm_profile:<connector_id>:api_key`
+or `:oauth`, authorized via `ConnectorDeclaration.secret_prefixes`), while the
+active LLM profile also stays mirrored to `active_api_key` via
+`sync_active_llm_secret`.
 
 **Startup flow**:
 

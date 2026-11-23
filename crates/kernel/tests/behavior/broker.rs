@@ -333,6 +333,7 @@ fn malicious_app_cannot_resolve_another_owners_matching_secret_name() {
             name: "stolen-notes-backend".into(),
             description: "Declares the notes secret name".into(),
             secret_names: vec![api_token_secret()],
+            secret_prefixes: vec![],
             config_schema: None,
         }],
         config_declarations: vec![],
@@ -386,6 +387,143 @@ fn uninstall_clears_owned_secrets() {
     let resolver = kernel.secret_resolver_for(&notes_app()).unwrap();
     assert!(matches!(
         resolver.resolve(&api_token_secret()).unwrap_err(),
+        KernelError::UnknownSecret(_)
+    ));
+}
+
+#[test]
+fn connector_secret_prefixes_resolve_only_matching_owned_secrets() {
+    let (mut kernel, _, _) = test_kernel();
+    let app_a = AppId::new("provider-a");
+    let app_b = AppId::new("provider-b");
+    let make_manifest = |app_id: AppId, prefixes: Vec<String>| AppManifest {
+        app_id,
+        version: "0.1.0".into(),
+        display_name: "Provider".into(),
+        description: "Multi-profile provider".into(),
+        capabilities: vec![],
+        surfaces: vec![],
+        agents: vec![],
+        skills: vec![],
+        assistant_profiles: vec![],
+        automations: vec![],
+        connectors: vec![ConnectorDeclaration {
+            name: "profiles".into(),
+            description: "Per-profile credentials".into(),
+            secret_names: vec![],
+            secret_prefixes: prefixes,
+            config_schema: None,
+        }],
+        config_declarations: vec![],
+        artifact_types: vec![],
+        extension_points: vec![],
+        extension_contributions: vec![],
+        grant_requests: vec![],
+        event_subscriptions: vec![],
+    };
+
+    // Invalid prefixes fail fast at install.
+    assert!(matches!(
+        kernel
+            .install(seal(make_manifest(AppId::new("bad-empty"), vec!["".into()])), BTreeMap::new())
+            .unwrap_err(),
+        KernelError::ManifestContributionInvalid { .. }
+    ));
+    assert!(matches!(
+        kernel
+            .install(
+                seal(make_manifest(AppId::new("bad-space"), vec!["llm profile:".into()])),
+                BTreeMap::new()
+            )
+            .unwrap_err(),
+        KernelError::ManifestContributionInvalid { .. }
+    ));
+    assert!(matches!(
+        kernel
+            .install(
+                seal(make_manifest(
+                    AppId::new("bad-dup"),
+                    vec!["profile:".into(), "profile:".into()]
+                )),
+                BTreeMap::new()
+            )
+            .unwrap_err(),
+        KernelError::ManifestContributionInvalid { .. }
+    ));
+
+    kernel
+        .install(seal(make_manifest(app_a.clone(), vec!["profile:".into()])), BTreeMap::new())
+        .unwrap();
+    kernel
+        .install(seal(make_manifest(app_b.clone(), vec!["profile:".into()])), BTreeMap::new())
+        .unwrap();
+
+    kernel.put_secret(
+        SecretRef {
+            owner: app_a.clone(),
+            name: SecretName::new("profile:work:api_key"),
+        },
+        "work-secret".into(),
+    );
+    kernel.put_secret(
+        SecretRef {
+            owner: app_a.clone(),
+            name: SecretName::new("profile:personal:api_key"),
+        },
+        "personal-secret".into(),
+    );
+    kernel.put_secret(
+        SecretRef {
+            owner: app_a.clone(),
+            name: SecretName::new("other:secret"),
+        },
+        "undeclared-secret".into(),
+    );
+    kernel.put_secret(
+        SecretRef {
+            owner: app_b.clone(),
+            name: SecretName::new("profile:work:api_key"),
+        },
+        "other-app-secret".into(),
+    );
+
+    let resolver_a = kernel.secret_resolver_for(&app_a).unwrap();
+    assert_eq!(
+        resolver_a
+            .resolve(&SecretName::new("profile:work:api_key"))
+            .unwrap(),
+        "work-secret"
+    );
+    assert_eq!(
+        resolver_a
+            .resolve(&SecretName::new("profile:personal:api_key"))
+            .unwrap(),
+        "personal-secret"
+    );
+    assert!(matches!(
+        resolver_a
+            .resolve(&SecretName::new("profile:missing:api_key"))
+            .unwrap_err(),
+        KernelError::UnknownSecret(_)
+    ));
+    assert!(matches!(
+        resolver_a
+            .resolve(&SecretName::new("other:secret"))
+            .unwrap_err(),
+        KernelError::UndeclaredSecret(_)
+    ));
+
+    let resolver_b = kernel.secret_resolver_for(&app_b).unwrap();
+    assert_eq!(
+        resolver_b
+            .resolve(&SecretName::new("profile:work:api_key"))
+            .unwrap(),
+        "other-app-secret"
+    );
+    assert!(matches!(
+        resolver_b
+            .resolve(&SecretName::new("profile:personal:api_key"))
+            .unwrap_err(),
         KernelError::UnknownSecret(_)
     ));
 }

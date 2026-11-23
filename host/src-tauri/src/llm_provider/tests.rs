@@ -396,3 +396,82 @@ fn generation_persists_oauth_rotation_on_success_and_failure() {
         assert!(stored.contains(access));
     }
 }
+
+#[test]
+fn resolve_profile_allows_non_default_authenticated_local_and_acknowledged_cloud_profiles() {
+    let config = Arc::new(Mutex::new(HostConfigService::default()));
+    {
+        let mut guard = config.lock().unwrap();
+        guard
+            .upsert_connector_config(crate::config::ConnectorConfigView {
+                id: "llm-provider/local-ollama".into(),
+                kind: crate::config::ConnectorKind::Ollama,
+                base_url: "http://127.0.0.1:11434".into(),
+                default_model: "llama3.2".into(),
+                default_variant: None,
+                default_text_verbosity: None,
+                secret_refs: BTreeMap::new(),
+            })
+            .unwrap();
+        guard
+            .update_host_config(
+                serde_json::from_value(json!({
+                    "host": {
+                        "default_llm_profile": "local-ollama"
+                    }
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        guard
+            .upsert_connector_config(crate::config::ConnectorConfigView {
+                id: "llm-provider/local-vllm".into(),
+                kind: crate::config::ConnectorKind::OpenAiCompatible,
+                base_url: "http://127.0.0.1:8000/v1".into(),
+                default_model: "qwen2.5".into(),
+                default_variant: None,
+                default_text_verbosity: None,
+                secret_refs: BTreeMap::from([("api_key".into(), "vllm-key".into())]),
+            })
+            .unwrap();
+        guard
+            .upsert_connector_config(crate::config::ConnectorConfigView {
+                id: "llm-provider/unacked-cloud".into(),
+                kind: crate::config::ConnectorKind::Openai,
+                base_url: "https://api.openai.com/v1".into(),
+                default_model: "gpt-4.1".into(),
+                default_variant: None,
+                default_text_verbosity: None,
+                secret_refs: BTreeMap::from([("api_key".into(), "unacked-key".into())]),
+            })
+            .unwrap();
+        guard
+            .upsert_connector_config_with_egress_acknowledgement(crate::config::ConnectorConfigView {
+                id: "llm-provider/acked-cloud".into(),
+                kind: crate::config::ConnectorKind::Anthropic,
+                base_url: "https://api.anthropic.com/v1".into(),
+                default_model: "claude-sonnet-4-5".into(),
+                default_variant: None,
+                default_text_verbosity: None,
+                secret_refs: BTreeMap::from([("api_key".into(), "acked-key".into())]),
+            })
+            .unwrap();
+    }
+
+    let local_auth = resolve_profile(&object(json!({"profile": "llm-provider/local-vllm"})), &config)
+        .unwrap()
+        .unwrap();
+    assert_eq!(local_auth.connector_id, "llm-provider/local-vllm");
+
+    let unacked_err = resolve_profile(
+        &object(json!({"profile": "llm-provider/unacked-cloud"})),
+        &config,
+    )
+    .unwrap_err();
+    assert!(unacked_err.0.contains("requires data-egress acknowledgement"));
+
+    let acked = resolve_profile(&object(json!({"profile": "llm-provider/acked-cloud"})), &config)
+        .unwrap()
+        .unwrap();
+    assert_eq!(acked.connector_id, "llm-provider/acked-cloud");
+}

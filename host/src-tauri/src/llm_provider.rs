@@ -37,7 +37,9 @@ use app_host_kernel::primitives::surface::{SurfaceDeclaration, SurfaceKind};
 use app_host_kernel::JsonObject;
 use app_host_kernel::KernelResult;
 
-use crate::config::{active_llm_api_key_secret, HostConfigService, LlmProfileRuntime};
+use crate::config::{
+    active_llm_api_key_secret, HostConfigService, LlmProfileRuntime, LLM_PROFILE_SECRET_PREFIX,
+};
 use crate::llm_client::{
     backend_from_profile_secrets, models_from_profile_secrets, ChatMessage, CompletionRequest,
     LlmBackend, LlmProviderError, NormalizedModel, OAuthCredential, ToolDefinition,
@@ -327,6 +329,10 @@ fn connector_declaration(
             .then(active_llm_api_key_secret)
             .into_iter()
             .collect(),
+        secret_prefixes: requires_secret
+            .then(|| LLM_PROFILE_SECRET_PREFIX.to_string())
+            .into_iter()
+            .collect(),
         config_schema: Some(object(json!({
             "type": "object",
             "properties": {
@@ -342,7 +348,7 @@ fn connector_declaration(
 pub fn llm_provider_manifest() -> AppManifest {
     AppManifest {
         app_id: llm_provider_app_id(),
-        version: "0.4.0".into(),
+        version: "0.5.0".into(),
         display_name: "LLM Provider".into(),
         description: "Provides generation and model discovery through broker-mediated secrets"
             .into(),
@@ -456,6 +462,7 @@ pub fn llm_provider_handlers(
         let oauth_credential = read_profile_oauth_credential(&generate_config, &profile)?;
         let backend = backend_from_profile_secrets(
             &context.secrets,
+            &profile.connector_id,
             profile.kind,
             profile.base_url.clone(),
             profile.api_key_secret_ref.is_some(),
@@ -556,14 +563,13 @@ fn resolve_profile(
         }
     };
 
-    // The broker exposes only the active profile's synthetic credential.
     if !is_active_default
-        && (profile.api_key_secret_ref.is_some() || profile.oauth_secret_ref.is_some())
+        && !guard
+            .llm_profile_cloud_egress_allowed(&profile.connector_id)
+            .map_err(HandlerFailure)?
     {
         return Err(HandlerFailure(format!(
-            "LLM profile '{}' was pinned for this request but is no longer \
-             the active default, so its credential is unavailable. Retry with \
-             the current default profile.",
+            "cloud LLM profile '{}' requires data-egress acknowledgement in Settings before it can be used",
             profile.connector_id
         )));
     }
@@ -581,6 +587,7 @@ fn models_handler(host_config: Arc<Mutex<HostConfigService>>, refresh: bool) -> 
         let oauth_credential = read_profile_oauth_credential(&host_config, &profile)?;
         let result = models_from_profile_secrets(
             &context.secrets,
+            &profile.connector_id,
             profile.kind,
             profile.base_url.clone(),
             profile.default_model.clone(),

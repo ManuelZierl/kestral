@@ -21,7 +21,10 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::chrome::{OAuthControl, OAuthPublicEvent, PendingOAuthSessions};
-use crate::config::{active_llm_api_key_secret, ConnectorKind, ModelVariant, TextVerbosity};
+use crate::config::{
+    llm_profile_api_key_secret, llm_profile_oauth_secret, ConnectorKind, ModelVariant,
+    TextVerbosity,
+};
 use crate::node_worker::{NodeWorkerProcess, WorkerPathConfig, WorkerPaths};
 
 const PROTOCOL_VERSION: u32 = 2;
@@ -1157,6 +1160,7 @@ fn provider_worker_path_config() -> WorkerPathConfig<'static> {
 
 pub fn backend_from_profile_secrets(
     resolver: &app_host_kernel::services::broker::SecretResolver,
+    connector_id: &str,
     kind: ConnectorKind,
     base_url: String,
     needs_api_key: bool,
@@ -1164,6 +1168,7 @@ pub fn backend_from_profile_secrets(
 ) -> Result<Box<dyn LlmBackend>, String> {
     Ok(Box::new(backend_from_resolver(
         resolver,
+        connector_id,
         kind,
         base_url,
         needs_api_key,
@@ -1180,6 +1185,7 @@ pub type ModelListingOutcome = (
 
 pub fn models_from_profile_secrets(
     resolver: &app_host_kernel::services::broker::SecretResolver,
+    connector_id: &str,
     kind: ConnectorKind,
     base_url: String,
     _default_model: String,
@@ -1187,8 +1193,15 @@ pub fn models_from_profile_secrets(
     oauth_credential: Option<String>,
     refresh: bool,
 ) -> Result<ModelListingOutcome, LlmProviderError> {
-    let backend = backend_from_resolver(resolver, kind, base_url, needs_api_key, oauth_credential)
-        .map_err(LlmProviderError)?;
+    let backend = backend_from_resolver(
+        resolver,
+        connector_id,
+        kind,
+        base_url,
+        needs_api_key,
+        oauth_credential,
+    )
+    .map_err(LlmProviderError)?;
     let result = backend.models(refresh);
     let update = backend.take_credential_update()?;
     Ok((result, update))
@@ -1212,6 +1225,7 @@ pub fn models_from_config(
 
 fn backend_from_resolver(
     resolver: &app_host_kernel::services::broker::SecretResolver,
+    connector_id: &str,
     kind: ConnectorKind,
     base_url: String,
     needs_api_key: bool,
@@ -1220,7 +1234,7 @@ fn backend_from_resolver(
     let api_key = if needs_api_key {
         Some(
             resolver
-                .resolve(&active_llm_api_key_secret())
+                .resolve(&llm_profile_api_key_secret(connector_id))
                 .map_err(|error| format!("missing configured API key: {error}"))?
                 .to_string(),
         )
@@ -1228,11 +1242,11 @@ fn backend_from_resolver(
         None
     };
     let oauth_credential = if kind.defaults().oauth_credential_required {
-        // Resolve the broker alias first. The latest persisted profile value
-        // is then used so a worker rotation takes effect on the next call
-        // without bypassing broker authorization.
+        // Resolve the per-profile broker credential first so broker
+        // authorization is enforced. The latest persisted profile value is
+        // then used so a worker rotation takes effect on the next call.
         resolver
-            .resolve(&active_llm_api_key_secret())
+            .resolve(&llm_profile_oauth_secret(connector_id))
             .map_err(|error| format!("missing configured OAuth credential: {error}"))?;
         Some(OAuthCredential::parse_serialized(
             oauth_credential

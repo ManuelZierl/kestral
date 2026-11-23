@@ -55,12 +55,21 @@ pub enum GrantCheck {
 #[derive(Clone)]
 pub struct SecretResolver {
     declared: BTreeSet<SecretName>,
+    declared_prefixes: Vec<String>,
     secrets: BTreeMap<SecretName, String>,
 }
 
 impl SecretResolver {
+    fn is_declared(&self, name: &SecretName) -> bool {
+        self.declared.contains(name)
+            || self
+                .declared_prefixes
+                .iter()
+                .any(|prefix| name.as_str().starts_with(prefix))
+    }
+
     pub fn resolve(&self, name: &SecretName) -> KernelResult<&str> {
-        if !self.declared.contains(name) {
+        if !self.is_declared(name) {
             return Err(KernelError::UndeclaredSecret(name.clone()));
         }
         self.secrets
@@ -326,13 +335,35 @@ impl PermissionBroker {
     /// are included, providing per-app namespacing without a global
     /// namespace.
     pub fn secret_resolver_for(&self, owner: &AppId, declared: Vec<SecretName>) -> SecretResolver {
+        self.secret_resolver_for_with_prefixes(owner, declared, Vec::new())
+    }
+
+    /// Secret access for `owner`, scoped to its exact declared secret names
+    /// and declared secret-name prefixes (e.g. for dynamic per-profile
+    /// connector credentials).
+    pub fn secret_resolver_for_with_prefixes(
+        &self,
+        owner: &AppId,
+        declared: Vec<SecretName>,
+        declared_prefixes: Vec<String>,
+    ) -> SecretResolver {
         let declared: BTreeSet<SecretName> = declared.into_iter().collect();
         let secrets = self
             .secrets
             .iter()
-            .filter(|(ref_, _)| &ref_.owner == owner && declared.contains(&ref_.name))
+            .filter(|(ref_, _)| {
+                &ref_.owner == owner
+                    && (declared.contains(&ref_.name)
+                        || declared_prefixes
+                            .iter()
+                            .any(|prefix| ref_.name.as_str().starts_with(prefix)))
+            })
             .map(|(ref_, value)| (ref_.name.clone(), value.clone()))
             .collect();
-        SecretResolver { declared, secrets }
+        SecretResolver {
+            declared,
+            declared_prefixes,
+            secrets,
+        }
     }
 }
