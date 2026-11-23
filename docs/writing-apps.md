@@ -1169,10 +1169,21 @@ destructive work as `local-write`.
 See [Agent workers]({{ internal_link_prefix }}{% link agent-workers.md %}) for the complete version 1
 message contract, limits, callback mediation, progress, and cancellation rules.
 
-Native backend kinds declare `authority_mode`. In the 0.1 series,
-OS sandboxing is not proven and production packages using unsandboxed native
-backends require the host's explicit unsafe-backend opt-in. Do not describe a
-backend as sandboxed unless the target host reports that support.
+Native backend kinds declare `authority_mode`. On Linux x86-64 and ARM64,
+`"sandboxed"` is available for packaged `mcp-stdio` and `executable` backends
+and their app-data migration commands. The host requires the distribution's
+Bubblewrap 0.8 or newer at `/usr/bin/bwrap`, Linux 5.11 or newer, and a system
+policy that permits the required user namespaces and syscall filtering. Commands
+and their interpreters must be in the payload or available under `/usr/bin` or
+`/bin`; bring any runtime assets not
+present in the standard system binary/library directories in the payload. Use
+`APP_HOST_PAYLOAD_DIR` and `APP_HOST_DATA_DIR` for the read-only payload and
+writable app data (the working directory). `/tmp` is private scratch space.
+Do not rely on the host home directory, ambient credentials, or direct sockets,
+even for localhost. Missing sandbox support refuses activation, with no fallback.
+Production packages using `"unsandboxed"` still require the host's explicit
+unsafe-backend opt-in. Agent workers and standalone stdio tool servers do not
+use the Linux sandbox in this release.
 
 At activation, MCP-backed packages must advertise tools matching their static
 capability declarations. A mismatch blocks activation.
@@ -1454,5 +1465,5 @@ host-mediated capabilities rather than bypassing the boundary.
 
 Kestral 0.1 accepts package directories and public HTTPS Git repositories.
 The `.ahpkg` archive form is a reserved transport design, not an implemented
-install source. Runtime restart policies and full native process sandboxing are
-also outside the current package guarantee.
+install source. Runtime restart policies and a cross-platform native process
+sandbox are also outside the current package guarantee.
